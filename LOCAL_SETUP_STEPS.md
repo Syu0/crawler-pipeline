@@ -55,7 +55,7 @@ QOO10_TRACER=0
 |----------|---------|-------------|
 | `QOO10_SAK` | - | **Required:** Seller Auth Key from Qoo10 |
 | `QOO10_ALLOW_REAL_REG` | `0` | Set to `1` to enable real registration (default: dry-run) |
-| `QOO10_TRACER` | `0` | Set to `1` for verbose logging |
+| `QOO10_TRACER` | `0` | Set to `1` for verbose logging (shows request params) |
 
 ### Common Gotcha ⚠️
 
@@ -65,6 +65,31 @@ QOO10_TRACER=0
 ✅ **Right:** Add to `backend/.env` file
 
 **Why?** Terminal exports don't persist. Use `backend/.env` for permanent settings.
+
+---
+
+## Default Values (Hardcoded)
+
+These values are automatically applied if not specified in the input JSON:
+
+### ShippingNo
+- **Default:** `471554`
+- Auto-resolving via API lookup is **disabled**
+- To override: add `"ShippingNo": "your-value"` in your JSON payload
+
+### SellerCode Prefix
+- **Default prefix:** `auto` (always)
+- `SellerCodeBase` and `SellerCode` in input JSON are **ignored**
+- Final format: `auto{YYYYMMDDHHmmss}{rand4}` (e.g., `auto202602081430123456`)
+- To change prefix: modify `generateUniqueSellerCode()` in `backend/qoo10/registerNewGoods.js`
+
+### ProductionPlace (Origin)
+- **Default:** `ProductionPlaceType=2` (海外/Overseas), `ProductionPlace=Overseas`
+- Qoo10 spec values:
+  - `1` = 国内 (Japan domestic)
+  - `2` = 海外 (Overseas/Foreign)
+  - `3` = その他 (Other)
+- To override: add `"ProductionPlaceType": "1", "ProductionPlace": "Japan"` in your JSON
 
 ---
 
