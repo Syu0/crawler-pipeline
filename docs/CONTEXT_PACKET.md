@@ -12,7 +12,7 @@ Quick reference document for LLM handoffs and onboarding.
 |-------|-------|
 | Name | qoo10-debug-project |
 | Version | 1.0.0 |
-| Commit | b2bf7aa |
+| Commit | b43abe1 |
 | Last Sync | 2026-02-08 |
 
 ---
