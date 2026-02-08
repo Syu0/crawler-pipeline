@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-02-05T05:43:35.629Z",
+  "request": {
+    "url": "https://api.qoo10.jp/GMKT.INC.Front.QAPIService/ebayjapan.qapi/CertificationAPI.CreateCertificationKey",
+    "qapiVersion": "1.0",
+    "headers": {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "QAPIVersion": "1.0",
+      "GiosisCertificationKey": "****"
+    },
+    "body": "returnType=application%2Fjson&user_id=****&pwd=****"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"ResultObject\":null,\"ResultCode\":-1,\"ResultMsg\":\"システムエラー\"}",
+    "parsed": {
+      "ResultObject": null,
+      "ResultCode": -1,
+      "ResultMsg": "システムエラー"
+    }
+  }
+}
