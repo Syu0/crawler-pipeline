@@ -43,39 +43,10 @@ const ADDITIVE_PARAMS = [
 ];
 
 /**
- * Make Qoo10 API call
+ * Make Qoo10 SetNewGoods API call
  */
-function callSetNewGoods(params) {
-  return new Promise((resolve, reject) => {
-    const body = new URLSearchParams(params).toString();
-    const url = new URL(`${QOO10_BASE_URL}/ItemsBasic.SetNewGoods`);
-    
-    const options = {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'QAPIVersion': '1.1',
-        'GiosisCertificationKey': SAK,
-        'Content-Length': Buffer.byteLength(body)
-      }
-    };
-    
-    const req = https.request(url, options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          resolve({ status: res.statusCode, data: JSON.parse(data) });
-        } catch (err) {
-          resolve({ status: res.statusCode, data: { rawText: data } });
-        }
-      });
-    });
-    
-    req.on('error', reject);
-    req.write(body);
-    req.end();
-  });
+async function callSetNewGoods(params) {
+  return qoo10PostMethod('ItemsBasic.SetNewGoods', params, '1.1');
 }
 
 /**
