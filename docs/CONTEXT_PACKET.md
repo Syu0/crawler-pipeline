@@ -99,9 +99,14 @@ Coupang URL → [Step 2: Scraper] → Google Sheet → [Step 3: Qoo10 CLI] → Q
 
 ## Quick Commands
 
+All npm scripts are **cross-platform** (Windows/macOS/Linux) via `cross-env`.
+
 ```bash
 # Step 2: Scrape Coupang (dry-run)
 npm run coupang:scrape:dry
+
+# Step 2: Scrape Coupang (dry-run + tracer)
+npm run coupang:scrape:dry:trace
 
 # Step 2: Scrape Coupang (real)
 npm run coupang:scrape:run
