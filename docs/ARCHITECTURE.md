@@ -113,6 +113,27 @@ Register products on Qoo10 Japan marketplace via QAPI (`ItemsBasic.SetNewGoods`)
 ### Data Flow (Step 2)
 
 ```
+1. CLI receives Coupang URL
+   └── scripts/coupang-scrape-to-sheet.js --url "<URL>"
+
+2. Scraper fetches and parses HTML
+   └── scripts/lib/coupangScraper.js
+       ├── Extracts URL params (productId, itemId, vendorItemId, categoryId)
+       ├── Parses title, price, images from HTML
+       ├── Normalizes StandardImage to "thumbnails/..." path
+       ├── Converts weight to Kg (default: 1)
+       └── Returns structured product data
+
+3. Sheets client upserts to Google Sheets
+   └── scripts/lib/sheetsClient.js
+       ├── Authenticates via Service Account
+       ├── Ensures header row exists
+       └── Upserts by vendorItemId (or itemId fallback)
+```
+
+### Data Flow (Step 3)
+
+```
 1. CLI reads JSON file
    └── scripts/qoo10-register-cli.js
 
@@ -127,7 +148,7 @@ Register products on Qoo10 Japan marketplace via QAPI (`ItemsBasic.SetNewGoods`)
 
 3. QAPI Client makes HTTP request
    └── scripts/lib/qoo10Client.js
-       └── POST to https://api.qoo10.jp/GMKT.INC.Front.QAPIService/ebayjapan.qapi/ItemsBasic.SetNewGoods
+       └── POST to Qoo10 ItemsBasic.SetNewGoods
 
 4. Response parsed and returned
    └── { success, createdItemId (GdNo), aiContentsNo, ... }
@@ -138,17 +159,18 @@ Register products on Qoo10 Japan marketplace via QAPI (`ItemsBasic.SetNewGoods`)
 ## Current Status
 
 <!-- STATUS_START -->
-- **Phase**: Step 3 implemented (Qoo10 registration)
-- **Last updated**: 2025-02-08
+- **Phase**: Step 2 + Step 3 implemented
+- **Last updated**: 2026-02-08
 - **Features complete**:
-  - Basic product registration via SetNewGoods
-  - Single option group support (SIZE, COLOR, etc.)
-  - ExtraImages injection into ItemDescription
-  - Dry-run mode (default)
-  - Tracer mode for debugging
+  - Step 2: Coupang HTML scraping (no-login)
+  - Step 2: Google Sheets upsert (Service Account auth)
+  - Step 2: StandardImage normalization, WeightKg conversion
+  - Step 3: Qoo10 registration via SetNewGoods
+  - Step 3: Single option group, ExtraImages support
+  - Dry-run and tracer modes for both steps
 - **Features pending**:
-  - TODO: Google Sheets integration (read product data)
-  - TODO: Write GdNo back to Google Sheet
+  - TODO: SecondSubCat resolver module (Qoo10 category mapping)
+  - TODO: Write GdNo back to Google Sheet after registration
   - TODO: Multi-option support (SIZE + COLOR)
   - TODO: UpdateGoods endpoint
 <!-- STATUS_END -->
@@ -157,11 +179,13 @@ Register products on Qoo10 Japan marketplace via QAPI (`ItemsBasic.SetNewGoods`)
 
 ## Key Technical Decisions
 
-1. **Dry-run by default**: `QOO10_ALLOW_REAL_REG=1` required for real API calls
-2. **Fixed SellerCode prefix**: Always `auto` + timestamp + random (ignores input)
-3. **Fixed ShippingNo default**: `471554` (no auto-resolve API call)
-4. **ProductionPlace default**: `2` (Overseas), `Overseas`
-5. **Single option group**: Only one option type per product (SIZE **or** COLOR)
+1. **Dry-run by default**: Both steps require explicit opt-in for real operations
+2. **Service Account auth**: Google Sheets uses JSON key file (gitignored)
+3. **StandardImage normalization**: Strip CDN prefix to `thumbnails/...` path
+4. **Fixed SellerCode prefix**: Always `auto` + timestamp + random
+5. **Fixed ShippingNo default**: `471554` (no auto-resolve)
+6. **Weight in Kg**: Default 1, convert from grams if detected
+7. **Single option group**: Only one option type per product
 
 ---
 
@@ -169,7 +193,8 @@ Register products on Qoo10 Japan marketplace via QAPI (`ItemsBasic.SetNewGoods`)
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| dotenv | ^17.2.4 | Load environment variables from .env |
+| dotenv | ^17.2.4 | Load environment variables |
+| googleapis | ^171.4.0 | Google Sheets API client |
 
 ---
 
