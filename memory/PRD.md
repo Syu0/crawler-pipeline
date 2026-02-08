@@ -18,14 +18,19 @@ Build a pipeline to scrape Coupang product URLs, store data in Google Sheets, an
 ## What's Been Implemented
 
 ### Step 2: Coupang Scraping (COMPLETE)
-- [x] `scripts/coupang-scrape-to-sheet.js` - CLI entry point
-- [x] `scripts/lib/coupangScraper.js` - HTML parsing and field extraction
+- [x] **Chrome Extension** (`chrome-extension-coupang/`)
+  - Manifest V3, popup UI with "Send to Sheet" button
+  - Content script extracts data from DOM (no cookies exfiltrated)
+  - Sends to local receiver via POST
+- [x] **Local Receiver** (`scripts/coupang-receiver.js`)
+  - HTTP server on port 8787
+  - POST /api/coupang/upsert endpoint
+  - Upserts to Google Sheets
 - [x] `scripts/lib/sheetsClient.js` - Google Sheets API (Service Account)
-- [x] Dry-run mode (`COUPANG_SCRAPE_DRY_RUN=1`)
-- [x] Tracer mode (`COUPANG_TRACER=1`)
 - [x] StandardImage normalization (strip CDN to `thumbnails/...`)
 - [x] WeightKg conversion (g→Kg, default 1)
 - [x] Upsert by vendorItemId (fallback: itemId)
+- [x] CLI alternative: `scripts/coupang-scrape-to-sheet.js` (requires cookie)
 
 ### Step 3: Qoo10 Registration (COMPLETE)
 - [x] `backend/qoo10/registerNewGoods.js` - Core module
