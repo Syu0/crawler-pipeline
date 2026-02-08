@@ -1,0 +1,200 @@
+/**
+ * Google Sheets Client
+ * Uses Service Account authentication to read/write Google Sheets
+ */
+
+require('dotenv').config({ path: require('path').join(__dirname, '..', '..', 'backend', '.env') });
+
+const { google } = require('googleapis');
+const fs = require('fs');
+const path = require('path');
+
+/**
+ * Get authenticated Google Sheets client
+ */
+async function getSheetsClient() {
+  const keyPath = process.env.GOOGLE_SERVICE_ACCOUNT_JSON_PATH;
+  
+  if (!keyPath) {
+    throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON_PATH not set in backend/.env');
+  }
+  
+  const absolutePath = path.resolve(process.cwd(), keyPath);
+  
+  if (!fs.existsSync(absolutePath)) {
+    throw new Error(`Service account key file not found: ${absolutePath}\n` +
+      'Please place your Google service account JSON key at this path.\n' +
+      'See docs/RUNBOOK.md for setup instructions.');
+  }
+  
+  const auth = new google.auth.GoogleAuth({
+    keyFile: absolutePath,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
+  
+  const sheets = google.sheets({ version: 'v4', auth });
+  return sheets;
+}
+
+/**
+ * Ensure header row exists in the sheet
+ * @param {string} sheetId - Google Sheet ID
+ * @param {string} tabName - Tab/sheet name
+ * @param {string[]} headers - Array of header names
+ */
+async function ensureHeaders(sheetId, tabName, headers) {
+  const sheets = await getSheetsClient();
+  
+  // Read first row
+  const range = `${tabName}!A1:Z1`;
+  let existingHeaders = [];
+  
+  try {
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId,
+      range,
+    });
+    existingHeaders = response.data.values?.[0] || [];
+  } catch (err) {
+    // Tab might not exist or be empty
+    if (err.message.includes('Unable to parse range')) {
+      console.log(`Tab "${tabName}" may not exist. Will create headers.`);
+    } else {
+      throw err;
+    }
+  }
+  
+  // If headers are empty or don't match, write them
+  if (existingHeaders.length === 0) {
+    console.log(`Writing headers to ${tabName}...`);
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId,
+      range: `${tabName}!A1`,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [headers],
+      },
+    });
+    return headers;
+  }
+  
+  return existingHeaders;
+}
+
+/**
+ * Find row index by primary key value
+ * @param {string} sheetId - Google Sheet ID
+ * @param {string} tabName - Tab/sheet name
+ * @param {number} keyColumnIndex - 0-based column index for primary key
+ * @param {string} keyValue - Value to search for
+ * @returns {number|null} - Row number (1-based) or null if not found
+ */
+async function findRowByKey(sheetId, tabName, keyColumnIndex, keyValue) {
+  const sheets = await getSheetsClient();
+  
+  // Get all values in the key column
+  const columnLetter = String.fromCharCode(65 + keyColumnIndex); // A=0, B=1, etc.
+  const range = `${tabName}!${columnLetter}:${columnLetter}`;
+  
+  try {
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId,
+      range,
+    });
+    
+    const values = response.data.values || [];
+    
+    for (let i = 0; i < values.length; i++) {
+      if (values[i][0] === keyValue) {
+        return i + 1; // 1-based row number
+      }
+    }
+  } catch (err) {
+    console.error('Error finding row by key:', err.message);
+  }
+  
+  return null;
+}
+
+/**
+ * Upsert a row into the sheet
+ * @param {string} sheetId - Google Sheet ID
+ * @param {string} tabName - Tab/sheet name
+ * @param {string[]} headers - Header names (for column order)
+ * @param {Object} data - Data object with keys matching headers
+ * @param {string} primaryKey - Header name to use as primary key
+ * @param {string} [fallbackKey] - Fallback header name if primary key is empty
+ */
+async function upsertRow(sheetId, tabName, headers, data, primaryKey, fallbackKey = null) {
+  const sheets = await getSheetsClient();
+  
+  // Determine key value
+  let keyValue = data[primaryKey];
+  let keyColumn = primaryKey;
+  
+  if (!keyValue && fallbackKey) {
+    keyValue = data[fallbackKey];
+    keyColumn = fallbackKey;
+  }
+  
+  if (!keyValue) {
+    throw new Error(`Cannot upsert: both ${primaryKey} and ${fallbackKey || 'fallback'} are empty`);
+  }
+  
+  // Find column index for the key
+  const keyColumnIndex = headers.indexOf(keyColumn);
+  if (keyColumnIndex === -1) {
+    throw new Error(`Key column "${keyColumn}" not found in headers`);
+  }
+  
+  // Build row values in header order
+  const rowValues = headers.map(h => {
+    const val = data[h];
+    if (val === undefined || val === null) return '';
+    if (typeof val === 'object') return JSON.stringify(val);
+    return String(val);
+  });
+  
+  // Find existing row
+  const existingRow = await findRowByKey(sheetId, tabName, keyColumnIndex, keyValue);
+  
+  if (existingRow && existingRow > 1) {
+    // Update existing row
+    console.log(`Updating existing row ${existingRow} for ${keyColumn}=${keyValue}`);
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId,
+      range: `${tabName}!A${existingRow}`,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [rowValues],
+      },
+    });
+    return { action: 'updated', row: existingRow };
+  } else {
+    // Append new row
+    console.log(`Appending new row for ${keyColumn}=${keyValue}`);
+    const response = await sheets.spreadsheets.values.append({
+      spreadsheetId: sheetId,
+      range: `${tabName}!A:A`,
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: {
+        values: [rowValues],
+      },
+    });
+    
+    // Extract appended row number from response
+    const updatedRange = response.data.updates?.updatedRange || '';
+    const match = updatedRange.match(/!A(\d+)/);
+    const appendedRow = match ? parseInt(match[1], 10) : null;
+    
+    return { action: 'appended', row: appendedRow };
+  }
+}
+
+module.exports = {
+  getSheetsClient,
+  ensureHeaders,
+  findRowByKey,
+  upsertRow,
+};
