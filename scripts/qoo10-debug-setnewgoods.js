@@ -85,14 +85,13 @@ async function runTests() {
     results.push({
       test: `+${paramKey}`,
       params: Object.keys(currentParams),
-      status: response.status,
-      resultCode: response.data.ResultCode,
-      resultMsg: response.data.ResultMsg
+      resultCode: response.ResultCode,
+      resultMsg: response.ResultMsg
     });
-    console.log(`→ HTTP ${response.status}, ResultCode: ${response.data.ResultCode}, Msg: ${response.data.ResultMsg}\n`);
+    console.log(`→ ResultCode: ${response.ResultCode}, Msg: ${response.ResultMsg}\n`);
     
     // Stop if we get success
-    if (response.data.ResultCode === 0) {
+    if (response.ResultCode === 0) {
       console.log('✓ SUCCESS! Found working param combination.');
       break;
     }
@@ -100,13 +99,11 @@ async function runTests() {
   
   // Print summary table
   console.log('\n=== Summary Table ===\n');
-  console.log('Test'.padEnd(20), '| Status | Code | Message');
+  console.log('Test'.padEnd(20), '| Code | Message');
   console.log('-'.repeat(70));
   results.forEach(r => {
     console.log(
       r.test.padEnd(20),
-      '|',
-      String(r.status).padEnd(6),
       '|',
       String(r.resultCode).padEnd(4),
       '|',
