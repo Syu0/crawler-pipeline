@@ -56,6 +56,11 @@ async function run() {
     console.log(`CreatedItemId (GdNo): ${result.createdItemId || 'null'}`);
     console.log(`SellerCode used: ${result.sellerCodeUsed}`);
     console.log(`ShippingNo used: ${result.shippingNoUsed}`);
+    console.log(`Options applied: ${result.optionsApplied ? 'YES' : 'NO'}`);
+    
+    if (result.optionSummary) {
+      console.log(`Option summary: ${result.optionSummary}`);
+    }
     
     // Show raw ResultObject when tracer enabled
     if (process.env.QOO10_TRACER === '1' || process.env.QOO10_TRACER === 'true') {

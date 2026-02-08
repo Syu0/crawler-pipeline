@@ -114,6 +114,31 @@ async function resolveShippingNo() {
 }
 
 /**
+ * Build AdditionalOption string from Options input
+ * Format: OptionName||*Value||*PriceDelta$$OptionName||*Value||*PriceDelta
+ */
+function buildAdditionalOptions(optionsInput) {
+  if (!optionsInput || !optionsInput.type || !Array.isArray(optionsInput.values) || optionsInput.values.length === 0) {
+    return null;
+  }
+  
+  const optionName = String(optionsInput.type || 'OPTION');
+  const optionParts = optionsInput.values
+    .filter(v => v && v.name)
+    .map(v => {
+      const name = String(v.name).trim();
+      const priceDelta = String(v.priceDelta || 0);
+      return `${optionName}||*${name}||*${priceDelta}`;
+    });
+  
+  if (optionParts.length === 0) {
+    return null;
+  }
+  
+  return optionParts.join('$$');
+}
+
+/**
  * Build final SetNewGoods params with defaults
  */
 function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode) {
@@ -132,7 +157,7 @@ function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode) {
     }
   }
   
-  return {
+  const params = {
     returnType: 'application/json',
     SecondSubCat: String(input.SecondSubCat),
     ItemTitle: String(input.ItemTitle),
@@ -155,6 +180,14 @@ function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode) {
     IndustrialCodeType: String(input.IndustrialCodeType || 'J'),
     IndustrialCode: String(input.IndustrialCode || '')
   };
+  
+  // Add AdditionalOption if Options provided
+  const additionalOption = buildAdditionalOptions(input.Options);
+  if (additionalOption) {
+    params.AdditionalOption = additionalOption;
+  }
+  
+  return params;
 }
 
 /**
@@ -255,6 +288,18 @@ async function registerNewGoods(input) {
   // Extract created item ID
   const createdItemId = extractCreatedItemId(response.ResultObject);
   
+  // Check if options were applied
+  let optionsApplied = false;
+  let optionSummary = null;
+  if (input.Options && input.Options.values && input.Options.values.length > 0) {
+    optionsApplied = true;
+    const optType = input.Options.type || 'OPTION';
+    const optValues = input.Options.values
+      .map(v => `${v.name}(${v.priceDelta > 0 ? '+' : ''}${v.priceDelta})`)
+      .join(', ');
+    optionSummary = `${optType}: ${optValues}`;
+  }
+  
   // Return normalized result
   const result = {
     success: response.ResultCode === 0,
@@ -263,6 +308,8 @@ async function registerNewGoods(input) {
     createdItemId: createdItemId,
     sellerCodeUsed: uniqueSellerCode,
     shippingNoUsed: shippingNo,
+    optionsApplied: optionsApplied,
+    optionSummary: optionSummary,
     rawResultObject: response.ResultObject || null
   };
   

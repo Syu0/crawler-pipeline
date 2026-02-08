@@ -1,0 +1,21 @@
+{
+  "SecondSubCat": "320002604",
+  "ItemTitle": "Sample Product with Options",
+  "ItemPrice": "5000",
+  "ItemQty": "20",
+  "SellerCodeBase": "OPTTEST",
+  "StandardImage": "https://dp.image-qoo10.jp/GMKT.IMG/loading_2017/qoo10_loading.v_20170420.png",
+  "ItemDescription": "<p>This product has size options</p>",
+  "Options": {
+    "type": "SIZE",
+    "values": [
+      {"name": "S", "priceDelta": 0, "qty": 10},
+      {"name": "M", "priceDelta": 200, "qty": 10}
+    ]
+  },
+  "AdultYN": "N",
+  "TaxRate": "S",
+  "RetailPrice": "0",
+  "ExpireDate": "2030-12-31",
+  "Weight": "500"
+}
