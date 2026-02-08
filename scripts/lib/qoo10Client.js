@@ -4,6 +4,9 @@
  * NO NETWORK CALLS unless QOO10_SAK env is set
  */
 
+// Auto-load backend/.env
+require('dotenv').config({ path: require('path').join(__dirname, '..', '..', 'backend', '.env') });
+
 const https = require('https');
 const { URLSearchParams } = require('url');
 
