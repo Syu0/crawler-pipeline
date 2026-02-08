@@ -39,6 +39,14 @@ Establish a debugging and development harness for integrating with the Qoo10 QAP
 - [x] `AIContentsNo` extraction from API response
 - [x] `aiContentsNo` included in result object and CLI output
 
+### Single Option Support (COMPLETE)
+- [x] `Options` field with single type (e.g., SIZE or COLOR)
+- [x] `AdditionalOption` parameter construction: `Type||*Name||*PriceDelta$$...`
+- [x] Validation: type required, values array required, priceDelta ≥ 0, no `$$` or `||*` in names
+- [x] CLI output shows `Options applied: YES/NO` and `Option summary`
+- [x] Tracer output shows raw `AdditionalOption` string
+- [x] Combined sample: `sample-with-extraimages-options.json`
+
 ---
 
 ## Prioritized Backlog
