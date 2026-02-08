@@ -1,0 +1,132 @@
+/**
+ * Qoo10 QAPI Client with safe tracer for debugging -999 errors
+ * NO NETWORK CALLS unless env is set and tracer is enabled
+ */
+
+const QOO10_BASE_URL = 'https://api.qoo10.jp/GMKT.INC.Front.QAPIService/ebayjapan.qapi';
+const ENABLE_TRACER = process.env.REACT_APP_QOO10_TRACER === 'true';
+
+/**
+ * Mask sensitive key - show first 8 and last 4 chars only
+ */
+function maskKey(key) {
+  if (!key || key.length < 12) return '***masked***';
+  return `${key.substring(0, 8)}...${key.substring(key.length - 4)}`;
+}
+
+/**
+ * Safe tracer: logs method, URL, headers (masked), body, response
+ */
+function traceRequest(methodName, headers, params) {
+  if (!ENABLE_TRACER) return;
+  
+  console.log('\n=== QOO10 REQUEST TRACE ===');
+  console.log('Method:', methodName);
+  console.log('URL:', `${QOO10_BASE_URL}/${methodName}`);
+  console.log('Headers:', {
+    ...headers,
+    GiosisCertificationKey: maskKey(headers.GiosisCertificationKey)
+  });
+  console.log('Body (urlencoded):', new URLSearchParams(params).toString());
+}
+
+function traceResponse(methodName, rawText, parsedData) {
+  if (!ENABLE_TRACER) return;
+  
+  console.log('\n=== QOO10 RESPONSE TRACE ===');
+  console.log('Method:', methodName);
+  console.log('Raw Response:', rawText);
+  console.log('Parsed JSON:', parsedData);
+  console.log('========================\n');
+}
+
+/**
+ * Generate masked curl command for debugging (NO secrets)
+ */
+function generateCurlCommand(methodName, headers, params) {
+  const url = `${QOO10_BASE_URL}/${methodName}`;
+  const maskedHeaders = {
+    ...headers,
+    GiosisCertificationKey: maskKey(headers.GiosisCertificationKey)
+  };
+  
+  let curl = `curl -X POST '${url}'`;
+  Object.entries(maskedHeaders).forEach(([key, value]) => {
+    curl += ` \\
+  -H '${key}: ${value}'`;
+  });
+  curl += ` \\
+  --data-urlencode '${new URLSearchParams(params).toString()}'`;
+  
+  return curl;
+}
+
+/**
+ * Core POST method for Qoo10 QAPI
+ * @param {string} methodName - e.g., 'ItemsBasic.SetNewGoods'
+ * @param {object} params - request parameters as object
+ * @param {string} apiVersion - default '1.1'
+ * @returns {Promise<object>} - parsed JSON response
+ */
+export async function qoo10PostMethod(methodName, params, apiVersion = '1.1') {
+  const sak = process.env.REACT_APP_QOO10_SAK;
+  
+  if (!sak) {
+    throw new Error('QOO10_SAK not set - network call blocked by env gate');
+  }
+  
+  const url = `${QOO10_BASE_URL}/${methodName}`;
+  const headers = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'QAPIVersion': apiVersion,
+    'GiosisCertificationKey': sak
+  };
+  
+  // Normalize all params to strings before encoding
+  const normalizedParams = {};
+  Object.entries(params).forEach(([key, value]) => {
+    normalizedParams[key] = String(value);
+  });
+  
+  traceRequest(methodName, headers, normalizedParams);
+  
+  if (ENABLE_TRACER) {
+    console.log('\nGenerated curl (masked):\n', generateCurlCommand(methodName, headers, normalizedParams));
+  }
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: headers,
+    body: new URLSearchParams(normalizedParams)
+  });
+  
+  const rawText = await response.text();
+  let parsedData;
+  
+  try {
+    parsedData = JSON.parse(rawText);
+  } catch (err) {
+    // Might be XML
+    parsedData = { rawXML: rawText };
+  }
+  
+  traceResponse(methodName, rawText, parsedData);
+  
+  return parsedData;
+}
+
+/**
+ * Sanity check method - GetSellerDeliveryGroupInfo
+ */
+export async function testQoo10Connection() {
+  return qoo10PostMethod('ItemsLookup.GetSellerDeliveryGroupInfo', {
+    returnType: 'application/json'
+  }, '1.0');
+}
+
+/**
+ * SetNewGoods method - the failing one
+ */
+export async function setNewGoods(params) {
+  return qoo10PostMethod('ItemsBasic.SetNewGoods', params, '1.1');
+}
