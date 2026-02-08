@@ -10,6 +10,8 @@
     "qoo10:register:with-options": "node scripts/qoo10-register-cli.js backend/qoo10/sample-with-options.json",
     "qoo10:register:with-extraimages": "node scripts/qoo10-register-cli.js backend/qoo10/sample-with-extraimages.json",
     "qoo10:register:with-extraimages-options": "node scripts/qoo10-register-cli.js backend/qoo10/sample-with-extraimages-options.json",
+    "coupang:scrape:dry": "COUPANG_SCRAPE_DRY_RUN=1 node scripts/coupang-scrape-to-sheet.js --url \"https://www.coupang.com/vp/products/7107426071?itemId=17757771253&vendorItemId=84922122516&categoryId=317679\"",
+    "coupang:scrape:run": "node scripts/coupang-scrape-to-sheet.js --url \"https://www.coupang.com/vp/products/7107426071?itemId=17757771253&vendorItemId=84922122516&categoryId=317679\"",
     "docs:sync": "node scripts/update-context-packet.js"
   },
   "dependencies": {
