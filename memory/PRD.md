@@ -82,6 +82,14 @@ Establish a debugging and development harness for integrating with the Qoo10 QAP
 | `QOO10_ALLOW_REAL_REG` | `0` | Set to `1` to enable real registration |
 | `QOO10_TRACER` | `0` | Set to `1` for verbose logging |
 
+## Hardcoded Defaults
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| ShippingNo | `471554` | Auto-resolve disabled, override via JSON |
+| SellerCode prefix | `auto` | Always `auto`, input ignored |
+| ProductionPlaceType | `2` | 海外 (Overseas) |
+| ProductionPlace | `Overseas` | Override via JSON |
+
 ## Available Commands
 ```bash
 npm run qoo10:register:sample            # Basic registration
@@ -92,4 +100,4 @@ npm run qoo10:register:with-extraimages  # With extra images
 ---
 
 ## Last Updated
-December 8, 2025 - Added ExtraImages support and AIContentsNo extraction
+December 8, 2025 - ShippingNo default (471554), SellerCode prefix fixed (auto), ProductionPlace (Overseas)
