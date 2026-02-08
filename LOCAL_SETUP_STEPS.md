@@ -183,5 +183,69 @@ All scripts include automatic env validation.
 
 ---
 
+## Options (Variants)
+
+Qoo10 supports product options/variants (e.g., size, color) that are set during product creation.
+
+### JSON Format
+
+Add an `Options` field to your product JSON:
+
+```json
+{
+  "ItemTitle": "Product with Size Options",
+  "StandardImage": "https://...",
+  "Options": {
+    "type": "SIZE",
+    "values": [
+      {"name": "S", "priceDelta": 0, "qty": 10},
+      {"name": "M", "priceDelta": 200, "qty": 10},
+      {"name": "L", "priceDelta": 500, "qty": 5}
+    ]
+  }
+}
+```
+
+**Fields:**
+- `type`: Option type name (e.g., "SIZE", "COLOR", "VARIANT")
+- `values`: Array of option values
+  - `name`: Value name (e.g., "S", "Blue")
+  - `priceDelta`: Price adjustment (0 for base price, positive for premium)
+  - `qty`: Quantity for this option (not used in AdditionalOption format)
+
+### Command to Test
+
+```bash
+npm run qoo10:register:with-options
+```
+
+**Sample file:** `backend/qoo10/sample-with-options.json`
+
+### Expected Output
+
+```
+=== Registration Result ===
+
+Success: true
+ResultCode: 0
+ResultMsg: SUCCESS
+CreatedItemId (GdNo): 1192348471
+SellerCode used: OPTTEST202602080545123456
+ShippingNo used: 663125
+Options applied: YES
+Option summary: SIZE: S(+0), M(+200)
+
+✓ Product registered successfully!
+```
+
+**Notes:**
+- Options are set during product creation (in SetNewGoods API call)
+- If `Options` field is missing, product is created without options
+- Format: `OptionType||*ValueName||*PriceDelta$$OptionType||*ValueName||*PriceDelta`
+- Delimiter between options: `$$`
+- Delimiter within option: `||*`
+
+---
+
 **Full documentation:** `/app/QAPI_DEBUG_SETUP.md`  
 **Tutorial:** https://emergent.sh/tutorial/moltbot-on-emergent
