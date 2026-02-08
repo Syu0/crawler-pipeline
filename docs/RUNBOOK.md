@@ -8,23 +8,40 @@ Operational procedures for the Qoo10 product registration system.
 
 | Task | Command |
 |------|---------|
+| **Step 2 (Extension Mode)** | |
+| Start receiver server | `npm run coupang:receiver:start` |
+| **Step 2 (CLI Mode)** | |
 | Scrape Coupang (dry-run) | `npm run coupang:scrape:dry` |
-| Scrape Coupang (dry-run + trace) | `npm run coupang:scrape:dry:trace` |
 | Scrape Coupang (real) | `npm run coupang:scrape:run` |
-| Scrape Coupang (real + trace) | `npm run coupang:scrape:run:trace` |
+| **Step 3 (Qoo10)** | |
 | Register sample (dry-run) | `npm run qoo10:register:sample` |
 | Register with options | `npm run qoo10:register:with-options` |
 | Check Qoo10 env | `npm run qoo10:env` |
-| Test Qoo10 connection | `npm run qoo10:test:lookup` |
 
 > **Windows Note**: All npm scripts use `cross-env` for cross-platform compatibility.
-> No need to manually set environment variables on Windows.
+> Run `npm install` once after cloning to install dependencies.
 
 ---
 
-## Step 2: Coupang Scraping to Google Sheet
+## Step 2: Coupang Scraping (Chrome Extension + Receiver)
 
-### Google Service Account Setup
+The recommended approach uses a **Chrome Extension** to scrape product data from logged-in Coupang sessions, sending it to a **local Node receiver** that writes to Google Sheets.
+
+### Architecture
+
+```
+┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────┐
+│  Chrome Extension   │ ──▶ │  Local Receiver     │ ──▶ │  Google Sheets  │
+│  (popup + content)  │     │  (127.0.0.1:8787)   │     │  (coupang_datas)│
+└─────────────────────┘     └─────────────────────┘     └─────────────────┘
+        │                            │
+        │ Extracts from DOM          │ POST /api/coupang/upsert
+        └────────────────────────────┘
+```
+
+### Step 2.1: Set Up Google Sheets
+
+#### Google Service Account Setup
 
 1. **Create a Service Account**:
    - Go to [Google Cloud Console](https://console.cloud.google.com/)
