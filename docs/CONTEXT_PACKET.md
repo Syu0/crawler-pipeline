@@ -12,7 +12,7 @@ Quick reference document for LLM handoffs and onboarding.
 |-------|-------|
 | Name | qoo10-debug-project |
 | Version | 1.0.0 |
-| Commit | (run docs:sync) |
+| Commit | b5d5ec7 |
 | Last Sync | 2026-02-08 |
 
 ---
@@ -82,8 +82,9 @@ Coupang URL → [Step 2: Scraper] → Google Sheet → [Step 3: Qoo10 CLI] → Q
 - **Phase**: Step 2 + Step 3 implemented
 - **Last updated**: 2026-02-08
 - **Features complete**:
-  - Step 2: Coupang scraping with field extraction
+  - Step 2: Coupang HTML scraping (no-login)
   - Step 2: Google Sheets upsert (Service Account auth)
+  - Step 2: StandardImage normalization, WeightKg conversion
   - Step 3: Qoo10 registration via SetNewGoods
   - Step 3: Single option group, ExtraImages support
   - Dry-run and tracer modes for both steps
