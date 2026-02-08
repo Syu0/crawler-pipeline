@@ -2,32 +2,61 @@
 
 ## System Context
 
-This project implements **Step 3** of a larger Coupang-to-Qoo10 product pipeline:
+This project implements **Step 2 and Step 3** of a Coupang-to-Qoo10 product pipeline:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         Full Pipeline (Context)                              │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Step 1: Coupang Scraper       Step 2: Google Sheets        Step 3: Qoo10  │
-│  ┌─────────────────────┐      ┌──────────────────────┐     ┌─────────────┐ │
-│  │ Coupang Rocket URL  │ ──▶  │ Product Data Sheet   │ ──▶ │ THIS REPO   │ │
-│  │ (External scraper)  │      │ (Manual/automated)   │     │ Node.js CLI │ │
-│  └─────────────────────┘      └──────────────────────┘     └─────────────┘ │
-│                                                                    │        │
-│                                                                    ▼        │
-│                                                            ┌─────────────┐  │
-│                                                            │  Qoo10 JP   │  │
-│                                                            │  QAPI       │  │
-│                                                            └─────────────┘  │
-│                                                                    │        │
-│                                                                    ▼        │
-│                                                            Write GdNo back  │
-│                                                            to Google Sheet  │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              Full Pipeline                                       │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  Step 1: URL Input      Step 2: Scrape + Sheet      Step 3: Qoo10 Registration │
+│  ┌───────────────┐     ┌─────────────────────┐     ┌─────────────────────────┐ │
+│  │ Coupang URL   │ ──▶ │ THIS REPO           │ ──▶ │ THIS REPO               │ │
+│  │ (User input)  │     │ coupang-scrape-to-  │     │ qoo10-register-cli.js   │ │
+│  └───────────────┘     │ sheet.js            │     │ ★ IMPLEMENTED           │ │
+│                        │ ★ IMPLEMENTED       │     └─────────────────────────┘ │
+│                        └─────────────────────┘                 │               │
+│                                    │                           ▼               │
+│                                    ▼                    ┌─────────────┐        │
+│                        ┌─────────────────────┐         │  Qoo10 JP   │        │
+│                        │ Google Sheets       │         │  QAPI       │        │
+│                        │ (coupang_datas tab) │         └─────────────┘        │
+│                        └─────────────────────┘                 │               │
+│                                                                ▼               │
+│                                                     Write GdNo back (TODO)     │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## This Repository (Step 3)
+---
+
+## Step 2: Coupang Scraper → Google Sheets
+
+### Purpose
+Scrape product data from Coupang URLs and store in Google Sheets for later registration.
+
+### High-Level Flow
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌────────────────────┐
+│  Coupang URL    │ ──▶ │  HTML Parsing    │ ──▶ │  Google Sheets     │
+│  (CLI input)    │     │  (coupangScraper)│     │  (sheetsClient)    │
+└─────────────────┘     └──────────────────┘     └────────────────────┘
+```
+
+### Key Fields Extracted
+
+| Field | Source | Normalization |
+|-------|--------|---------------|
+| `ItemTitle` | og:title, title tag | HTML decode |
+| `ItemPrice` | sale-price, data-price | Remove commas |
+| `StandardImage` | og:image | Strip to `thumbnails/...` path |
+| `ExtraImages` | Image URLs in page | Array, deduplicated |
+| `WeightKg` | Weight text patterns | Convert g→Kg, default 1 |
+| `SecondSubCat` | - | Placeholder (resolver TODO) |
+
+---
+
+## Step 3: Qoo10 Registration
 
 ### Purpose
 Register products on Qoo10 Japan marketplace via QAPI (`ItemsBasic.SetNewGoods`).
@@ -41,41 +70,47 @@ Register products on Qoo10 Japan marketplace via QAPI (`ItemsBasic.SetNewGoods`)
 └────────────────────┘     └─────────────────────┘     └──────────────────────┘
 ```
 
-### Module Structure
+---
+
+## Module Structure
 
 ```
 /app
 ├── backend/
-│   ├── .env                         # Environment variables (gitignored)
-│   ├── .env.example                 # Template for env vars
+│   ├── .env                              # Environment variables (gitignored)
+│   ├── .env.example                      # Template for env vars
+│   ├── keys/                             # Service account keys (gitignored)
+│   │   └── google-service-account.json   # Google API key (NOT committed)
 │   └── qoo10/
-│       ├── registerNewGoods.js      # ★ Core registration module
-│       ├── sample-newgoods.json     # Sample: basic product
-│       ├── sample-with-options.json # Sample: with variants
-│       ├── sample-with-extraimages.json
-│       └── sample-with-extraimages-options.json
+│       ├── registerNewGoods.js           # ★ Step 3: Core registration module
+│       ├── sample-newgoods.json          # Sample: basic product
+│       └── sample-with-*.json            # Various test samples
 │
 ├── scripts/
 │   ├── lib/
-│   │   └── qoo10Client.js           # ★ Low-level QAPI HTTP client
-│   ├── qoo10-register-cli.js        # ★ CLI entry point
-│   ├── qoo10-env-check.js           # Env validation helper
-│   ├── qoo10-test-lookup.js         # Connection test script
-│   └── qoo10-debug-setnewgoods.js   # Debug harness
+│   │   ├── qoo10Client.js                # ★ Step 3: QAPI HTTP client
+│   │   ├── coupangScraper.js             # ★ Step 2: HTML scraping logic
+│   │   └── sheetsClient.js               # ★ Step 2: Google Sheets API
+│   ├── coupang-scrape-to-sheet.js        # ★ Step 2: CLI entry point
+│   ├── qoo10-register-cli.js             # ★ Step 3: CLI entry point
+│   └── update-context-packet.js          # Docs sync helper
 │
-├── docs/                            # Documentation (this folder)
-└── package.json                     # NPM scripts
+├── docs/                                 # Documentation
+└── package.json                          # NPM scripts
 ```
 
 ### Entry Points
 
-| Entry Point | Path | Description |
-|-------------|------|-------------|
-| CLI Runner | `scripts/qoo10-register-cli.js` | Main CLI for product registration |
-| Core Module | `backend/qoo10/registerNewGoods.js` | `registerNewGoods()` function |
-| QAPI Client | `scripts/lib/qoo10Client.js` | HTTP wrapper for Qoo10 API |
+| Step | Entry Point | Path | Description |
+|------|-------------|------|-------------|
+| 2 | Coupang Scraper | `scripts/coupang-scrape-to-sheet.js` | Scrape URL → Sheet |
+| 2 | Scraper Lib | `scripts/lib/coupangScraper.js` | HTML parsing logic |
+| 2 | Sheets Client | `scripts/lib/sheetsClient.js` | Google Sheets API |
+| 3 | Qoo10 CLI | `scripts/qoo10-register-cli.js` | Register to Qoo10 |
+| 3 | Core Module | `backend/qoo10/registerNewGoods.js` | Registration logic |
+| 3 | QAPI Client | `scripts/lib/qoo10Client.js` | HTTP wrapper |
 
-### Data Flow
+### Data Flow (Step 2)
 
 ```
 1. CLI reads JSON file
