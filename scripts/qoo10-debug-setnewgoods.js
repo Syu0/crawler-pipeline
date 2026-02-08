@@ -8,13 +8,9 @@
  * Requires: QOO10_SAK env var
  */
 
-const https = require('https');
-const { URLSearchParams } = require('url');
+const { qoo10PostMethod } = require('./lib/qoo10Client');
 
-const QOO10_BASE_URL = 'https://api.qoo10.jp/GMKT.INC.Front.QAPIService/ebayjapan.qapi';
-const SAK = process.env.QOO10_SAK;
-
-if (!SAK) {
+if (!process.env.QOO10_SAK) {
   console.error('QOO10_SAK not set');
   process.exit(1);
 }
