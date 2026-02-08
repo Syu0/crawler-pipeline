@@ -58,7 +58,11 @@
   "scripts": {
     "start": "craco start",
     "build": "craco build",
-    "test": "craco test"
+    "test": "craco test",
+    "qoo10:env:lookup": "MODE=lookup node ../scripts/qoo10-env-check.js",
+    "qoo10:env:register": "MODE=register node ../scripts/qoo10-env-check.js",
+    "qoo10:test:lookup": "node ../scripts/qoo10-test-lookup.js",
+    "qoo10:debug:setnewgoods": "npm run qoo10:env:register && node ../scripts/qoo10-debug-setnewgoods.js"
   },
   "browserslist": {
     "production": [
