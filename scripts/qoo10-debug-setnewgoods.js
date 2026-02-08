@@ -66,11 +66,10 @@ async function runTests() {
   results.push({
     test: 'Minimal',
     params: Object.keys(currentParams),
-    status: response.status,
-    resultCode: response.data.ResultCode,
-    resultMsg: response.data.ResultMsg
+    resultCode: response.ResultCode,
+    resultMsg: response.ResultMsg
   });
-  console.log(`→ HTTP ${response.status}, ResultCode: ${response.data.ResultCode}, Msg: ${response.data.ResultMsg}\n`);
+  console.log(`→ ResultCode: ${response.ResultCode}, Msg: ${response.ResultMsg}\n`);
   
   // Test 2-N: Add one param at a time
   for (let i = 0; i < ADDITIVE_PARAMS.length; i++) {
