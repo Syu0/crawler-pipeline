@@ -39,13 +39,8 @@ try {
   process.exit(1);
 }
 
-// Make SellerCode unique per run (append timestamp)
-const originalSellerCode = productData.SellerCode || 'CLI';
-productData.SellerCode = `${originalSellerCode}${Date.now().toString().slice(-8)}`;
-
 console.log('\n=== Qoo10 Product Registration CLI ===\n');
-console.log(`Loading product data from: ${jsonFilePath}`);
-console.log(`Unique SellerCode: ${productData.SellerCode}\n`);
+console.log(`Loading product data from: ${jsonFilePath}\n`);
 
 // Register product
 async function run() {
@@ -58,16 +53,16 @@ async function run() {
     console.log(`Success: ${result.success}`);
     console.log(`ResultCode: ${result.resultCode}`);
     console.log(`ResultMsg: ${result.resultMsg}`);
+    console.log(`CreatedItemId (GdNo): ${result.createdItemId || 'null'}`);
+    console.log(`SellerCode used: ${result.sellerCodeUsed}`);
+    console.log(`ShippingNo used: ${result.shippingNoUsed}`);
     
-    if (result.itemNo) {
-      console.log(`ItemNo: ${result.itemNo}`);
+    // Show raw ResultObject when tracer enabled
+    if (process.env.QOO10_TRACER === '1' || process.env.QOO10_TRACER === 'true') {
+      console.log('\n--- Raw ResultObject (debug) ---');
+      console.log(JSON.stringify(result.rawResultObject, null, 2));
+      console.log('--------------------------------');
     }
-    
-    console.log('\nRequest metadata:');
-    console.log(`  Category: ${result.request.secondSubCat}`);
-    console.log(`  Title: ${result.request.itemTitle}`);
-    console.log(`  SellerCode: ${result.request.sellerCode}`);
-    console.log(`  ShippingNo: ${result.request.shippingNo}`);
     
     if (result.success) {
       console.log('\n✓ Product registered successfully!\n');
