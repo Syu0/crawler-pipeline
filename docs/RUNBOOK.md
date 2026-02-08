@@ -84,9 +84,75 @@ The recommended approach uses a **Chrome Extension** to scrape product data from
    GOOGLE_SHEET_ID=1PYJKQ9D2qApWfdw7Km4RiWJXJ5qso63vCurfAk5wEA4
    GOOGLE_SHEET_TAB_NAME=coupang_datas
    GOOGLE_SERVICE_ACCOUNT_JSON_PATH=./backend/keys/google-service-account.json
+   COUPANG_RECEIVER_PORT=8787
    ```
 
-### Running the Scraper
+### Step 2.2: Install Chrome Extension
+
+1. **Open Chrome Extensions**:
+   - Navigate to `chrome://extensions/`
+   - Enable "Developer mode" (toggle in top-right)
+
+2. **Load the Extension**:
+   - Click "Load unpacked"
+   - Select the `chrome-extension-coupang/` folder from this repo
+
+3. **Pin the Extension** (optional):
+   - Click the puzzle piece icon in Chrome toolbar
+   - Pin "Coupang to Sheet" for easy access
+
+### Step 2.3: Start the Receiver Server
+
+```bash
+npm run coupang:receiver:start
+```
+
+Expected output:
+```
+==================================================
+  Coupang Data Receiver
+==================================================
+  Server:    http://127.0.0.1:8787
+  Endpoint:  POST /api/coupang/upsert
+  Health:    GET /health
+
+  Sheet ID:  1PYJKQ9D2qApWfdw7Km4RiWJXJ5qso63vCurfAk5wEA4
+  Tab:       coupang_datas
+
+  Press Ctrl+C to stop
+==================================================
+```
+
+### Step 2.4: Scrape a Product
+
+1. **Navigate to a Coupang product page** in Chrome (while logged in)
+   - URL should be like: `https://www.coupang.com/vp/products/12345678?...`
+
+2. **Click the extension icon** in the toolbar
+
+3. **Click "Send to Sheet"**
+   - Status will show: Collecting → Sending → Done
+   - The receiver terminal will log the upsert
+
+4. **Check your Google Sheet**
+   - A new row should appear in the `coupang_datas` tab
+
+### Troubleshooting Extension Mode
+
+| Error | Solution |
+|-------|----------|
+| "Cannot connect to receiver" | Run `npm run coupang:receiver:start` |
+| "Not a Coupang product page" | Navigate to a `/vp/products/` URL |
+| "GOOGLE_SHEET_ID not configured" | Add to `backend/.env` |
+| "Port 8787 is already in use" | Kill existing process or change port |
+
+---
+
+## Step 2 Alternative: CLI Scraper (requires cookie)
+
+The CLI scraper fetches Coupang pages directly but requires authentication.
+
+### Running the CLI Scraper
 
 **Dry-run mode** (no sheet write):
 ```bash
@@ -103,21 +169,7 @@ npm run coupang:scrape:run
 node scripts/coupang-scrape-to-sheet.js --url "https://www.coupang.com/vp/products/XXXXX?itemId=YYY&vendorItemId=ZZZ"
 ```
 
-**With tracer**:
-```bash
-COUPANG_TRACER=1 npm run coupang:scrape:dry
-```
-
-### Troubleshooting Coupang Scraping
-
-| Error | Solution |
-|-------|----------|
-| `HTTP 403: Failed to fetch page` | Set `COUPANG_COOKIE` in backend/.env |
-| `Service account key file not found` | Place JSON key at the configured path |
-| `GOOGLE_SHEET_ID not set` | Add to backend/.env |
-| `Unable to parse range` | Ensure the tab name exists in the sheet |
-
-### Getting a Coupang Cookie (if blocked)
+### Getting a Coupang Cookie (for CLI mode)
 
 1. Open Chrome, go to coupang.com, log in
 2. Open DevTools (F12) → Network tab
