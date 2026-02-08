@@ -227,11 +227,11 @@ function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode) {
  * @param {string} input.ItemTitle - Product title (required)
  * @param {string|number} input.ItemPrice - Price (required, positive)
  * @param {string|number} input.ItemQty - Quantity (required, positive)
- * @param {string} [input.SellerCode] - Base for unique code generation (optional, default: 'AUTO')
- * @param {string} [input.SellerCodeBase] - Alternative to SellerCode (optional)
+ * @param {string} [input.SellerCode] - IGNORED (prefix always "auto")
+ * @param {string} [input.SellerCodeBase] - IGNORED (prefix always "auto")
  * @param {string} input.StandardImage - Product image URL (required, https)
  * @param {string} input.ItemDescription - Product description HTML (required, non-empty)
- * @param {string} [input.ShippingNo] - Shipping group ID (auto-resolved if omitted)
+ * @param {string} [input.ShippingNo='471554'] - Shipping group ID (default: 471554)
  * @param {string} [input.AdultYN='N'] - Adult content flag
  * @param {string} [input.AvailableDateType='0'] - Availability type
  * @param {string} [input.AvailableDateValue='2'] - Availability value
@@ -240,8 +240,8 @@ function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode) {
  * @param {string} [input.ExpireDate='2030-12-31'] - Expiration date
  * @param {string} [input.Weight='500'] - Weight in grams
  * @param {string} [input.PromotionName=''] - Promotion name
- * @param {string} [input.ProductionPlaceType='1'] - Production place type
- * @param {string} [input.ProductionPlace='Japan'] - Production place
+ * @param {string} [input.ProductionPlaceType='2'] - Production place type (1=国内, 2=海外, 3=その他)
+ * @param {string} [input.ProductionPlace='Overseas'] - Production place (country/region name)
  * @param {string} [input.IndustrialCodeType='J'] - Industrial code type
  * @param {string} [input.IndustrialCode=''] - Industrial code
  * @param {Object} [input.Options] - Product variants/options
