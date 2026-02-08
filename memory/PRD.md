@@ -103,9 +103,10 @@ Establish a debugging and development harness for integrating with the Qoo10 QAP
 npm run qoo10:register:sample            # Basic registration
 npm run qoo10:register:with-options      # With product variants
 npm run qoo10:register:with-extraimages  # With extra images
+npm run qoo10:register:with-extraimages-options  # With extra images + options
 ```
 
 ---
 
 ## Last Updated
-December 8, 2025 - ShippingNo default (471554), SellerCode prefix fixed (auto), ProductionPlace (Overseas)
+December 8, 2025 - Added single-option support via AdditionalOption
