@@ -44,11 +44,12 @@ function validateUrl(url, field) {
 
 /**
  * Generate unique SellerCode with timestamp and random suffix
- * Format: {base}{YYYYMMDDHHmmss}{rand4}
+ * Format: auto{YYYYMMDDHHmmss}{rand4}
+ * NOTE: Prefix is always "auto" (hardcoded) - SellerCodeBase from input is ignored
  */
-function generateUniqueSellerCode(base = 'AUTO') {
-  // Truncate base if too long (max 20 chars to keep total length reasonable)
-  const truncatedBase = String(base).substring(0, 20);
+function generateUniqueSellerCode() {
+  // Prefix is always "auto" - ignore any input base
+  const truncatedBase = 'auto';
   
   const now = new Date();
   const timestamp = [
@@ -201,9 +202,11 @@ function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode) {
     ItemDescription: finalDescription,
     Weight: String(input.Weight || '500'),
     PromotionName: String(input.PromotionName || ''),
-    ProductionPlaceType: String(input.ProductionPlaceType || '1'),
-    ProductionPlace: String(input.ProductionPlace || 'Japan'),
-    IndustrialCodeType: String(input.IndustrialCodeType || 'J'),
+    // ProductionPlaceType: "1"=国内(Japan), "2"=海外(Overseas), "3"=その他(Other)
+    // Default to "2" (Overseas) for foreign products
+    ProductionPlaceType: String(input.ProductionPlaceType || '2'),
+    ProductionPlace: String(input.ProductionPlace || 'Overseas'),
+    IndustrialCodeType: String(input.IndustrialCodeType || ''),
     IndustrialCode: String(input.IndustrialCode || '')
   };
   
@@ -284,17 +287,18 @@ async function registerNewGoods(input) {
     throw new Error('ItemDescription must be at least 5 characters');
   }
   
-  // Generate unique SellerCode
-  const sellerCodeBase = input.SellerCodeBase || input.SellerCode || 'AUTO';
-  const uniqueSellerCode = generateUniqueSellerCode(sellerCodeBase);
+  // Generate unique SellerCode (prefix always "auto", input SellerCodeBase ignored)
+  const uniqueSellerCode = generateUniqueSellerCode();
   console.log(`Generated unique SellerCode: ${uniqueSellerCode}`);
   
-  // Resolve ShippingNo if not provided
+  // Resolve ShippingNo: use input value if provided, otherwise default to 471554
+  const DEFAULT_SHIPPING_NO = '471554';
   let shippingNo = input.ShippingNo;
   if (!shippingNo) {
-    console.log('ShippingNo not provided, auto-resolving...');
-    shippingNo = await resolveShippingNo();
-    console.log(`Resolved ShippingNo: ${shippingNo}`);
+    shippingNo = DEFAULT_SHIPPING_NO;
+    console.log(`ShippingNo defaulted to ${DEFAULT_SHIPPING_NO}`);
+  } else {
+    console.log(`ShippingNo from input: ${shippingNo}`);
   }
   
   // Build final params
