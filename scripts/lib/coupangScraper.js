@@ -1,0 +1,499 @@
+/**
+ * Coupang Product Scraper
+ * Extracts product data from Coupang product detail pages (no-login)
+ */
+
+const https = require('https');
+const http = require('http');
+const { URL } = require('url');
+
+const ENABLE_TRACER = process.env.COUPANG_TRACER === '1' || process.env.COUPANG_TRACER === 'true';
+
+/**
+ * Log tracer message
+ */
+function trace(...args) {
+  if (ENABLE_TRACER) {
+    console.log('[TRACER]', ...args);
+  }
+}
+
+/**
+ * Parse weight text to Kg
+ * Handles patterns like "250g", "1.5kg", "1kg", "500 g", etc.
+ * @param {string} text - Weight text
+ * @returns {string} - Weight in Kg as string (e.g., "0.25", "1.5")
+ */
+function parseWeightToKg(text) {
+  if (!text) return '1'; // Default 1 Kg
+  
+  const normalized = text.toLowerCase().replace(/\s+/g, '').replace(/,/g, '');
+  
+  // Match kg patterns first (e.g., "1.5kg", "2kg")
+  const kgMatch = normalized.match(/([\d.]+)\s*kg/);
+  if (kgMatch) {
+    const val = parseFloat(kgMatch[1]);
+    return isNaN(val) ? '1' : String(val);
+  }
+  
+  // Match g patterns (e.g., "250g", "1500g")
+  const gMatch = normalized.match(/([\d.]+)\s*g(?!b)/); // exclude "gb"
+  if (gMatch) {
+    const grams = parseFloat(gMatch[1]);
+    if (!isNaN(grams)) {
+      const kg = grams / 1000;
+      return String(Math.round(kg * 1000) / 1000); // Round to 3 decimal places
+    }
+  }
+  
+  return '1'; // Default
+}
+
+/**
+ * Normalize Coupang image URL to "thumbnails/..." format
+ * @param {string} url - Full Coupang CDN URL
+ * @returns {string} - Normalized path starting with "thumbnails/..."
+ */
+function normalizeImageUrl(url) {
+  if (!url) return '';
+  
+  // Handle protocol-relative URLs
+  if (url.startsWith('//')) {
+    url = 'https:' + url;
+  }
+  
+  // Extract path starting from "thumbnails/"
+  const thumbnailsIndex = url.indexOf('thumbnails/');
+  if (thumbnailsIndex !== -1) {
+    return url.substring(thumbnailsIndex);
+  }
+  
+  // If not a thumbnail URL, try to extract from image/ path
+  const imageIndex = url.indexOf('image/');
+  if (imageIndex !== -1) {
+    return url.substring(imageIndex);
+  }
+  
+  // Return as-is if no pattern matches
+  return url;
+}
+
+/**
+ * Extract URL parameters
+ * @param {string} urlString - Full URL
+ * @returns {Object} - Parsed URL info
+ */
+function parseProductUrl(urlString) {
+  const url = new URL(urlString);
+  
+  // Extract product ID from path: /vp/products/<id>
+  const pathMatch = url.pathname.match(/\/vp\/products\/(\d+)/);
+  const coupangProductId = pathMatch ? pathMatch[1] : null;
+  
+  return {
+    sourceUrl: urlString,
+    coupangProductId,
+    itemId: url.searchParams.get('itemId') || null,
+    vendorItemId: url.searchParams.get('vendorItemId') || null,
+    coupangCategoryId: url.searchParams.get('categoryId') || null,
+  };
+}
+
+/**
+ * Fetch HTML from URL with proper headers
+ * @param {string} urlString - URL to fetch
+ * @returns {Promise<string>} - HTML content
+ */
+function fetchHtml(urlString) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString);
+    const protocol = url.protocol === 'https:' ? https : http;
+    
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept-Encoding': 'identity', // Disable compression for simplicity
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+    };
+    
+    // Add cookie if provided
+    const cookie = process.env.COUPANG_COOKIE;
+    if (cookie) {
+      headers['Cookie'] = cookie;
+      trace('Using COUPANG_COOKIE from env');
+    }
+    
+    trace(`Fetching: ${urlString}`);
+    trace('Headers:', JSON.stringify(headers, null, 2));
+    
+    const options = {
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: url.pathname + url.search,
+      method: 'GET',
+      headers,
+    };
+    
+    const req = protocol.request(options, (res) => {
+      trace(`Response status: ${res.statusCode}`);
+      trace(`Response headers:`, JSON.stringify(res.headers, null, 2));
+      
+      // Handle redirects
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        trace(`Redirecting to: ${res.headers.location}`);
+        fetchHtml(res.headers.location).then(resolve).catch(reject);
+        return;
+      }
+      
+      if (res.statusCode !== 200) {
+        reject(new Error(`HTTP ${res.statusCode}: Failed to fetch page. ` +
+          (res.statusCode === 403 ? 'Try setting COUPANG_COOKIE in backend/.env' : '')));
+        return;
+      }
+      
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        trace(`Received ${data.length} bytes`);
+        resolve(data);
+      });
+    });
+    
+    req.on('error', reject);
+    req.setTimeout(30000, () => {
+      req.destroy();
+      reject(new Error('Request timeout after 30 seconds'));
+    });
+    req.end();
+  });
+}
+
+/**
+ * Extract text content between patterns
+ */
+function extractBetween(html, startPattern, endPattern) {
+  const startIndex = html.indexOf(startPattern);
+  if (startIndex === -1) return null;
+  
+  const contentStart = startIndex + startPattern.length;
+  const endIndex = html.indexOf(endPattern, contentStart);
+  if (endIndex === -1) return null;
+  
+  return html.substring(contentStart, endIndex);
+}
+
+/**
+ * Decode HTML entities
+ */
+function decodeHtmlEntities(text) {
+  if (!text) return '';
+  return text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)));
+}
+
+/**
+ * Extract product data from HTML
+ * @param {string} html - Page HTML
+ * @param {Object} urlInfo - Parsed URL info
+ * @returns {Object} - Extracted product data
+ */
+function extractProductData(html, urlInfo) {
+  trace('Starting HTML extraction...');
+  
+  const result = {
+    // From URL
+    source_url: urlInfo.sourceUrl,
+    coupang_product_id: urlInfo.coupangProductId,
+    itemId: urlInfo.itemId,
+    vendorItemId: urlInfo.vendorItemId,
+    coupang_category_id: urlInfo.coupangCategoryId,
+    
+    // To be extracted
+    ItemTitle: '',
+    ItemPrice: '',
+    StandardImage: '',
+    StandardImageFullUrl: '',
+    ExtraImagesJson: '[]',
+    ItemDescriptionHtml: '',
+    WeightKg: '1',
+    SecondSubCat: '', // Placeholder - requires resolver module
+    
+    // Tier-2 (best effort)
+    brand: '',
+    optionRaw: '',
+    specsJson: '{}',
+    reviewSummary: '',
+    
+    // Timestamps
+    collected_at_iso: new Date().toISOString(),
+    updated_at_iso: new Date().toISOString(),
+  };
+  
+  // ===== Extract Title =====
+  // Try og:title first
+  const ogTitleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i) ||
+                       html.match(/<meta\s+content="([^"]+)"\s+property="og:title"/i);
+  if (ogTitleMatch) {
+    result.ItemTitle = decodeHtmlEntities(ogTitleMatch[1]).trim();
+    trace('Title (og:title):', result.ItemTitle.substring(0, 50) + '...');
+  }
+  
+  // Fallback to <title> tag
+  if (!result.ItemTitle) {
+    const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+    if (titleMatch) {
+      result.ItemTitle = decodeHtmlEntities(titleMatch[1]).split('|')[0].trim();
+      trace('Title (<title>):', result.ItemTitle.substring(0, 50) + '...');
+    }
+  }
+  
+  // Try product name class
+  if (!result.ItemTitle) {
+    const nameMatch = html.match(/class="prod-buy-header__title"[^>]*>([^<]+)</i) ||
+                      html.match(/class="product-title"[^>]*>([^<]+)</i);
+    if (nameMatch) {
+      result.ItemTitle = decodeHtmlEntities(nameMatch[1]).trim();
+    }
+  }
+  
+  // ===== Extract Price =====
+  // Look for total-price or sale-price
+  const pricePatterns = [
+    /class="total-price"[^>]*>[\s\S]*?<strong[^>]*>([\d,]+)<\/strong>/i,
+    /class="prod-sale-price"[^>]*>[\s\S]*?<span[^>]*>([\d,]+)<\/span>/i,
+    /"salePrice"\s*:\s*(\d+)/i,
+    /data-price="(\d+)"/i,
+    /class="price-value"[^>]*>([\d,]+)/i,
+  ];
+  
+  for (const pattern of pricePatterns) {
+    const match = html.match(pattern);
+    if (match) {
+      result.ItemPrice = match[1].replace(/,/g, '');
+      trace('Price:', result.ItemPrice);
+      break;
+    }
+  }
+  
+  // ===== Extract Main Image =====
+  // Try og:image first
+  const ogImageMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i) ||
+                       html.match(/<meta\s+content="([^"]+)"\s+property="og:image"/i);
+  if (ogImageMatch) {
+    result.StandardImageFullUrl = ogImageMatch[1];
+    result.StandardImage = normalizeImageUrl(ogImageMatch[1]);
+    trace('Main image (og:image):', result.StandardImage.substring(0, 80) + '...');
+  }
+  
+  // Try product image patterns
+  if (!result.StandardImageFullUrl) {
+    const imgPatterns = [
+      /class="prod-image__detail"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"/i,
+      /id="repImageContainer"[\s\S]*?<img[^>]+src="([^"]+)"/i,
+      /"mainImage"\s*:\s*"([^"]+)"/i,
+    ];
+    
+    for (const pattern of imgPatterns) {
+      const match = html.match(pattern);
+      if (match) {
+        let imgUrl = match[1];
+        if (imgUrl.startsWith('//')) imgUrl = 'https:' + imgUrl;
+        result.StandardImageFullUrl = imgUrl;
+        result.StandardImage = normalizeImageUrl(imgUrl);
+        break;
+      }
+    }
+  }
+  
+  // ===== Extract Extra Images =====
+  const extraImages = [];
+  const imgRegex = /thumbnail[^"']*\.(?:jpg|jpeg|png|webp)/gi;
+  const allImages = html.match(imgRegex) || [];
+  
+  // Also look for image URLs in specific containers
+  const detailImgRegex = /["']([^"']*(?:thumbnail|remote)[^"']*\.(?:jpg|jpeg|png|webp))['"]/gi;
+  let detailMatch;
+  while ((detailMatch = detailImgRegex.exec(html)) !== null) {
+    allImages.push(detailMatch[1]);
+  }
+  
+  // Deduplicate and normalize
+  const seen = new Set();
+  for (const img of allImages) {
+    const normalized = normalizeImageUrl(img);
+    if (normalized && !seen.has(normalized) && normalized !== result.StandardImage) {
+      seen.add(normalized);
+      extraImages.push(normalized);
+      if (extraImages.length >= 10) break; // Limit to 10 extra images
+    }
+  }
+  
+  result.ExtraImagesJson = JSON.stringify(extraImages);
+  trace(`Extra images found: ${extraImages.length}`);
+  
+  // ===== Extract Description =====
+  // Try to find product description section
+  let descriptionHtml = '';
+  
+  // Look for description in detail area
+  const descPatterns = [
+    /<div[^>]+class="[^"]*product-detail[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<div/i,
+    /<div[^>]+id="productDetail"[^>]*>([\s\S]*?)<\/div>\s*<div/i,
+  ];
+  
+  for (const pattern of descPatterns) {
+    const match = html.match(pattern);
+    if (match) {
+      descriptionHtml = match[1].trim();
+      break;
+    }
+  }
+  
+  // If no description found, create one from title
+  if (!descriptionHtml && result.ItemTitle) {
+    descriptionHtml = `<p>${result.ItemTitle}</p>`;
+  }
+  
+  // Add images to description if we have extra images
+  if (extraImages.length > 0) {
+    const imgHtml = extraImages.slice(0, 5).map(img => 
+      `<p><img src="https://thumbnail.coupangcdn.com/${img}" /></p>`
+    ).join('\n');
+    descriptionHtml += `\n<br/>\n${imgHtml}`;
+  }
+  
+  result.ItemDescriptionHtml = descriptionHtml;
+  trace('Description length:', descriptionHtml.length);
+  
+  // ===== Extract Weight =====
+  const weightPatterns = [
+    /총\s*중량[:\s]*([^<\n]+)/i,
+    /중량[:\s]*([^<\n]+)/i,
+    /무게[:\s]*([^<\n]+)/i,
+    /weight[:\s]*([^<\n]+)/i,
+    /(\d+(?:\.\d+)?)\s*(?:kg|g)\b/i,
+  ];
+  
+  for (const pattern of weightPatterns) {
+    const match = html.match(pattern);
+    if (match) {
+      const weightKg = parseWeightToKg(match[1] || match[0]);
+      if (weightKg !== '1') {
+        result.WeightKg = weightKg;
+        trace('Weight found:', match[1] || match[0], '→', weightKg, 'Kg');
+        break;
+      }
+    }
+  }
+  
+  // ===== Tier-2: Brand =====
+  const brandPatterns = [
+    /브랜드[:\s]*([^<\n,]+)/i,
+    /제조사[:\s]*([^<\n,]+)/i,
+    /"brand"\s*:\s*"([^"]+)"/i,
+    /class="prod-brand-name"[^>]*>([^<]+)/i,
+  ];
+  
+  for (const pattern of brandPatterns) {
+    const match = html.match(pattern);
+    if (match) {
+      result.brand = decodeHtmlEntities(match[1]).trim();
+      trace('Brand:', result.brand);
+      break;
+    }
+  }
+  
+  // ===== Tier-2: Option Raw =====
+  // Just capture if options exist (no complex parsing)
+  const optionMatch = html.match(/class="[^"]*option[^"]*"[^>]*>([\s\S]{0,500})/i);
+  if (optionMatch) {
+    result.optionRaw = optionMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 200);
+    trace('Option raw (truncated):', result.optionRaw.substring(0, 50) + '...');
+  }
+  
+  // ===== Tier-2: Specs =====
+  const specs = {};
+  const specRegex = /<th[^>]*>([^<]+)<\/th>\s*<td[^>]*>([^<]+)<\/td>/gi;
+  let specMatch;
+  while ((specMatch = specRegex.exec(html)) !== null) {
+    const key = decodeHtmlEntities(specMatch[1]).trim();
+    const value = decodeHtmlEntities(specMatch[2]).trim();
+    if (key && value && key.length < 50) {
+      specs[key] = value;
+    }
+    if (Object.keys(specs).length >= 20) break;
+  }
+  result.specsJson = JSON.stringify(specs);
+  trace('Specs found:', Object.keys(specs).length);
+  
+  // ===== Tier-2: Review Summary =====
+  const reviewMatch = html.match(/(\d+(?:\.\d+)?)\s*점/i) ||
+                      html.match(/평점[:\s]*(\d+(?:\.\d+)?)/i);
+  if (reviewMatch) {
+    result.reviewSummary = `평점: ${reviewMatch[1]}`;
+    trace('Review:', result.reviewSummary);
+  }
+  
+  return result;
+}
+
+/**
+ * Main scrape function
+ * @param {string} productUrl - Coupang product URL
+ * @returns {Promise<Object>} - Extracted product data
+ */
+async function scrapeCoupangProduct(productUrl) {
+  console.log(`\n=== Coupang Scraper ===`);
+  console.log(`URL: ${productUrl}\n`);
+  
+  // Parse URL
+  const urlInfo = parseProductUrl(productUrl);
+  
+  if (!urlInfo.coupangProductId) {
+    throw new Error('Invalid Coupang product URL: could not extract product ID');
+  }
+  
+  console.log(`Product ID: ${urlInfo.coupangProductId}`);
+  console.log(`Item ID: ${urlInfo.itemId || '(none)'}`);
+  console.log(`Vendor Item ID: ${urlInfo.vendorItemId || '(none)'}`);
+  console.log(`Category ID: ${urlInfo.coupangCategoryId || '(none)'}`);
+  
+  // Fetch HTML
+  const html = await fetchHtml(productUrl);
+  
+  // Check for blocking
+  if (html.includes('차단') || html.includes('blocked') || html.includes('captcha')) {
+    throw new Error('Request appears to be blocked by Coupang.\n' +
+      'Try setting COUPANG_COOKIE in backend/.env with a valid session cookie.');
+  }
+  
+  // Extract data
+  const productData = extractProductData(html, urlInfo);
+  
+  // Summary
+  console.log(`\n=== Extraction Summary ===`);
+  console.log(`Title: ${productData.ItemTitle.substring(0, 60)}${productData.ItemTitle.length > 60 ? '...' : ''}`);
+  console.log(`Price: ${productData.ItemPrice || '(not found)'}`);
+  console.log(`Main Image: ${productData.StandardImage ? 'OK' : '(not found)'}`);
+  console.log(`Extra Images: ${JSON.parse(productData.ExtraImagesJson).length}`);
+  console.log(`Weight: ${productData.WeightKg} Kg`);
+  console.log(`Brand: ${productData.brand || '(not found)'}`);
+  console.log(`SecondSubCat: (placeholder - requires resolver)`);
+  
+  return productData;
+}
+
+module.exports = {
+  scrapeCoupangProduct,
+  parseWeightToKg,
+  normalizeImageUrl,
+  parseProductUrl,
+};
