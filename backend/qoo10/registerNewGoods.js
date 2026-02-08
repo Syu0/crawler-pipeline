@@ -130,28 +130,99 @@ async function resolveShippingNo() {
 }
 
 /**
- * Build AdditionalOption string from Options input
+ * Build AdditionalOption string from single Options group
  * Format: OptionName||*Value||*PriceDelta$$OptionName||*Value||*PriceDelta
+ * 
+ * @param {Object} optionsInput - Options configuration
+ * @param {string} optionsInput.type - Option type name (e.g., "SIZE", "COLOR")
+ * @param {Array} optionsInput.values - Array of option values
+ * @param {string} optionsInput.values[].name - Option value name (e.g., "S", "M", "Red")
+ * @param {number} optionsInput.values[].priceDelta - Price adjustment (0 or positive integer)
+ * @returns {Object} { additionalOption: string|null, optionsApplied: boolean, optionSummary: string|null }
+ * @throws {Error} If validation fails
  */
-function buildAdditionalOptions(optionsInput) {
-  if (!optionsInput || !optionsInput.type || !Array.isArray(optionsInput.values) || optionsInput.values.length === 0) {
-    return null;
+function buildAdditionalOptionSingle(optionsInput) {
+  // If Options is missing or empty, return null (backward compatible)
+  if (!optionsInput) {
+    return { additionalOption: null, optionsApplied: false, optionSummary: null };
   }
   
-  const optionName = String(optionsInput.type || 'OPTION');
-  const optionParts = optionsInput.values
-    .filter(v => v && v.name)
-    .map(v => {
-      const name = String(v.name).trim();
-      const priceDelta = String(v.priceDelta || 0);
-      return `${optionName}||*${name}||*${priceDelta}`;
-    });
+  // If Options exists but type is missing -> ignore silently
+  if (!optionsInput.type || String(optionsInput.type).trim() === '') {
+    return { additionalOption: null, optionsApplied: false, optionSummary: null };
+  }
+  
+  // If values is not an array -> throw error
+  if (optionsInput.values !== undefined && !Array.isArray(optionsInput.values)) {
+    throw new Error('Options.values must be an array');
+  }
+  
+  // If values is empty array -> ignore silently
+  if (!optionsInput.values || optionsInput.values.length === 0) {
+    return { additionalOption: null, optionsApplied: false, optionSummary: null };
+  }
+  
+  const optionType = String(optionsInput.type).trim();
+  
+  // Validate option type doesn't contain delimiters
+  if (optionType.includes('$$') || optionType.includes('||*')) {
+    throw new Error(`Options.type contains forbidden characters ('$$' or '||*'): ${optionType}`);
+  }
+  
+  const optionParts = [];
+  const summaryParts = [];
+  
+  for (let i = 0; i < optionsInput.values.length; i++) {
+    const v = optionsInput.values[i];
+    
+    if (!v || v.name === undefined || v.name === null) {
+      continue; // Skip invalid entries
+    }
+    
+    const name = String(v.name).trim();
+    
+    // Validate name is not empty
+    if (name === '') {
+      throw new Error(`Options.values[${i}].name is empty`);
+    }
+    
+    // Validate name doesn't contain delimiters
+    if (name.includes('$$') || name.includes('||*')) {
+      throw new Error(`Options.values[${i}].name contains forbidden characters ('$$' or '||*'): ${name}`);
+    }
+    
+    // Validate priceDelta
+    const priceDelta = v.priceDelta !== undefined ? Number(v.priceDelta) : 0;
+    
+    if (!Number.isInteger(priceDelta)) {
+      throw new Error(`Options.values[${i}].priceDelta must be an integer, got: ${v.priceDelta}`);
+    }
+    
+    if (priceDelta < 0) {
+      throw new Error(`Options.values[${i}].priceDelta must be 0 or positive, got: ${priceDelta}`);
+    }
+    
+    // Build AdditionalOption part: OptionType||*ValueName||*PriceDelta
+    optionParts.push(`${optionType}||*${name}||*${priceDelta}`);
+    
+    // Build summary part: ValueName(+PriceDelta) or ValueName(0)
+    const priceDisplay = priceDelta > 0 ? `+${priceDelta}` : String(priceDelta);
+    summaryParts.push(`${name}(${priceDisplay})`);
+  }
   
   if (optionParts.length === 0) {
-    return null;
+    return { additionalOption: null, optionsApplied: false, optionSummary: null };
   }
   
-  return optionParts.join('$$');
+  // Join with $$ delimiter
+  const additionalOption = optionParts.join('$$');
+  const optionSummary = `${optionType}: ${summaryParts.join(', ')}`;
+  
+  return {
+    additionalOption,
+    optionsApplied: true,
+    optionSummary
+  };
 }
 
 /**
