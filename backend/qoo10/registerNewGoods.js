@@ -314,6 +314,9 @@ async function registerNewGoods(input) {
   // Extract created item ID
   const createdItemId = extractCreatedItemId(response.ResultObject);
   
+  // Extract AIContentsNo
+  const aiContentsNo = extractAIContentsNo(response.ResultObject);
+  
   // Check if options were applied
   let optionsApplied = false;
   let optionSummary = null;
@@ -332,6 +335,7 @@ async function registerNewGoods(input) {
     resultCode: response.ResultCode,
     resultMsg: response.ResultMsg || '',
     createdItemId: createdItemId,
+    aiContentsNo: aiContentsNo,
     sellerCodeUsed: uniqueSellerCode,
     shippingNoUsed: shippingNo,
     optionsApplied: optionsApplied,
