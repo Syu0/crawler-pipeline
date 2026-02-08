@@ -117,6 +117,21 @@ async function resolveShippingNo() {
  * Build final SetNewGoods params with defaults
  */
 function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode) {
+  // Build base ItemDescription
+  let finalDescription = String(input.ItemDescription || '<p>Product description</p>');
+  
+  // Append DetailImages if provided
+  if (input.DetailImages && Array.isArray(input.DetailImages) && input.DetailImages.length > 0) {
+    const imageHtml = input.DetailImages
+      .filter(url => url && String(url).trim())
+      .map(url => `<img src="${String(url).trim()}" />`)
+      .join('');
+    
+    if (imageHtml) {
+      finalDescription += `<hr/>${imageHtml}`;
+    }
+  }
+  
   return {
     returnType: 'application/json',
     SecondSubCat: String(input.SecondSubCat),
@@ -132,7 +147,7 @@ function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode) {
     TaxRate: String(input.TaxRate || 'S'),
     ExpireDate: String(input.ExpireDate || '2030-12-31'),
     StandardImage: String(input.StandardImage),
-    ItemDescription: String(input.ItemDescription),
+    ItemDescription: finalDescription,
     Weight: String(input.Weight || '500'),
     PromotionName: String(input.PromotionName || ''),
     ProductionPlaceType: String(input.ProductionPlaceType || '1'),
@@ -222,7 +237,7 @@ async function registerNewGoods(input) {
   
   // Dry-run mode check
   if (!allowRealRegistration) {
-    console.log('\n⚠️  DRY-RUN MODE: Set QOO10_ALLOW_REAL_REG=1 to perform real registration.\n');
+    console.log('\n⚠️  DRY-RUN MODE: Set QOO10_ALLOW_REAL_REG=1 in backend/.env to perform real registration.\n');
     return {
       success: false,
       resultCode: -1,

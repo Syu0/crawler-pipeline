@@ -5,6 +5,10 @@
   "ItemQty": "10",
   "SellerCodeBase": "SAMPLE",
   "StandardImage": "https://dp.image-qoo10.jp/GMKT.IMG/loading_2017/qoo10_loading.v_20170420.png",
+  "DetailImages": [
+    "https://dp.image-qoo10.jp/GMKT.IMG/loading_2017/qoo10_loading.v_20170420.png",
+    "https://dp.image-qoo10.jp/GMKT.IMG/loading_2017/qoo10_loading.v_20170420.png"
+  ],
   "ItemDescription": "<p>This is a sample product for testing Qoo10 registration</p>",
   "AdultYN": "N",
   "TaxRate": "S",
