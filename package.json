@@ -9,7 +9,8 @@
     "qoo10:register:sample": "node scripts/qoo10-register-cli.js backend/qoo10/sample-newgoods.json",
     "qoo10:register:with-options": "node scripts/qoo10-register-cli.js backend/qoo10/sample-with-options.json",
     "qoo10:register:with-extraimages": "node scripts/qoo10-register-cli.js backend/qoo10/sample-with-extraimages.json",
-    "qoo10:register:with-extraimages-options": "node scripts/qoo10-register-cli.js backend/qoo10/sample-with-extraimages-options.json"
+    "qoo10:register:with-extraimages-options": "node scripts/qoo10-register-cli.js backend/qoo10/sample-with-extraimages-options.json",
+    "docs:sync": "node scripts/update-context-packet.js"
   },
   "dependencies": {
     "dotenv": "^17.2.4"
