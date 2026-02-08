@@ -1,0 +1,19 @@
+{
+  "SecondSubCat": "320002604",
+  "ItemTitle": "Sample Debug Product",
+  "ItemPrice": "5000",
+  "ItemQty": "10",
+  "SellerCode": "SAMPLE001",
+  "StandardImage": "https://dp.image-qoo10.jp/GMKT.IMG/loading_2017/qoo10_loading.v_20170420.png",
+  "ItemDescription": "<p>This is a sample product for testing Qoo10 registration</p>",
+  "AdultYN": "N",
+  "TaxRate": "S",
+  "RetailPrice": "0",
+  "ExpireDate": "2030-12-31",
+  "Weight": "500",
+  "PromotionName": "Sample Promo",
+  "ProductionPlaceType": "1",
+  "ProductionPlace": "Japan",
+  "IndustrialCodeType": "J",
+  "IndustrialCode": ""
+}
