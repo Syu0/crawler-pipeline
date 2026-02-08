@@ -304,6 +304,22 @@ async function registerNewGoods(input) {
   // Build final params
   const params = buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode);
   
+  // Log key params for tracer/verification
+  const isTracer = process.env.QOO10_TRACER === '1' || process.env.QOO10_TRACER === 'true';
+  console.log(`ProductionPlaceType: ${params.ProductionPlaceType} (1=国内, 2=海外, 3=その他)`);
+  console.log(`ProductionPlace: ${params.ProductionPlace}`);
+  
+  if (isTracer) {
+    console.log('\n--- Tracer: Request Params ---');
+    console.log(`ShippingNo: ${params.ShippingNo}`);
+    console.log(`SellerCode: ${params.SellerCode}`);
+    console.log(`ProductionPlaceType: ${params.ProductionPlaceType}`);
+    console.log(`ProductionPlace: ${params.ProductionPlace}`);
+    console.log(`IndustrialCodeType: ${params.IndustrialCodeType || '(empty)'}`);
+    console.log(`IndustrialCode: ${params.IndustrialCode || '(empty)'}`);
+    console.log('------------------------------\n');
+  }
+  
   // Dry-run mode check
   if (!allowRealRegistration) {
     console.log('\n⚠️  DRY-RUN MODE: Set QOO10_ALLOW_REAL_REG=1 in backend/.env to perform real registration.\n');
