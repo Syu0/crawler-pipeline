@@ -103,18 +103,26 @@ function qoo10PostMethod(methodName, params, apiVersion = '1.1') {
     
     if (ENABLE_TRACER) {
       console.log('\nGenerated curl (masked):\n', generateCurlCommand(methodName, headers, normalizedParams));
+      console.log(`\nRequest body length: ${body.length} bytes`);
+      console.log(`Request body (first 200 chars): ${body.substring(0, 200)}${body.length > 200 ? '...' : ''}\n`);
     }
     
     const req = https.request(url, { method: 'POST', headers }, (res) => {
       let rawText = '';
       res.on('data', chunk => rawText += chunk);
       res.on('end', () => {
+        if (ENABLE_TRACER) {
+          console.log(`\nRaw response (first 500 chars): ${rawText.substring(0, 500)}${rawText.length > 500 ? '...' : ''}`);
+          console.log(`Response length: ${rawText.length} bytes\n`);
+        }
+        
         let parsedData;
         try {
           parsedData = JSON.parse(rawText);
         } catch (err) {
-          // Might be XML
-          parsedData = { rawXML: rawText };
+          // Might be XML or malformed
+          console.warn('Failed to parse response as JSON. Raw response:', rawText.substring(0, 200));
+          parsedData = { rawXML: rawText, parseError: err.message };
         }
         
         traceResponse(methodName, rawText, parsedData);
