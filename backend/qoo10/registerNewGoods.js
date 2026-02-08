@@ -227,8 +227,13 @@ function buildAdditionalOptionSingle(optionsInput) {
 
 /**
  * Build final SetNewGoods params with defaults
+ * @param {Object} input - Raw input data
+ * @param {string} shippingNo - Resolved ShippingNo
+ * @param {string} uniqueSellerCode - Generated unique SellerCode
+ * @param {Object} optionResult - Result from buildAdditionalOptionSingle()
+ * @returns {Object} params for SetNewGoods API call
  */
-function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode) {
+function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode, optionResult) {
   // Build base ItemDescription
   let finalDescription = String(input.ItemDescription || '<p>Product description</p>');
   
@@ -281,10 +286,9 @@ function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode) {
     IndustrialCode: String(input.IndustrialCode || '')
   };
   
-  // Add AdditionalOption if Options provided
-  const additionalOption = buildAdditionalOptions(input.Options);
-  if (additionalOption) {
-    params.AdditionalOption = additionalOption;
+  // Add AdditionalOption if Options provided and valid
+  if (optionResult && optionResult.additionalOption) {
+    params.AdditionalOption = optionResult.additionalOption;
   }
   
   return params;
