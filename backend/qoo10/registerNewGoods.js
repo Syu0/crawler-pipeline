@@ -87,6 +87,21 @@ function extractCreatedItemId(resultObject) {
 }
 
 /**
+ * Extract AIContentsNo from ResultObject
+ */
+function extractAIContentsNo(resultObject) {
+  if (!resultObject || typeof resultObject !== 'object') {
+    return null;
+  }
+  
+  if (resultObject.AIContentsNo !== undefined && resultObject.AIContentsNo !== null) {
+    return String(resultObject.AIContentsNo);
+  }
+  
+  return null;
+}
+
+/**
  * Get valid ShippingNo from GetSellerDeliveryGroupInfo
  */
 async function resolveShippingNo() {
@@ -154,6 +169,17 @@ function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode) {
     
     if (imageHtml) {
       finalDescription += `<hr/>${imageHtml}`;
+    }
+  }
+  
+  // Append ExtraImages if provided (format: <br/> then <p><img src="URL" /></p> for each)
+  if (input.ExtraImages && Array.isArray(input.ExtraImages) && input.ExtraImages.length > 0) {
+    const validUrls = input.ExtraImages.filter(url => url && String(url).trim());
+    if (validUrls.length > 0) {
+      const extraImageHtml = validUrls
+        .map(url => `<p><img src="${String(url).trim()}" /></p>`)
+        .join('');
+      finalDescription += `<br/>${extraImageHtml}`;
     }
   }
   
