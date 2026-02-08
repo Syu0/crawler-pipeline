@@ -17,10 +17,8 @@
     "docs:sync": "node scripts/update-context-packet.js"
   },
   "dependencies": {
+    "cross-env": "^7.0.3",
     "dotenv": "^17.2.4",
     "googleapis": "^171.4.0"
-  },
-  "devDependencies": {
-    "cross-env": "^10.1.0"
   }
 }
