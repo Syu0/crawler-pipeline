@@ -92,9 +92,34 @@ Minimal              | -999 | Object reference not set...
 
 ---
 
+## Cross-Platform Support
+
+### Windows (Git Bash/MINGW)
+```bash
+npm run qoo10:test:lookup
+npm run qoo10:debug:setnewgoods
+```
+
+### Windows (PowerShell)
+```powershell
+npm run qoo10:test:lookup
+npm run qoo10:debug:setnewgoods
+```
+
+### macOS/Linux
+```bash
+npm run qoo10:test:lookup
+npm run qoo10:debug:setnewgoods
+```
+
+All platforms use identical commands - no shell-specific syntax.
+
+---
+
 ## Key Points
 
 ✅ **No manual export needed** - scripts auto-load `backend/.env`  
+✅ **Cross-platform** - works on Windows, macOS, Linux without modifications  
 ✅ **Secrets stay local** - `backend/.env` is gitignored  
 ✅ **One-time setup** - just `cp .env.example .env` and fill in SAK  
 ✅ **All commands from repo root** - `cd /app && npm run qoo10:*`  
@@ -106,11 +131,26 @@ Minimal              | -999 | Object reference not set...
 **"QOO10_SAK not set"**  
 → Ensure `backend/.env` exists and contains `QOO10_SAK=your-key`
 
+**Windows error: "잘못된 매개 변수입니다" or "Invalid parameter"**  
+→ Fixed in latest version - pull latest and try again (no MODE=... syntax used anymore)
+
 **"npm: command not found" or "yarn: command not found"**  
 → Use `npm install` (yarn is aliased to npm in this environment)
 
 **Changes not showing up after git pull**  
-→ Run `npm install` again to update dotenv dependency
+→ Run `npm install` again to update dependencies
+
+---
+
+## Available Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run qoo10:env` | Validate QOO10_SAK is set |
+| `npm run qoo10:test:lookup` | Sanity check connection |
+| `npm run qoo10:debug:setnewgoods` | Binary search param harness |
+
+All scripts include automatic env validation.
 
 ---
 
