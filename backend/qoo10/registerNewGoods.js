@@ -319,7 +319,11 @@ function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode, optionResul
  * @param {string} [input.ProductionPlace='Overseas'] - Production place (country/region name)
  * @param {string} [input.IndustrialCodeType='J'] - Industrial code type
  * @param {string} [input.IndustrialCode=''] - Industrial code
- * @param {Object} [input.Options] - Product variants/options
+ * @param {Object} [input.Options] - Single option group (e.g., SIZE or COLOR, not both)
+ * @param {string} input.Options.type - Option type name (e.g., "SIZE", "COLOR")
+ * @param {Array} input.Options.values - Array of option values
+ * @param {string} input.Options.values[].name - Value name (e.g., "S", "M", "Red")
+ * @param {number} [input.Options.values[].priceDelta=0] - Price adjustment (0 or positive integer)
  * @param {string[]} [input.DetailImages] - Detail image URLs (appended as <img> tags after <hr/>)
  * @param {string[]} [input.ExtraImages] - Extra image URLs (appended as <br/><p><img/></p> tags)
  * 
