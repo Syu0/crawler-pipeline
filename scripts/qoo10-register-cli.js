@@ -54,6 +54,7 @@ async function run() {
     console.log(`ResultCode: ${result.resultCode}`);
     console.log(`ResultMsg: ${result.resultMsg}`);
     console.log(`CreatedItemId (GdNo): ${result.createdItemId || 'null'}`);
+    console.log(`AIContentsNo: ${result.aiContentsNo || 'null'}`);
     console.log(`SellerCode used: ${result.sellerCodeUsed}`);
     console.log(`ShippingNo used: ${result.shippingNoUsed}`);
     console.log(`Options applied: ${result.optionsApplied ? 'YES' : 'NO'}`);
