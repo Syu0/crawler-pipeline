@@ -33,11 +33,40 @@ nano backend/.env
 vim backend/.env
 ```
 
-Add your key:
+Add your credentials:
 ```bash
 QOO10_SAK=your-actual-seller-auth-key-here
+QOO10_ALLOW_REAL_REG=0
 QOO10_TRACER=0
 ```
+
+**To enable real registration** (instead of dry-run):
+```bash
+QOO10_SAK=your-key
+QOO10_ALLOW_REAL_REG=1
+QOO10_TRACER=0
+```
+
+---
+
+## Environment Variables (backend/.env)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `QOO10_SAK` | - | **Required:** Seller Auth Key from Qoo10 |
+| `QOO10_ALLOW_REAL_REG` | `0` | Set to `1` to enable real registration (default: dry-run) |
+| `QOO10_TRACER` | `0` | Set to `1` for verbose logging |
+
+### Common Gotcha ⚠️
+
+**Setting env vars only in terminal session is temporary and will be lost.**
+
+❌ **Wrong:** `export QOO10_ALLOW_REAL_REG=1 && npm run ...`  
+✅ **Right:** Add to `backend/.env` file
+
+**Why?** Terminal exports don't persist. Use `backend/.env` for permanent settings.
+
+---
 
 ### 5. Test connection (sanity check)
 ```bash

@@ -6,10 +6,37 @@ Node-side debugging harness for Qoo10 Japan QAPI `ItemsBasic.SetNewGoods` return
 **Key points:**
 - All Qoo10 calls happen **server-side** (Node scripts), NOT in browser
 - Secrets stored in `backend/.env` (auto-loaded by scripts)
-- Single env var: `QOO10_SAK` (Seller Auth Key)
 - **Cross-platform** - works on Windows, macOS, Linux
-- NO network calls until env is set
+- NO network calls until explicitly enabled
 - Parameter binary-search to identify missing/invalid params
+
+---
+
+## Environment Variables (backend/.env)
+
+All env vars are read from `backend/.env` and auto-loaded by scripts.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `QOO10_SAK` | **Yes** | - | Seller Auth Key from Qoo10 seller portal |
+| `QOO10_ALLOW_REAL_REG` | No | `0` (dry-run) | Set to `1` to enable real registration |
+| `QOO10_TRACER` | No | `0` | Set to `1` for verbose request/response logging |
+
+**Example `backend/.env`:**
+```bash
+QOO10_SAK=your-seller-auth-key-here
+QOO10_ALLOW_REAL_REG=0
+QOO10_TRACER=0
+```
+
+### Common Gotcha ⚠️
+
+**Do NOT set env vars only in terminal session** - they will be lost after closing terminal.
+
+❌ **Wrong:** `export QOO10_ALLOW_REAL_REG=1 && npm run qoo10:register:sample`  
+✅ **Right:** Add `QOO10_ALLOW_REAL_REG=1` to `backend/.env`
+
+**Why?** Terminal exports are session-only. Using `backend/.env` persists the setting across all runs.
 
 ---
 
@@ -35,6 +62,14 @@ cp backend/.env.example backend/.env
 Example `backend/.env`:
 ```bash
 QOO10_SAK=your-seller-auth-key-here
+QOO10_ALLOW_REAL_REG=0
+QOO10_TRACER=0
+```
+
+**Set to 1 to enable real registration:**
+```bash
+QOO10_SAK=your-key
+QOO10_ALLOW_REAL_REG=1
 QOO10_TRACER=0
 ```
 

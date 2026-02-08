@@ -55,6 +55,7 @@ console.log(result);
 | `SellerCode` | string | Unique seller code |
 | `StandardImage` | string | Product image URL (https) |
 | `ItemDescription` | string | HTML description (min 5 chars) |
+| `DetailImages` | array | Optional: Array of detail image URLs |
 
 ### Optional Fields (with defaults)
 
@@ -73,6 +74,27 @@ console.log(result);
 | `ProductionPlace` | 'Japan' | Production place |
 | `IndustrialCodeType` | 'J' | Industrial code type |
 | `IndustrialCode` | '' | Industrial code |
+
+### DetailImages Support
+
+The `DetailImages` field allows multiple product images. When provided, images are automatically appended to `ItemDescription` as HTML `<img>` tags.
+
+**Example:**
+```json
+{
+  "StandardImage": "https://example.com/main.jpg",
+  "DetailImages": [
+    "https://example.com/detail1.jpg",
+    "https://example.com/detail2.jpg"
+  ],
+  "ItemDescription": "<p>Product description</p>"
+}
+```
+
+**Generated ItemDescription:**
+```html
+<p>Product description</p><hr/><img src="https://example.com/detail1.jpg" /><img src="https://example.com/detail2.jpg" />
+```
 
 ---
 
@@ -185,11 +207,34 @@ Location: `/app/backend/qoo10/sample-newgoods.json`
 ## Environment
 
 Requires `backend/.env` with:
-```
+```bash
 QOO10_SAK=your-seller-auth-key
+QOO10_ALLOW_REAL_REG=0
+QOO10_TRACER=0
 ```
 
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `QOO10_SAK` | - | **Required:** Seller Auth Key |
+| `QOO10_ALLOW_REAL_REG` | `0` | Set to `1` for real registration (default: dry-run) |
+| `QOO10_TRACER` | `0` | Set to `1` for verbose logging |
+
 Module auto-loads `backend/.env` using dotenv.
+
+### Dry-Run Mode (Default)
+
+By default, `QOO10_ALLOW_REAL_REG=0` (or not set) means **dry-run mode**.
+
+**Dry-run behavior:**
+- Resolves ShippingNo (allowed, no risk)
+- Skips SetNewGoods API call
+- Returns mock response: `resultCode: -1, resultMsg: 'Dry-run mode'`
+
+**To enable real registration:**
+```bash
+# In backend/.env
+QOO10_ALLOW_REAL_REG=1
+```
 
 ---
 
