@@ -241,14 +241,20 @@ function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode) {
  * @param {string} [input.ProductionPlace='Japan'] - Production place
  * @param {string} [input.IndustrialCodeType='J'] - Industrial code type
  * @param {string} [input.IndustrialCode=''] - Industrial code
+ * @param {Object} [input.Options] - Product variants/options
+ * @param {string[]} [input.DetailImages] - Detail image URLs (appended as <img> tags after <hr/>)
+ * @param {string[]} [input.ExtraImages] - Extra image URLs (appended as <br/><p><img/></p> tags)
  * 
  * @returns {Promise<Object>} Result object with:
  *   - success: boolean
  *   - resultCode: number
  *   - resultMsg: string
  *   - createdItemId: string | null (GdNo from ResultObject)
+ *   - aiContentsNo: string | null (AIContentsNo from ResultObject)
  *   - sellerCodeUsed: string
  *   - shippingNoUsed: string
+ *   - optionsApplied: boolean
+ *   - optionSummary: string | null
  *   - rawResultObject: object | null
  */
 async function registerNewGoods(input) {
