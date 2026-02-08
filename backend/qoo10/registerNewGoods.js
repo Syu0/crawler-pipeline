@@ -376,13 +376,24 @@ async function registerNewGoods(input) {
     console.log(`ShippingNo from input: ${shippingNo}`);
   }
   
+  // Build Options (single group only) - validates and throws on error
+  const optionResult = buildAdditionalOptionSingle(input.Options);
+  
   // Build final params
-  const params = buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode);
+  const params = buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode, optionResult);
   
   // Log key params for tracer/verification
   const isTracer = process.env.QOO10_TRACER === '1' || process.env.QOO10_TRACER === 'true';
   console.log(`ProductionPlaceType: ${params.ProductionPlaceType} (1=国内, 2=海外, 3=その他)`);
   console.log(`ProductionPlace: ${params.ProductionPlace}`);
+  
+  // Log options info
+  if (optionResult.optionsApplied) {
+    console.log(`Options applied: YES`);
+    console.log(`Option summary: ${optionResult.optionSummary}`);
+  } else {
+    console.log(`Options applied: NO`);
+  }
   
   if (isTracer) {
     console.log('\n--- Tracer: Request Params ---');
@@ -392,6 +403,11 @@ async function registerNewGoods(input) {
     console.log(`ProductionPlace: ${params.ProductionPlace}`);
     console.log(`IndustrialCodeType: ${params.IndustrialCodeType || '(empty)'}`);
     console.log(`IndustrialCode: ${params.IndustrialCode || '(empty)'}`);
+    if (params.AdditionalOption) {
+      console.log(`AdditionalOption: ${params.AdditionalOption}`);
+    } else {
+      console.log(`AdditionalOption: (none)`);
+    }
     console.log('------------------------------\n');
   }
   
@@ -403,8 +419,11 @@ async function registerNewGoods(input) {
       resultCode: -1,
       resultMsg: 'Dry-run mode - registration skipped',
       createdItemId: null,
+      aiContentsNo: null,
       sellerCodeUsed: uniqueSellerCode,
       shippingNoUsed: shippingNo,
+      optionsApplied: optionResult.optionsApplied,
+      optionSummary: optionResult.optionSummary,
       rawResultObject: null
     };
   }
@@ -418,18 +437,6 @@ async function registerNewGoods(input) {
   // Extract AIContentsNo
   const aiContentsNo = extractAIContentsNo(response.ResultObject);
   
-  // Check if options were applied
-  let optionsApplied = false;
-  let optionSummary = null;
-  if (input.Options && input.Options.values && input.Options.values.length > 0) {
-    optionsApplied = true;
-    const optType = input.Options.type || 'OPTION';
-    const optValues = input.Options.values
-      .map(v => `${v.name}(${v.priceDelta > 0 ? '+' : ''}${v.priceDelta})`)
-      .join(', ');
-    optionSummary = `${optType}: ${optValues}`;
-  }
-  
   // Return normalized result
   const result = {
     success: response.ResultCode === 0,
@@ -439,8 +446,8 @@ async function registerNewGoods(input) {
     aiContentsNo: aiContentsNo,
     sellerCodeUsed: uniqueSellerCode,
     shippingNoUsed: shippingNo,
-    optionsApplied: optionsApplied,
-    optionSummary: optionSummary,
+    optionsApplied: optionResult.optionsApplied,
+    optionSummary: optionResult.optionSummary,
     rawResultObject: response.ResultObject || null
   };
   
