@@ -1,0 +1,23 @@
+{
+  "SecondSubCat": "320002604",
+  "ItemTitle": "Sample Product with Extra Images",
+  "ItemPrice": "5000",
+  "ItemQty": "10",
+  "SellerCodeBase": "EXTRA",
+  "StandardImage": "https://dp.image-qoo10.jp/GMKT.IMG/loading_2017/qoo10_loading.v_20170420.png",
+  "ExtraImages": [
+    "https://dp.image-qoo10.jp/GMKT.IMG/loading_2017/qoo10_loading.v_20170420.png",
+    "https://dp.image-qoo10.jp/GMKT.IMG/loading_2017/qoo10_loading.v_20170420.png"
+  ],
+  "ItemDescription": "<p>This is a sample product with extra images for testing</p>",
+  "AdultYN": "N",
+  "TaxRate": "S",
+  "RetailPrice": "0",
+  "ExpireDate": "2030-12-31",
+  "Weight": "500",
+  "PromotionName": "Extra Images Test",
+  "ProductionPlaceType": "1",
+  "ProductionPlace": "Japan",
+  "IndustrialCodeType": "J",
+  "IndustrialCode": ""
+}
