@@ -109,20 +109,32 @@ function fetchHtml(urlString) {
     const url = new URL(urlString);
     const protocol = url.protocol === 'https:' ? https : http;
     
+    // Realistic browser headers to avoid bot detection
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
       'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Accept-Encoding': 'identity', // Disable compression for simplicity
+      'Accept-Encoding': 'identity',
       'Cache-Control': 'no-cache',
       'Pragma': 'no-cache',
+      'Referer': 'https://www.coupang.com/',
+      'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"',
+      'sec-fetch-dest': 'document',
+      'sec-fetch-mode': 'navigate',
+      'sec-fetch-site': 'same-origin',
+      'sec-fetch-user': '?1',
+      'upgrade-insecure-requests': '1',
     };
     
-    // Add cookie if provided
+    // Add cookie if provided (for authenticated requests)
     const cookie = process.env.COUPANG_COOKIE;
-    if (cookie) {
-      headers['Cookie'] = cookie;
+    if (cookie && cookie.trim()) {
+      headers['Cookie'] = cookie.trim();
       trace('Using COUPANG_COOKIE from env');
+    } else {
+      trace('No COUPANG_COOKIE set - attempting no-login fetch');
     }
     
     trace(`Fetching: ${urlString}`);
@@ -143,13 +155,38 @@ function fetchHtml(urlString) {
       // Handle redirects
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         trace(`Redirecting to: ${res.headers.location}`);
-        fetchHtml(res.headers.location).then(resolve).catch(reject);
+        let redirectUrl = res.headers.location;
+        if (redirectUrl.startsWith('/')) {
+          redirectUrl = `${url.protocol}//${url.hostname}${redirectUrl}`;
+        }
+        fetchHtml(redirectUrl).then(resolve).catch(reject);
+        return;
+      }
+      
+      // Handle error status codes with actionable guidance
+      if (res.statusCode === 403 || res.statusCode === 429) {
+        const errorMsg = res.statusCode === 403 
+          ? 'Access denied (403 Forbidden)' 
+          : 'Rate limited (429 Too Many Requests)';
+        
+        reject(new Error(
+          `${errorMsg}\n\n` +
+          `To fix this, set COUPANG_COOKIE in backend/.env:\n` +
+          `  1. Login to Coupang in Chrome browser\n` +
+          `  2. Open DevTools (F12) -> Network tab\n` +
+          `  3. Navigate to a product page\n` +
+          `  4. Click on the main document request\n` +
+          `  5. Copy the "cookie" request header value\n` +
+          `  6. Paste into backend/.env:\n` +
+          `     COUPANG_COOKIE=<paste_here>\n` +
+          `  7. Rerun: npm run coupang:scrape:dry:trace\n\n` +
+          `Note: Cookies expire. Refresh if it stops working.`
+        ));
         return;
       }
       
       if (res.statusCode !== 200) {
-        reject(new Error(`HTTP ${res.statusCode}: Failed to fetch page. ` +
-          (res.statusCode === 403 ? 'Try setting COUPANG_COOKIE in backend/.env' : '')));
+        reject(new Error(`HTTP ${res.statusCode}: Failed to fetch page.`));
         return;
       }
       
@@ -157,6 +194,12 @@ function fetchHtml(urlString) {
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         trace(`Received ${data.length} bytes`);
+        
+        // Connectivity check: show first 200 chars on success in tracer mode
+        if (ENABLE_TRACER && data.length > 0) {
+          trace('HTML preview (first 200 chars):', data.substring(0, 200).replace(/\s+/g, ' '));
+        }
+        
         resolve(data);
       });
     });
