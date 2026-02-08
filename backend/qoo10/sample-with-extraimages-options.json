@@ -1,0 +1,28 @@
+{
+  "SecondSubCat": "320002604",
+  "ItemTitle": "Sample Product with Extra Images and Options",
+  "ItemPrice": "5000",
+  "ItemQty": "30",
+  "StandardImage": "https://dp.image-qoo10.jp/GMKT.IMG/loading_2017/qoo10_loading.v_20170420.png",
+  "ExtraImages": [
+    "https://dp.image-qoo10.jp/GMKT.IMG/loading_2017/qoo10_loading.v_20170420.png",
+    "https://dp.image-qoo10.jp/GMKT.IMG/loading_2017/qoo10_loading.v_20170420.png"
+  ],
+  "Options": {
+    "type": "SIZE",
+    "values": [
+      {"name": "S", "priceDelta": 0},
+      {"name": "M", "priceDelta": 200},
+      {"name": "L", "priceDelta": 500}
+    ]
+  },
+  "ItemDescription": "<p>This is a sample product with extra images and size options</p>",
+  "AdultYN": "N",
+  "TaxRate": "S",
+  "RetailPrice": "0",
+  "ExpireDate": "2030-12-31",
+  "Weight": "500",
+  "PromotionName": "Extra Images + Options Test",
+  "ProductionPlaceType": "2",
+  "ProductionPlace": "Overseas"
+}
