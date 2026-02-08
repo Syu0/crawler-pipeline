@@ -1,62 +1,107 @@
 # Google Sheet Schema
 
-This document defines the expected schema for the Google Sheet used in the Coupang-to-Qoo10 pipeline.
+This document defines the schema for the `coupang_datas` tab used in the Coupang-to-Qoo10 pipeline.
 
-> **Note**: Sheet integration is TODO. This schema is a specification for future implementation.
+> **Status**: IMPLEMENTED. Step 2 scraper writes to this schema.
 
 ---
 
 ## Overview
 
 The Google Sheet serves as the central data store between:
-- **Step 1**: Coupang scraper (writes product data)
+- **Step 2**: Coupang scraper (writes product data)
 - **Step 3**: Qoo10 registration (reads product data, writes Qoo10 IDs)
 
 ---
 
 ## Sheet Structure
 
-### Main Sheet: `Products`
+### Tab: `coupang_datas`
 
-| Column | Header Name | Type | Required | Description |
-|--------|-------------|------|----------|-------------|
-| A | `coupang_url` | string | Y | Source Coupang Rocket Delivery product URL |
-| B | `product_title` | string | Y | Product title (maps to `ItemTitle`) |
-| C | `price` | number | Y | Price in JPY (maps to `ItemPrice`) |
-| D | `quantity` | number | Y | Stock quantity (maps to `ItemQty`) |
-| E | `category_id` | string | Y | Qoo10 category ID (maps to `SecondSubCat`) |
-| F | `main_image_url` | string | Y | Primary image URL (maps to `StandardImage`) |
-| G | `description_html` | string | Y | HTML description (maps to `ItemDescription`) |
-| H | `extra_images` | string | N | Comma-separated image URLs (maps to `ExtraImages[]`) |
-| I | `option_type` | string | N | Option group name, e.g., "SIZE" (maps to `Options.type`) |
-| J | `option_values` | string | N | JSON array, e.g., `[{"name":"S","priceDelta":0}]` |
-| K | `shipping_no` | string | N | Override ShippingNo (default: 471554) |
-| L | `status` | string | N | Processing status: `pending`, `registered`, `error` |
-| M | `qoo10_gdno` | string | N | **OUTPUT**: Created Qoo10 item ID (GdNo) |
-| N | `qoo10_ai_contents_no` | string | N | **OUTPUT**: AIContentsNo from response |
-| O | `seller_code` | string | N | **OUTPUT**: Generated SellerCode used |
-| P | `registered_at` | datetime | N | **OUTPUT**: Registration timestamp |
-| Q | `error_message` | string | N | **OUTPUT**: Error message if failed |
-
----
-
-## Column Mapping to API
-
-| Sheet Column | API Parameter | Notes |
-|--------------|---------------|-------|
-| `product_title` | `ItemTitle` | Direct mapping |
-| `price` | `ItemPrice` | Converted to string |
-| `quantity` | `ItemQty` | Converted to string |
-| `category_id` | `SecondSubCat` | Direct mapping |
-| `main_image_url` | `StandardImage` | Must be HTTPS URL |
-| `description_html` | `ItemDescription` | ExtraImages appended |
-| `extra_images` | `ExtraImages[]` | Parse comma-separated |
-| `option_type` + `option_values` | `Options` object | Combined into Options |
-| `shipping_no` | `ShippingNo` | Default: 471554 |
+| Column | Header Name | Type | Source | Description |
+|--------|-------------|------|--------|-------------|
+| A | `vendorItemId` | string | URL param | **PRIMARY KEY** for upsert |
+| B | `itemId` | string | URL param | Fallback key if vendorItemId missing |
+| C | `coupang_product_id` | string | URL path | Product ID from /vp/products/{id} |
+| D | `coupang_category_id` | string | URL param | Coupang category ID (categoryId) |
+| E | `source_url` | string | Input | Original Coupang URL |
+| F | `ItemTitle` | string | HTML | Product title (Qoo10 field name) |
+| G | `ItemPrice` | string | HTML | Price in KRW, numeric string |
+| H | `StandardImage` | string | HTML | **Normalized** path: `thumbnails/...` |
+| I | `StandardImageFullUrl` | string | HTML | Full CDN URL (optional) |
+| J | `ExtraImagesJson` | JSON string | HTML | Array of image paths |
+| K | `ItemDescriptionHtml` | string | HTML | HTML description with images |
+| L | `WeightKg` | string | HTML | Weight in Kg (default: "1") |
+| M | `SecondSubCat` | string | - | **PLACEHOLDER**: Qoo10 category ID |
+| N | `brand` | string | HTML | Brand/manufacturer (best effort) |
+| O | `optionRaw` | string | HTML | Raw option text (best effort) |
+| P | `specsJson` | JSON string | HTML | Key-value specs table |
+| Q | `reviewSummary` | string | HTML | Review rating (best effort) |
+| R | `collected_at_iso` | ISO datetime | System | First collection timestamp |
+| S | `updated_at_iso` | ISO datetime | System | Last update timestamp |
 
 ---
 
-## Status Values
+## StandardImage Normalization Rule
+
+Coupang CDN URLs are normalized to a relative path:
+
+**Before** (full URL):
+```
+https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/92227177321273-59c263de-60eb-4a36-b7fa-e490c36d45d0.jpg
+```
+
+**After** (stored value):
+```
+thumbnails/remote/492x492ex/image/retail/images/92227177321273-59c263de-60eb-4a36-b7fa-e490c36d45d0.jpg
+```
+
+This allows flexible reconstruction with different CDN prefixes for Qoo10.
+
+---
+
+## Weight Conversion Rules
+
+| Input Pattern | Output (Kg) |
+|---------------|-------------|
+| `250g` | `0.25` |
+| `1.5kg` | `1.5` |
+| `1kg 500g` | `1.5` |
+| No weight found | `1` (default) |
+
+---
+
+## Upsert Logic
+
+1. **Primary key**: `vendorItemId`
+2. **Fallback key**: `itemId` (if vendorItemId is empty)
+3. **Behavior**:
+   - If key exists: UPDATE the row
+   - If key not found: APPEND new row
+4. **Timestamps**:
+   - `collected_at_iso`: Set only on first insert
+   - `updated_at_iso`: Updated on every upsert
+
+---
+
+## Column Mapping to Qoo10 API
+
+| Sheet Column | Qoo10 Parameter | Notes |
+|--------------|-----------------|-------|
+| `ItemTitle` | `ItemTitle` | Direct mapping |
+| `ItemPrice` | `ItemPrice` | Convert KRW → JPY if needed |
+| `StandardImage` | `StandardImage` | Prepend CDN prefix |
+| `ExtraImagesJson` | `ExtraImages` | Parse JSON array |
+| `ItemDescriptionHtml` | `ItemDescription` | Direct mapping |
+| `WeightKg` | `Weight` | Qoo10 expects Kg |
+| `SecondSubCat` | `SecondSubCat` | **TODO: Resolver needed** |
+
+---
+
+## Status Values (TODO: Add column)
+
+| Status | Description |
+|--------|-------------|
 
 | Status | Description |
 |--------|-------------|
