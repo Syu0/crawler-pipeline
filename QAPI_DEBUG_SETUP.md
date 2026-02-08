@@ -1,115 +1,152 @@
-# Qoo10 QAPI Debug Setup - Complete
+# Qoo10 QAPI Debug Setup
 
-## Files Created
+## Overview
+Node-side debugging harness for Qoo10 Japan QAPI `ItemsBasic.SetNewGoods` returning ResultCode=-999.
 
-### 1. `/app/frontend/src/lib/qoo10Client.js`
-- Core Qoo10 QAPI client with safe tracer
-- **Env gate**: NO network calls unless `REACT_APP_QOO10_SAK` is set
-- **Tracer**: Enable with `REACT_APP_QOO10_TRACER=true` to log:
-  - Method name, URL, headers (SAK masked), urlencoded body
-  - Raw response text + parsed JSON/XML
-  - Masked curl command for manual testing
-- Functions: `qoo10PostMethod()`, `testQoo10Connection()`, `setNewGoods()`
-
-### 2. `/app/scripts/qoo10-env-check.js`
-- Validates required env vars before tests run
-- Modes: `lookup` (requires QOO10_SAK), `register` (requires QOO10_SAK)
-- Exits with error if vars missing
-
-### 3. `/app/scripts/qoo10-debug-setnewgoods.js`
-- **Parameter binary search harness** (NOT RUN YET)
-- Starts with minimal SetNewGoods params, adds suspicious params incrementally
-- Tracks ResultCode/Msg for each attempt
-- Prints clean summary table
-- Additive params tested: StandardImage, ItemDescription, TaxRate, ExpireDate, etc.
-
-### 4. `/app/scripts/qoo10-test-lookup.js`
-- Sanity check: tests `ItemsLookup.GetSellerDeliveryGroupInfo`
-- Confirms SAK works with a known-good method
+**Key points:**
+- All Qoo10 calls happen **server-side** (Node scripts), NOT in browser
+- Single env var: `QOO10_SAK` (Seller Auth Key)
+- NO network calls until env is set
+- Parameter binary-search to identify missing/invalid params
 
 ---
 
-## npm Scripts Added to `/app/frontend/package.json`
+## Files
 
-```json
-"qoo10:env:lookup": "MODE=lookup node ../scripts/qoo10-env-check.js",
-"qoo10:env:register": "MODE=register node ../scripts/qoo10-env-check.js",
-"qoo10:test:lookup": "node ../scripts/qoo10-test-lookup.js",
-"qoo10:debug:setnewgoods": "npm run qoo10:env:register && node ../scripts/qoo10-debug-setnewgoods.js"
+### 1. `/app/scripts/lib/qoo10Client.js`
+Core Qoo10 QAPI client (Node HTTPS)
+- **Env gate**: blocks fetch unless `QOO10_SAK` set
+- **Tracer**: set `QOO10_TRACER=1` to log method/URL/headers (SAK masked)/body/response
+- **Encoding**: all params normalized to strings, UTF-8 charset
+- Functions: `qoo10PostMethod()`, `testQoo10Connection()`, `setNewGoods()`
+
+### 2. `/app/scripts/qoo10-env-check.js`
+Validates `QOO10_SAK` before tests run. Exits with error if missing.
+
+### 3. `/app/scripts/qoo10-test-lookup.js`
+Sanity check: tests `ItemsLookup.GetSellerDeliveryGroupInfo` to verify SAK works.
+
+### 4. `/app/scripts/qoo10-debug-setnewgoods.js`
+**Parameter binary search harness**
+- Starts with minimal SetNewGoods params
+- Adds optional/suspicious params incrementally (StandardImage, ItemDescription, TaxRate, etc.)
+- Prints ResultCode/Msg table
+
+---
+
+## npm Scripts (run from repo root `/app`)
+
+```bash
+npm run qoo10:env:lookup              # Check QOO10_SAK is set (lookup mode)
+npm run qoo10:env:register            # Check QOO10_SAK is set (register mode)
+npm run qoo10:test:lookup             # Sanity check connection
+npm run qoo10:debug:setnewgoods       # Run param binary search
 ```
 
 ---
 
-## To Run Later (After Setting Env)
+## Usage
 
-### Step 1: Set env vars
+### Step 1: Set env var
 ```bash
-# In /app/frontend/.env or shell export
 export QOO10_SAK="your-seller-auth-key-here"
-export REACT_APP_QOO10_SAK="your-seller-auth-key-here"
-export REACT_APP_QOO10_TRACER="true"  # optional, for verbose logs
+```
+
+Optional: enable verbose tracer
+```bash
+export QOO10_TRACER=1
 ```
 
 ### Step 2: Test connection (sanity check)
 ```bash
-cd /app/frontend
+cd /app
 npm run qoo10:test:lookup
-# Should return ResultCode: 0 if SAK is valid
+# Expected: ResultCode: 0, ResultMsg: "Success"
 ```
 
 ### Step 3: Run SetNewGoods debug harness
 ```bash
-cd /app/frontend
+cd /app
 npm run qoo10:debug:setnewgoods
-# Tests minimal params first, then adds params incrementally
 # Prints table showing which params cause -999 vs success
 ```
 
-### Step 4: Check env gate (without setting vars)
+### Step 4: Verify env gate (without setting var)
 ```bash
-cd /app/frontend
+unset QOO10_SAK
 npm run qoo10:env:register
-# Will exit with error: "Missing required env vars"
+# Expected: "Missing required env vars for MODE=register: QOO10_SAK"
 ```
 
 ---
 
-## PR-Style Diffs
+## Example Output
 
-### Created Files:
-1. `/app/frontend/src/lib/qoo10Client.js` - NEW (130 lines)
-2. `/app/scripts/qoo10-env-check.js` - NEW (36 lines)
-3. `/app/scripts/qoo10-debug-setnewgoods.js` - NEW (185 lines)
-4. `/app/scripts/qoo10-test-lookup.js` - NEW (62 lines)
+### Successful connection test
+```
+Testing Qoo10 connection (GetSellerDeliveryGroupInfo)...
 
-### Modified Files:
-- `/app/frontend/package.json` - Added 4 new scripts
+Response: {
+  "ResultCode": 0,
+  "ResultMsg": "Success",
+  "ResultObject": [...]
+}
+
+✓ Connection OK
+```
+
+### Debug harness (partial)
+```
+=== Qoo10 SetNewGoods Parameter Debug ===
+
+[Test 1] Minimal params only
+Params: returnType, SecondSubCat, ItemTitle, ItemPrice, ItemQty, ...
+→ ResultCode: -999, Msg: Object reference not set to an instance of an object.
+
+[Test 2] Adding: StandardImage
+Params: returnType, SecondSubCat, ItemTitle, ..., StandardImage
+→ ResultCode: -999, Msg: Object reference not set to an instance of an object.
+
+[Test 3] Adding: ItemDescription
+→ ResultCode: 0, Msg: Success
+✓ SUCCESS! Found working param combination.
+
+=== Summary Table ===
+
+Test                 | Code | Message
+----------------------------------------------------------------------
+Minimal              | -999 | Object reference not set...
++StandardImage       | -999 | Object reference not set...
++ItemDescription     | 0    | Success
+```
 
 ---
 
 ## Key Features
 
-✅ **NO network calls until env is set** - hard gate blocks fetch  
+✅ **Node-side only** - no browser/React env vars  
+✅ **Single env var** - `QOO10_SAK` for all scripts  
+✅ **Env gate** - NO network calls until SAK is set  
 ✅ **Safe tracer** - masks SAK in logs, shows curl with masked secrets  
-✅ **Parameter binary search** - identifies which param causes -999  
+✅ **UTF-8 encoding** - Content-Type includes charset  
 ✅ **String normalization** - all params converted to strings before urlencoding  
-✅ **Clean exit codes** - scripts return proper status for CI/CD  
+✅ **Binary search** - identifies which param fixes -999  
 
 ---
 
-## Next Steps (Manual)
+## Troubleshooting
 
-1. Obtain Qoo10 SAK from seller portal
-2. Set `QOO10_SAK` and `REACT_APP_QOO10_SAK` in env
-3. Run `npm run qoo10:test:lookup` to verify connection
-4. Run `npm run qoo10:debug:setnewgoods` to identify missing param
-5. Check ResultCode table output to find which param addition fixes -999
+**"QOO10_SAK not set"**  
+→ Run `export QOO10_SAK="your-key"` before npm scripts
+
+**"Connection failed" on lookup test**  
+→ Verify SAK is valid and not expired
+
+**All tests return -999**  
+→ Check Qoo10 seller portal for required account settings (e.g., shipping template, category permissions)
 
 ---
 
-**Tutorial Link:**  
+**Tutorial:**  
 https://emergent.sh/tutorial/moltbot-on-emergent
 
----
-
-**Status:** Setup complete. No network calls made. Ready for manual testing after env vars are set.
