@@ -212,9 +212,16 @@ All scripts include automatic env validation.
 
 ---
 
-## Options (Variants)
+## Single Option (AdditionalOption)
 
-Qoo10 supports product options/variants (e.g., size, color) that are set during product creation.
+Qoo10 supports **single option group** (e.g., SIZE **or** COLOR, not both at once) via `AdditionalOption` parameter.
+
+### Forced Defaults (Hardcoded)
+- **ShippingNo**: `471554` (override by adding `"ShippingNo": "xxx"` in JSON)
+- **SellerCode prefix**: `auto` (always, input ignored)
+- **ProductionPlaceType**: `2` (海外/Overseas)
+- **ProductionPlace**: `Overseas`
+- **Dry-run**: Controlled by `QOO10_ALLOW_REAL_REG=1` in `backend/.env`
 
 ### JSON Format
 
@@ -227,20 +234,25 @@ Add an `Options` field to your product JSON:
   "Options": {
     "type": "SIZE",
     "values": [
-      {"name": "S", "priceDelta": 0, "qty": 10},
-      {"name": "M", "priceDelta": 200, "qty": 10},
-      {"name": "L", "priceDelta": 500, "qty": 5}
+      {"name": "S", "priceDelta": 0},
+      {"name": "M", "priceDelta": 200},
+      {"name": "L", "priceDelta": 500}
     ]
   }
 }
 ```
 
 **Fields:**
-- `type`: Option type name (e.g., "SIZE", "COLOR", "VARIANT")
-- `values`: Array of option values
-  - `name`: Value name (e.g., "S", "Blue")
-  - `priceDelta`: Price adjustment (0 for base price, positive for premium)
-  - `qty`: Quantity for this option (not used in AdditionalOption format)
+- `type`: Option type name (e.g., "SIZE", "COLOR", "VARIANT") - **required if Options present**
+- `values`: Array of option values - **required if Options present**
+  - `name`: Value name (e.g., "S", "Blue") - **required, trimmed, no `$$` or `||*` allowed**
+  - `priceDelta`: Price adjustment (0 or positive integer, default: 0)
+
+### Validation Rules
+- Only **one option group** allowed (single `type`)
+- `priceDelta` must be 0 or positive integer (negative throws error)
+- `name` and `type` cannot contain `$$` or `||*` (throws error)
+- If `Options.type` missing or `values` empty → ignored silently
 
 ### Command to Test
 
@@ -250,29 +262,76 @@ npm run qoo10:register:with-options
 
 **Sample file:** `backend/qoo10/sample-with-options.json`
 
-### Expected Output
+### Expected Output (Dry-run)
 
 ```
+Generated unique SellerCode: auto202602081430123456
+ShippingNo defaulted to 471554
+ProductionPlaceType: 2 (1=国内, 2=海外, 3=その他)
+ProductionPlace: Overseas
+Options applied: YES
+Option summary: SIZE: S(0), M(+200), L(+500)
+
+⚠️  DRY-RUN MODE: Set QOO10_ALLOW_REAL_REG=1 in backend/.env to perform real registration.
+
 === Registration Result ===
 
-Success: true
-ResultCode: 0
-ResultMsg: SUCCESS
-CreatedItemId (GdNo): 1192348471
-SellerCode used: OPTTEST202602080545123456
-ShippingNo used: 663125
+Success: false
+ResultCode: -1
+ResultMsg: Dry-run mode - registration skipped
+CreatedItemId (GdNo): null
+AIContentsNo: null
+SellerCode used: auto202602081430123456
+ShippingNo used: 471554
 Options applied: YES
-Option summary: SIZE: S(+0), M(+200)
-
-✓ Product registered successfully!
+Option summary: SIZE: S(0), M(+200), L(+500)
 ```
 
-**Notes:**
-- Options are set during product creation (in SetNewGoods API call)
-- If `Options` field is missing, product is created without options
-- Format: `OptionType||*ValueName||*PriceDelta$$OptionType||*ValueName||*PriceDelta`
-- Delimiter between options: `$$`
-- Delimiter within option: `||*`
+### AdditionalOption Format (Internal)
+- Format: `OptionType||*ValueName||*PriceDelta`
+- Multiple values joined with `$$`
+- Example: `SIZE||*S||*0$$SIZE||*M||*200$$SIZE||*L||*500`
+
+---
+
+## Extra Images + Options Combined
+
+You can use both `ExtraImages` and `Options` together in the same payload.
+
+### JSON Example
+
+```json
+{
+  "SecondSubCat": "320002604",
+  "ItemTitle": "Product with Extra Images and Options",
+  "ItemPrice": "5000",
+  "ItemQty": "30",
+  "StandardImage": "https://example.com/main.jpg",
+  "ExtraImages": [
+    "https://example.com/extra1.jpg",
+    "https://example.com/extra2.jpg"
+  ],
+  "Options": {
+    "type": "SIZE",
+    "values": [
+      {"name": "S", "priceDelta": 0},
+      {"name": "M", "priceDelta": 200},
+      {"name": "L", "priceDelta": 500}
+    ]
+  },
+  "ItemDescription": "<p>Product description</p>",
+  "ProductionPlaceType": "2",
+  "ProductionPlace": "Overseas"
+}
+```
+
+### Command to Test
+
+```bash
+npm run qoo10:register:with-extraimages-options
+```
+
+**Sample file:** `backend/qoo10/sample-with-extraimages-options.json`
 
 ---
 
