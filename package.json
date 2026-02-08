@@ -3,10 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "qoo10:env:lookup": "MODE=lookup node scripts/qoo10-env-check.js",
-    "qoo10:env:register": "MODE=register node scripts/qoo10-env-check.js",
-    "qoo10:test:lookup": "node scripts/qoo10-test-lookup.js",
-    "qoo10:debug:setnewgoods": "npm run qoo10:env:register && node scripts/qoo10-debug-setnewgoods.js"
+    "qoo10:env": "node scripts/qoo10-env-check.js",
+    "qoo10:test:lookup": "npm run qoo10:env && node scripts/qoo10-test-lookup.js",
+    "qoo10:debug:setnewgoods": "npm run qoo10:env && node scripts/qoo10-debug-setnewgoods.js"
   },
   "dependencies": {
     "dotenv": "^17.2.4"
