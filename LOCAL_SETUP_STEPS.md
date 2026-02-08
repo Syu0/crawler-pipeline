@@ -178,6 +178,9 @@ All platforms use identical commands - no shell-specific syntax.
 | `npm run qoo10:env` | Validate QOO10_SAK is set |
 | `npm run qoo10:test:lookup` | Sanity check connection |
 | `npm run qoo10:debug:setnewgoods` | Binary search param harness |
+| `npm run qoo10:register:sample` | Register with sample payload |
+| `npm run qoo10:register:with-options` | Register with product options/variants |
+| `npm run qoo10:register:with-extraimages` | Register with extra images |
 
 All scripts include automatic env validation.
 
@@ -244,6 +247,64 @@ Option summary: SIZE: S(+0), M(+200)
 - Format: `OptionType||*ValueName||*PriceDelta$$OptionType||*ValueName||*PriceDelta`
 - Delimiter between options: `$$`
 - Delimiter within option: `||*`
+
+---
+
+## Extra Images
+
+Qoo10 supports adding supplementary images to the product description. These are injected as HTML `<img>` tags into `ItemDescription`.
+
+### JSON Format
+
+Add an `ExtraImages` field to your product JSON:
+
+```json
+{
+  "ItemTitle": "Product with Extra Images",
+  "StandardImage": "https://...",
+  "ItemDescription": "<p>Main description</p>",
+  "ExtraImages": [
+    "https://example.com/extra1.jpg",
+    "https://example.com/extra2.jpg"
+  ]
+}
+```
+
+### How It Works
+
+- Images are appended to `ItemDescription` as: `<br/><p><img src="URL" /></p>` for each URL
+- Original `ItemDescription` is preserved; images are only appended
+- If `ExtraImages` is missing or empty, nothing is appended
+
+### Command to Test
+
+```bash
+npm run qoo10:register:with-extraimages
+```
+
+**Sample file:** `backend/qoo10/sample-with-extraimages.json`
+
+### Expected Output
+
+```
+=== Registration Result ===
+
+Success: true
+ResultCode: 0
+ResultMsg: SUCCESS
+CreatedItemId (GdNo): 1192348472
+AIContentsNo: 12345678
+SellerCode used: EXTRA202602080646539039
+ShippingNo used: 663125
+Options applied: NO
+
+✓ Product registered successfully!
+```
+
+**Notes:**
+- `AIContentsNo` is extracted from the API response and included in the result
+- Both `DetailImages` (legacy) and `ExtraImages` can coexist in the same payload
+- `DetailImages` uses `<hr/>` separator; `ExtraImages` uses `<br/>` separator
 
 ---
 
