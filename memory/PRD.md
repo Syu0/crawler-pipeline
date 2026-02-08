@@ -1,76 +1,63 @@
-# Qoo10 QAPI Integration - Product Requirements Document
+# Coupang-to-Qoo10 Pipeline - Product Requirements Document
 
 ## Original Problem Statement
-Establish a debugging and development harness for integrating with the Qoo10 QAPI using Node.js. The primary focus is on the `ItemsBasic.SetNewGoods` endpoint to register new products.
+Build a pipeline to scrape Coupang product URLs, store data in Google Sheets, and register products on Qoo10 Japan via QAPI.
 
 ## Core Requirements
-1. Create a reusable Node.js module for product registration
-2. Implement a command-line interface (CLI) to trigger the registration
-3. Support a "dry-run" mode to prevent accidental API calls
-4. Add support for product variants/options
-5. Add support for supplementary product images (DetailImages and ExtraImages)
-6. Extract and return `AIContentsNo` from API responses
+1. **Step 2**: Scrape Coupang product pages and write to Google Sheets
+2. **Step 3**: Register products on Qoo10 via `ItemsBasic.SetNewGoods`
+3. Support dry-run modes for both steps
+4. Extract and normalize product data (images, weight, options)
 
 ## User Personas
-- **Qoo10 Sellers**: Need programmatic product registration
+- **Qoo10 Sellers**: Need automated product registration from Coupang
 - **Developers**: Need debugging tools and clear documentation
 
 ---
 
 ## What's Been Implemented
 
-### Core Features (COMPLETE)
-- [x] Reusable Node.js module (`backend/qoo10/registerNewGoods.js`)
-- [x] CLI runner (`scripts/qoo10-register-cli.js`)
-- [x] Environment configuration via `dotenv` (backend/.env)
-- [x] Dry-run mode (default) with `QOO10_ALLOW_REAL_REG` toggle
-- [x] Tracer mode for debugging (`QOO10_TRACER`)
-- [x] Unique SellerCode generation
-- [x] Auto-resolution of ShippingNo
+### Step 2: Coupang Scraping (COMPLETE)
+- [x] `scripts/coupang-scrape-to-sheet.js` - CLI entry point
+- [x] `scripts/lib/coupangScraper.js` - HTML parsing and field extraction
+- [x] `scripts/lib/sheetsClient.js` - Google Sheets API (Service Account)
+- [x] Dry-run mode (`COUPANG_SCRAPE_DRY_RUN=1`)
+- [x] Tracer mode (`COUPANG_TRACER=1`)
+- [x] StandardImage normalization (strip CDN to `thumbnails/...`)
+- [x] WeightKg conversion (g→Kg, default 1)
+- [x] Upsert by vendorItemId (fallback: itemId)
 
-### Product Options/Variants (COMPLETE)
-- [x] Support for `Options` field in JSON payload
-- [x] `AdditionalOption` parameter construction
-- [x] CLI output shows options applied
-
-### Image Support (COMPLETE)
-- [x] `DetailImages`: Appended as `<hr/><img src="URL" />` to ItemDescription
-- [x] `ExtraImages`: Appended as `<br/><p><img src="URL" /></p>` to ItemDescription
-- [x] `AIContentsNo` extraction from API response
-- [x] `aiContentsNo` included in result object and CLI output
-
-### Single Option Support (COMPLETE)
-- [x] `Options` field with single type (e.g., SIZE or COLOR)
-- [x] `AdditionalOption` parameter construction: `Type||*Name||*PriceDelta$$...`
-- [x] Validation: type required, values array required, priceDelta ≥ 0, no `$$` or `||*` in names
-- [x] CLI output shows `Options applied: YES/NO` and `Option summary`
-- [x] Tracer output shows raw `AdditionalOption` string
-- [x] Combined sample: `sample-with-extraimages-options.json`
+### Step 3: Qoo10 Registration (COMPLETE)
+- [x] `backend/qoo10/registerNewGoods.js` - Core module
+- [x] `scripts/qoo10-register-cli.js` - CLI runner
+- [x] Single option group support (SIZE or COLOR)
+- [x] ExtraImages injection into ItemDescription
+- [x] Dry-run mode (`QOO10_ALLOW_REAL_REG=0`)
+- [x] Fixed defaults: ShippingNo=471554, SellerCode prefix=auto
 
 ### Documentation System (COMPLETE)
-- [x] `docs/ARCHITECTURE.md` - System architecture overview
-- [x] `docs/SHEET_SCHEMA.md` - Google Sheet column definitions
+- [x] `docs/ARCHITECTURE.md` - System architecture
+- [x] `docs/SHEET_SCHEMA.md` - Google Sheet columns
 - [x] `docs/RUNBOOK.md` - Operational procedures
-- [x] `docs/CONTEXT_PACKET.md` - Quick reference for LLM handoffs
-- [x] `docs/adr/0001-foundation-decisions.md` - Architecture decisions
-- [x] `scripts/update-context-packet.js` - Doc sync helper
-- [x] `.github/pull_request_template.md` - PR template
-- [x] `npm run docs:sync` - Sync metadata to CONTEXT_PACKET.md
+- [x] `docs/CONTEXT_PACKET.md` - LLM handoff reference
+- [x] `docs/adr/0001-foundation-decisions.md` - ADR
+- [x] `npm run docs:sync` - Sync helper
 
 ---
 
 ## Prioritized Backlog
 
-### P0 - None (All urgent items complete)
+### P0 - Next Up
+- [ ] SecondSubCat resolver module (Qoo10 category mapping)
+- [ ] Write GdNo back to Google Sheet after registration
 
 ### P1 - Future Enhancements
-- [ ] Implement `UpdateGoods` endpoint for updating existing products
-- [ ] Inventory management endpoints
-- [ ] Batch product registration support
+- [ ] Multi-option support (SIZE + COLOR)
+- [ ] UpdateGoods endpoint
+- [ ] Batch registration from sheet
 
 ### P2 - Nice to Have
-- [ ] Web UI for product registration
-- [ ] Response caching for delivery group info
+- [ ] Web UI
 - [ ] Automated test suite
 
 ---
@@ -80,44 +67,55 @@ Establish a debugging and development harness for integrating with the Qoo10 QAP
 ```
 /app
 ├── backend/
-│   ├── .env.example         # Environment template
+│   ├── .env.example              # Environment template
+│   ├── keys/                     # Service account keys (gitignored)
 │   └── qoo10/
-│       ├── registerNewGoods.js      # Core module
-│       ├── sample-newgoods.json     # Basic sample
-│       ├── sample-with-options.json # Options sample
-│       └── sample-with-extraimages.json # ExtraImages sample
+│       └── registerNewGoods.js   # Step 3 core module
 ├── scripts/
 │   ├── lib/
-│   │   └── qoo10Client.js   # Low-level QAPI client
-│   └── qoo10-register-cli.js # CLI runner
-└── package.json             # NPM scripts
+│   │   ├── coupangScraper.js     # Step 2 scraper
+│   │   ├── sheetsClient.js       # Step 2 sheets client
+│   │   └── qoo10Client.js        # Step 3 QAPI client
+│   ├── coupang-scrape-to-sheet.js # Step 2 CLI
+│   └── qoo10-register-cli.js     # Step 3 CLI
+├── docs/                         # Documentation
+└── package.json
 ```
 
 ## Environment Variables
+
+### Step 2 (Coupang Scraping)
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `QOO10_SAK` | - | **Required:** Seller Auth Key |
-| `QOO10_ALLOW_REAL_REG` | `0` | Set to `1` to enable real registration |
-| `QOO10_TRACER` | `0` | Set to `1` for verbose logging |
+| `GOOGLE_SHEET_ID` | - | Target Google Sheet ID |
+| `GOOGLE_SHEET_TAB_NAME` | `coupang_datas` | Tab name |
+| `GOOGLE_SERVICE_ACCOUNT_JSON_PATH` | - | Path to service account key |
+| `COUPANG_SCRAPE_DRY_RUN` | `0` | Skip sheet write |
+| `COUPANG_TRACER` | `0` | Verbose logging |
+| `COUPANG_COOKIE` | - | For blocked requests |
 
-## Hardcoded Defaults
-| Parameter | Default | Notes |
-|-----------|---------|-------|
-| ShippingNo | `471554` | Auto-resolve disabled, override via JSON |
-| SellerCode prefix | `auto` | Always `auto`, input ignored |
-| ProductionPlaceType | `2` | 海外 (Overseas) |
-| ProductionPlace | `Overseas` | Override via JSON |
+### Step 3 (Qoo10 Registration)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `QOO10_SAK` | - | Seller Auth Key |
+| `QOO10_ALLOW_REAL_REG` | `0` | Enable real registration |
+| `QOO10_TRACER` | `0` | Verbose logging |
 
 ## Available Commands
 ```bash
-npm run qoo10:register:sample            # Basic registration
-npm run qoo10:register:with-options      # With product variants
-npm run qoo10:register:with-extraimages  # With extra images
-npm run qoo10:register:with-extraimages-options  # With extra images + options
-npm run docs:sync                        # Sync documentation metadata
+# Step 2
+npm run coupang:scrape:dry    # Dry-run (no sheet write)
+npm run coupang:scrape:run    # Real (writes to sheet)
+
+# Step 3
+npm run qoo10:register:sample                    # Dry-run registration
+npm run qoo10:register:with-extraimages-options  # With images + options
+
+# Docs
+npm run docs:sync             # Sync documentation
 ```
 
 ---
 
 ## Last Updated
-February 8, 2026 - Added documentation system (ARCHITECTURE, RUNBOOK, SHEET_SCHEMA, CONTEXT_PACKET, ADR, PR template)
+February 8, 2026 - Step 2 implemented (Coupang scraping → Google Sheets)
