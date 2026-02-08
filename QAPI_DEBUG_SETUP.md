@@ -5,9 +5,49 @@ Node-side debugging harness for Qoo10 Japan QAPI `ItemsBasic.SetNewGoods` return
 
 **Key points:**
 - All Qoo10 calls happen **server-side** (Node scripts), NOT in browser
+- Secrets stored in `backend/.env` (auto-loaded by scripts)
 - Single env var: `QOO10_SAK` (Seller Auth Key)
 - NO network calls until env is set
 - Parameter binary-search to identify missing/invalid params
+
+---
+
+## Quick Start
+
+### 1. Pull latest code
+```bash
+git checkout emergent && git pull
+```
+
+### 2. Install dependencies
+```bash
+cd /app
+npm install
+```
+
+### 3. Create backend/.env
+```bash
+cp backend/.env.example backend/.env
+# Edit backend/.env and add your QOO10_SAK
+```
+
+Example `backend/.env`:
+```bash
+QOO10_SAK=your-seller-auth-key-here
+QOO10_TRACER=0
+```
+
+### 4. Run sanity check
+```bash
+npm run qoo10:test:lookup
+# Expected: ResultCode: 0, ResultMsg: "Success"
+```
+
+### 5. Run debug harness
+```bash
+npm run qoo10:debug:setnewgoods
+# Prints table showing which params cause -999 vs success
+```
 
 ---
 
@@ -15,13 +55,16 @@ Node-side debugging harness for Qoo10 Japan QAPI `ItemsBasic.SetNewGoods` return
 
 ### 1. `/app/scripts/lib/qoo10Client.js`
 Core Qoo10 QAPI client (Node HTTPS)
+- **Auto-loads** `backend/.env` at startup
 - **Env gate**: blocks fetch unless `QOO10_SAK` set
-- **Tracer**: set `QOO10_TRACER=1` to log method/URL/headers (SAK masked)/body/response
+- **Tracer**: set `QOO10_TRACER=1` in `backend/.env` to log method/URL/headers (SAK masked)/body/response
 - **Encoding**: all params normalized to strings, UTF-8 charset
 - Functions: `qoo10PostMethod()`, `testQoo10Connection()`, `setNewGoods()`
 
 ### 2. `/app/scripts/qoo10-env-check.js`
-Validates `QOO10_SAK` before tests run. Exits with error if missing.
+- **Auto-loads** `backend/.env` at startup
+- Validates `QOO10_SAK` before tests run
+- Exits with error if missing
 
 ### 3. `/app/scripts/qoo10-test-lookup.js`
 Sanity check: tests `ItemsLookup.GetSellerDeliveryGroupInfo` to verify SAK works.
@@ -31,6 +74,9 @@ Sanity check: tests `ItemsLookup.GetSellerDeliveryGroupInfo` to verify SAK works
 - Starts with minimal SetNewGoods params
 - Adds optional/suspicious params incrementally (StandardImage, ItemDescription, TaxRate, etc.)
 - Prints ResultCode/Msg table
+
+### 5. `/app/backend/.env.example`
+Template for secrets (copy to `backend/.env` and fill in)
 
 ---
 
@@ -45,38 +91,16 @@ npm run qoo10:debug:setnewgoods       # Run param binary search
 
 ---
 
-## Usage
+## Environment Variables
 
-### Step 1: Set env var
-```bash
-export QOO10_SAK="your-seller-auth-key-here"
-```
+All env vars are read from `backend/.env` (auto-loaded by scripts).
 
-Optional: enable verbose tracer
-```bash
-export QOO10_TRACER=1
-```
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `QOO10_SAK` | Yes | - | Seller Auth Key from Qoo10 seller portal |
+| `QOO10_TRACER` | No | `0` | Set to `1` for verbose request/response logging |
 
-### Step 2: Test connection (sanity check)
-```bash
-cd /app
-npm run qoo10:test:lookup
-# Expected: ResultCode: 0, ResultMsg: "Success"
-```
-
-### Step 3: Run SetNewGoods debug harness
-```bash
-cd /app
-npm run qoo10:debug:setnewgoods
-# Prints table showing which params cause -999 vs success
-```
-
-### Step 4: Verify env gate (without setting var)
-```bash
-unset QOO10_SAK
-npm run qoo10:env:register
-# Expected: "Missing required env vars for MODE=register: QOO10_SAK"
-```
+**No manual export needed** - scripts auto-load `backend/.env`.
 
 ---
 
@@ -125,6 +149,7 @@ Minimal              | -999 | Object reference not set...
 ## Key Features
 
 ✅ **Node-side only** - no browser/React env vars  
+✅ **Auto-load secrets** - reads `backend/.env` automatically  
 ✅ **Single env var** - `QOO10_SAK` for all scripts  
 ✅ **Env gate** - NO network calls until SAK is set  
 ✅ **Safe tracer** - masks SAK in logs, shows curl with masked secrets  
@@ -137,13 +162,20 @@ Minimal              | -999 | Object reference not set...
 ## Troubleshooting
 
 **"QOO10_SAK not set"**  
-→ Run `export QOO10_SAK="your-key"` before npm scripts
+→ Ensure `backend/.env` exists and contains `QOO10_SAK=your-key`
 
 **"Connection failed" on lookup test**  
 → Verify SAK is valid and not expired
 
 **All tests return -999**  
 → Check Qoo10 seller portal for required account settings (e.g., shipping template, category permissions)
+
+---
+
+## Git Safety
+
+`backend/.env` is excluded from git via `.gitignore` (pattern: `*.env`).  
+Use `backend/.env.example` as template for other developers.
 
 ---
 
