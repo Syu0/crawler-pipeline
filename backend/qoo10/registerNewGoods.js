@@ -43,6 +43,50 @@ function validateUrl(url, field) {
 }
 
 /**
+ * Generate unique SellerCode with timestamp and random suffix
+ * Format: {base}{YYYYMMDDHHmmss}{rand4}
+ */
+function generateUniqueSellerCode(base = 'AUTO') {
+  // Truncate base if too long (max 20 chars to keep total length reasonable)
+  const truncatedBase = String(base).substring(0, 20);
+  
+  const now = new Date();
+  const timestamp = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+    String(now.getHours()).padStart(2, '0'),
+    String(now.getMinutes()).padStart(2, '0'),
+    String(now.getSeconds()).padStart(2, '0')
+  ].join('');
+  
+  const rand4 = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+  
+  return `${truncatedBase}${timestamp}${rand4}`;
+}
+
+/**
+ * Extract created item ID from ResultObject
+ * Priority: GdNo > GoodsNo > ItemNo > itemNo
+ */
+function extractCreatedItemId(resultObject) {
+  if (!resultObject || typeof resultObject !== 'object') {
+    return null;
+  }
+  
+  // Try all possible keys in priority order
+  const keys = ['GdNo', 'GoodsNo', 'ItemNo', 'itemNo'];
+  
+  for (const key of keys) {
+    if (resultObject[key] !== undefined && resultObject[key] !== null) {
+      return String(resultObject[key]);
+    }
+  }
+  
+  return null;
+}
+
+/**
  * Get valid ShippingNo from GetSellerDeliveryGroupInfo
  */
 async function resolveShippingNo() {
@@ -72,7 +116,7 @@ async function resolveShippingNo() {
 /**
  * Build final SetNewGoods params with defaults
  */
-function buildSetNewGoodsParams(input, shippingNo) {
+function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode) {
   return {
     returnType: 'application/json',
     SecondSubCat: String(input.SecondSubCat),
@@ -83,7 +127,7 @@ function buildSetNewGoodsParams(input, shippingNo) {
     AvailableDateType: String(input.AvailableDateType || '0'),
     AvailableDateValue: String(input.AvailableDateValue || '2'),
     ShippingNo: String(shippingNo),
-    SellerCode: String(input.SellerCode),
+    SellerCode: uniqueSellerCode,
     AdultYN: String(input.AdultYN || 'N'),
     TaxRate: String(input.TaxRate || 'S'),
     ExpireDate: String(input.ExpireDate || '2030-12-31'),
