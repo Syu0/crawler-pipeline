@@ -206,6 +206,7 @@ All platforms use identical commands - no shell-specific syntax.
 | `npm run qoo10:register:sample` | Register with sample payload |
 | `npm run qoo10:register:with-options` | Register with product options/variants |
 | `npm run qoo10:register:with-extraimages` | Register with extra images |
+| `npm run qoo10:register:with-extraimages-options` | Register with extra images + options |
 
 All scripts include automatic env validation.
 
