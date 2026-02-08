@@ -349,3 +349,19 @@ npm run docs:sync
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - System architecture
 - [SHEET_SCHEMA.md](./SHEET_SCHEMA.md) - Google Sheet schema
 - [LOCAL_SETUP_STEPS.md](../LOCAL_SETUP_STEPS.md) - Detailed setup guide
+
+---
+
+## TODO: Future Work
+
+### SecondSubCat Resolver Module
+
+The `SecondSubCat` field (Qoo10 category ID) is currently left as a placeholder during Coupang scraping. A resolver module is needed:
+
+1. **Download Qoo10 category catalog** via Qoo10 API (`ItemsLookup.GetAllGlobalBrandInfo` or official export)
+2. **Store locally** as a versioned JSON file (e.g., `data/qoo10-categories-v1.json`)
+3. **Implement search/mapping strategy**:
+   - Keyword matching from Coupang title/category
+   - Manual mapping table for common categories
+   - Fallback to default category if no match
+4. **Integration**: Call resolver from `coupang-scrape-to-sheet.js` before writing to sheet
