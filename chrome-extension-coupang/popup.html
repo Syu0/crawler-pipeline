@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coupang to Sheet</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Coupang → Sheet</h1>
+    
+    <div id="status" class="status idle">
+      <span class="status-icon"></span>
+      <span class="status-text">Ready</span>
+    </div>
+    
+    <div id="product-info" class="product-info hidden">
+      <div class="info-row">
+        <span class="label">Product ID:</span>
+        <span id="info-product-id" class="value">-</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Title:</span>
+        <span id="info-title" class="value">-</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Price:</span>
+        <span id="info-price" class="value">-</span>
+      </div>
+    </div>
+    
+    <button id="send-btn" class="send-btn">
+      Send to Sheet
+    </button>
+    
+    <div id="error-msg" class="error-msg hidden"></div>
+    
+    <div class="footer">
+      <small>Receiver: http://127.0.0.1:8787</small>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

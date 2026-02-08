@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Coupang to Sheet",
+  "version": "1.0.0",
+  "description": "Extract Coupang product data and send to Google Sheets via local receiver",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://www.coupang.com/*",
+    "http://127.0.0.1:8787/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.coupang.com/vp/products/*"],
+      "js": ["contentScript.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
