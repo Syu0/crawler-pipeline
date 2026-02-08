@@ -5,7 +5,8 @@
   "scripts": {
     "qoo10:env": "node scripts/qoo10-env-check.js",
     "qoo10:test:lookup": "npm run qoo10:env && node scripts/qoo10-test-lookup.js",
-    "qoo10:debug:setnewgoods": "npm run qoo10:env && node scripts/qoo10-debug-setnewgoods.js"
+    "qoo10:debug:setnewgoods": "npm run qoo10:env && node scripts/qoo10-debug-setnewgoods.js",
+    "qoo10:register:sample": "node scripts/qoo10-register-cli.js backend/qoo10/sample-newgoods.json"
   },
   "dependencies": {
     "dotenv": "^17.2.4"
