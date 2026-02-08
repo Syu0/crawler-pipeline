@@ -4,6 +4,9 @@
  * Exits with error if required vars are missing
  */
 
+// Auto-load backend/.env
+require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend', '.env') });
+
 const MODE = process.env.MODE || 'lookup';
 
 const REQUIRED_VARS = {
