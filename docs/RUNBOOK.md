@@ -9,11 +9,16 @@ Operational procedures for the Qoo10 product registration system.
 | Task | Command |
 |------|---------|
 | Scrape Coupang (dry-run) | `npm run coupang:scrape:dry` |
+| Scrape Coupang (dry-run + trace) | `npm run coupang:scrape:dry:trace` |
 | Scrape Coupang (real) | `npm run coupang:scrape:run` |
+| Scrape Coupang (real + trace) | `npm run coupang:scrape:run:trace` |
 | Register sample (dry-run) | `npm run qoo10:register:sample` |
 | Register with options | `npm run qoo10:register:with-options` |
 | Check Qoo10 env | `npm run qoo10:env` |
 | Test Qoo10 connection | `npm run qoo10:test:lookup` |
+
+> **Windows Note**: All npm scripts use `cross-env` for cross-platform compatibility.
+> No need to manually set environment variables on Windows.
 
 ---
 
