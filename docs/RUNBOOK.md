@@ -97,6 +97,8 @@ The recommended approach uses a **Chrome Extension** to scrape product data from
    - Click "Load unpacked"
    - Select the `chrome-extension-coupang/` folder from this repo
 
+   > **Note**: The extension runs without custom icons (Chrome will show a default puzzle piece icon). This is intentional to avoid binary asset dependencies.
+
 3. **Pin the Extension** (optional):
    - Click the puzzle piece icon in Chrome toolbar
    - Pin "Coupang to Sheet" for easy access
