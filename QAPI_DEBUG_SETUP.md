@@ -7,6 +7,7 @@ Node-side debugging harness for Qoo10 Japan QAPI `ItemsBasic.SetNewGoods` return
 - All Qoo10 calls happen **server-side** (Node scripts), NOT in browser
 - Secrets stored in `backend/.env` (auto-loaded by scripts)
 - Single env var: `QOO10_SAK` (Seller Auth Key)
+- **Cross-platform** - works on Windows, macOS, Linux
 - NO network calls until env is set
 - Parameter binary-search to identify missing/invalid params
 
@@ -65,6 +66,7 @@ Core Qoo10 QAPI client (Node HTTPS)
 - **Auto-loads** `backend/.env` at startup
 - Validates `QOO10_SAK` before tests run
 - Exits with error if missing
+- **Cross-platform** - no shell-specific syntax
 
 ### 3. `/app/scripts/qoo10-test-lookup.js`
 Sanity check: tests `ItemsLookup.GetSellerDeliveryGroupInfo` to verify SAK works.
@@ -82,12 +84,15 @@ Template for secrets (copy to `backend/.env` and fill in)
 
 ## npm Scripts (run from repo root `/app`)
 
+**Cross-platform compatible** - works on Windows (Git Bash/MINGW/PowerShell), macOS, Linux
+
 ```bash
-npm run qoo10:env:lookup              # Check QOO10_SAK is set (lookup mode)
-npm run qoo10:env:register            # Check QOO10_SAK is set (register mode)
-npm run qoo10:test:lookup             # Sanity check connection
-npm run qoo10:debug:setnewgoods       # Run param binary search
+npm run qoo10:env                 # Check QOO10_SAK is set
+npm run qoo10:test:lookup         # Sanity check connection
+npm run qoo10:debug:setnewgoods   # Run param binary search
 ```
+
+All scripts include automatic env validation before running.
 
 ---
 
@@ -150,12 +155,37 @@ Minimal              | -999 | Object reference not set...
 
 ✅ **Node-side only** - no browser/React env vars  
 ✅ **Auto-load secrets** - reads `backend/.env` automatically  
+✅ **Cross-platform** - works on Windows/macOS/Linux without shell-specific syntax  
 ✅ **Single env var** - `QOO10_SAK` for all scripts  
 ✅ **Env gate** - NO network calls until SAK is set  
 ✅ **Safe tracer** - masks SAK in logs, shows curl with masked secrets  
 ✅ **UTF-8 encoding** - Content-Type includes charset  
 ✅ **String normalization** - all params converted to strings before urlencoding  
 ✅ **Binary search** - identifies which param fixes -999  
+
+---
+
+## Platform Compatibility
+
+### Windows (Git Bash/MINGW)
+```bash
+npm run qoo10:test:lookup
+npm run qoo10:debug:setnewgoods
+```
+
+### Windows (PowerShell)
+```powershell
+npm run qoo10:test:lookup
+npm run qoo10:debug:setnewgoods
+```
+
+### macOS/Linux
+```bash
+npm run qoo10:test:lookup
+npm run qoo10:debug:setnewgoods
+```
+
+All platforms use the same commands - no `MODE=...` env assignment needed.
 
 ---
 
@@ -169,6 +199,9 @@ Minimal              | -999 | Object reference not set...
 
 **All tests return -999**  
 → Check Qoo10 seller portal for required account settings (e.g., shipping template, category permissions)
+
+**Windows error: "잘못된 매개 변수입니다"**  
+→ Fixed in latest version - pull latest code and use `npm run qoo10:debug:setnewgoods` (no MODE=... needed)
 
 ---
 
