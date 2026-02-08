@@ -89,17 +89,17 @@ Quick reference document for LLM handoffs and onboarding.
 - **Phase**: Step 2 + Step 3 implemented
 - **Last updated**: 2026-02-08
 - **Features complete**:
-  - Step 2: Coupang HTML scraping (no-login)
+  - Step 2: Chrome Extension for browser-based scraping
+  - Step 2: Local receiver server (port 8787)
   - Step 2: Google Sheets upsert (Service Account auth)
-  - Step 2: StandardImage normalization, WeightKg conversion
+  - Step 2: StandardImage normalization (`thumbnails/...`)
   - Step 3: Qoo10 registration via SetNewGoods
   - Step 3: Single option group, ExtraImages support
-  - Dry-run and tracer modes for both steps
+  - Cross-platform npm scripts (Windows compatible)
 - **Features pending**:
   - TODO: SecondSubCat resolver module (Qoo10 category mapping)
   - TODO: Write GdNo back to Google Sheet after registration
   - TODO: Multi-option support (SIZE + COLOR)
-  - TODO: UpdateGoods endpoint
 <!-- SYNC_STATUS_END -->
 
 ---
@@ -109,14 +109,11 @@ Quick reference document for LLM handoffs and onboarding.
 All npm scripts are **cross-platform** (Windows/macOS/Linux) via `cross-env`.
 
 ```bash
-# Step 2: Scrape Coupang (dry-run)
+# Step 2: Start receiver server (keep running)
+npm run coupang:receiver:start
+
+# Step 2: CLI scraper (alternative, needs COUPANG_COOKIE)
 npm run coupang:scrape:dry
-
-# Step 2: Scrape Coupang (dry-run + tracer)
-npm run coupang:scrape:dry:trace
-
-# Step 2: Scrape Coupang (real)
-npm run coupang:scrape:run
 
 # Step 3: Qoo10 registration (dry-run)
 npm run qoo10:register:sample
