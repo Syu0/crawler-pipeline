@@ -3,7 +3,7 @@
   "ItemTitle": "Sample Debug Product",
   "ItemPrice": "5000",
   "ItemQty": "10",
-  "SellerCode": "SAMPLE001",
+  "SellerCodeBase": "SAMPLE",
   "StandardImage": "https://dp.image-qoo10.jp/GMKT.IMG/loading_2017/qoo10_loading.v_20170420.png",
   "ItemDescription": "<p>This is a sample product for testing Qoo10 registration</p>",
   "AdultYN": "N",

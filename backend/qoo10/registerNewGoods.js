@@ -106,7 +106,8 @@ function buildSetNewGoodsParams(input, shippingNo) {
  * @param {string} input.ItemTitle - Product title (required)
  * @param {string|number} input.ItemPrice - Price (required, positive)
  * @param {string|number} input.ItemQty - Quantity (required, positive)
- * @param {string} input.SellerCode - Unique seller code (required)
+ * @param {string} [input.SellerCode] - Base for unique code generation (optional, default: 'AUTO')
+ * @param {string} [input.SellerCodeBase] - Alternative to SellerCode (optional)
  * @param {string} input.StandardImage - Product image URL (required, https)
  * @param {string} input.ItemDescription - Product description HTML (required, non-empty)
  * @param {string} [input.ShippingNo] - Shipping group ID (auto-resolved if omitted)
@@ -127,17 +128,21 @@ function buildSetNewGoodsParams(input, shippingNo) {
  *   - success: boolean
  *   - resultCode: number
  *   - resultMsg: string
- *   - itemNo: string (if success)
- *   - request: object (masked request metadata)
+ *   - createdItemId: string | null (GdNo from ResultObject)
+ *   - sellerCodeUsed: string
+ *   - shippingNoUsed: string
+ *   - rawResultObject: object | null
  */
 async function registerNewGoods(input) {
+  // Check dry-run mode
+  const allowRealRegistration = process.env.QOO10_ALLOW_REAL_REG === '1' || process.env.QOO10_ALLOW_REAL_REG === 'true';
+  
   // Validate required fields
   const requiredFields = [
     'SecondSubCat',
     'ItemTitle',
     'ItemPrice',
     'ItemQty',
-    'SellerCode',
     'StandardImage',
     'ItemDescription'
   ];
@@ -155,6 +160,11 @@ async function registerNewGoods(input) {
     throw new Error('ItemDescription must be at least 5 characters');
   }
   
+  // Generate unique SellerCode
+  const sellerCodeBase = input.SellerCodeBase || input.SellerCode || 'AUTO';
+  const uniqueSellerCode = generateUniqueSellerCode(sellerCodeBase);
+  console.log(`Generated unique SellerCode: ${uniqueSellerCode}`);
+  
   // Resolve ShippingNo if not provided
   let shippingNo = input.ShippingNo;
   if (!shippingNo) {
@@ -164,23 +174,37 @@ async function registerNewGoods(input) {
   }
   
   // Build final params
-  const params = buildSetNewGoodsParams(input, shippingNo);
+  const params = buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode);
+  
+  // Dry-run mode check
+  if (!allowRealRegistration) {
+    console.log('\n⚠️  DRY-RUN MODE: Set QOO10_ALLOW_REAL_REG=1 to perform real registration.\n');
+    return {
+      success: false,
+      resultCode: -1,
+      resultMsg: 'Dry-run mode - registration skipped',
+      createdItemId: null,
+      sellerCodeUsed: uniqueSellerCode,
+      shippingNoUsed: shippingNo,
+      rawResultObject: null
+    };
+  }
   
   // Call Qoo10 API
   const response = await qoo10PostMethod('ItemsBasic.SetNewGoods', params, '1.1');
+  
+  // Extract created item ID
+  const createdItemId = extractCreatedItemId(response.ResultObject);
   
   // Return normalized result
   const result = {
     success: response.ResultCode === 0,
     resultCode: response.ResultCode,
     resultMsg: response.ResultMsg || '',
-    itemNo: response.ResultObject ? String(response.ResultObject) : null,
-    request: {
-      secondSubCat: params.SecondSubCat,
-      itemTitle: params.ItemTitle,
-      sellerCode: params.SellerCode,
-      shippingNo: params.ShippingNo
-    }
+    createdItemId: createdItemId,
+    sellerCodeUsed: uniqueSellerCode,
+    shippingNoUsed: shippingNo,
+    rawResultObject: response.ResultObject || null
   };
   
   return result;
