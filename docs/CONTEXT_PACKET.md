@@ -12,7 +12,7 @@ Quick reference document for LLM handoffs and onboarding.
 |-------|-------|
 | Name | qoo10-debug-project |
 | Version | 1.0.0 |
-| Commit | b5d5ec7 |
+| Commit | (run docs:sync) |
 | Last Sync | 2026-02-08 |
 
 ---
@@ -23,9 +23,16 @@ Quick reference document for LLM handoffs and onboarding.
 
 **Pipeline**:
 ```
-Coupang URL → [Step 2: Scraper] → Google Sheet → [Step 3: Qoo10 CLI] → QAPI → Write GdNo back
-                    ▲                                    ▲
-               IMPLEMENTED                          IMPLEMENTED
+┌──────────────────┐     ┌─────────────────┐     ┌──────────────────┐
+│ Chrome Extension │ ──▶ │ Local Receiver  │ ──▶ │  Google Sheets   │
+│ (on Coupang page)│     │ (port 8787)     │     │  (coupang_datas) │
+└──────────────────┘     └─────────────────┘     └──────────────────┘
+                                                         │
+                                                         ▼
+                                                 ┌──────────────────┐
+                                                 │  Qoo10 CLI       │
+                                                 │  (Step 3)        │
+                                                 └──────────────────┘
 ```
 
 ---
@@ -34,9 +41,10 @@ Coupang URL → [Step 2: Scraper] → Google Sheet → [Step 3: Qoo10 CLI] → Q
 
 | Step | File | Purpose |
 |------|------|---------|
-| Step 2 | `scripts/coupang-scrape-to-sheet.js` | Scrape Coupang → write to Sheet |
-| Step 2 | `scripts/lib/coupangScraper.js` | HTML parsing, field extraction |
+| Step 2 | `chrome-extension-coupang/` | Chrome extension (popup + content script) |
+| Step 2 | `scripts/coupang-receiver.js` | Local HTTP server for extension |
 | Step 2 | `scripts/lib/sheetsClient.js` | Google Sheets API client |
+| Step 2 | `scripts/coupang-scrape-to-sheet.js` | CLI scraper (alternative) |
 | Step 3 | `scripts/qoo10-register-cli.js` | Register product to Qoo10 |
 | Step 3 | `backend/qoo10/registerNewGoods.js` | Core registration logic |
 
@@ -44,16 +52,15 @@ Coupang URL → [Step 2: Scraper] → Google Sheet → [Step 3: Qoo10 CLI] → Q
 
 ## Environment Variables
 
-### Step 2 (Coupang Scraping)
+### Step 2 (Coupang → Sheet)
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `GOOGLE_SHEET_ID` | Yes | - | Target Google Sheet ID |
 | `GOOGLE_SHEET_TAB_NAME` | No | `coupang_datas` | Tab name |
 | `GOOGLE_SERVICE_ACCOUNT_JSON_PATH` | Yes | - | Path to service account key |
-| `COUPANG_SCRAPE_DRY_RUN` | No | `0` | Skip sheet write |
-| `COUPANG_TRACER` | No | `0` | Verbose logging |
-| `COUPANG_COOKIE` | No | - | For blocked requests |
+| `COUPANG_RECEIVER_PORT` | No | `8787` | Receiver server port |
+| `COUPANG_COOKIE` | No | - | For CLI mode only |
 
 ### Step 3 (Qoo10 Registration)
 
