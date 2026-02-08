@@ -3,7 +3,6 @@
   "ItemTitle": "Sample Product with Extra Images",
   "ItemPrice": "5000",
   "ItemQty": "10",
-  "SellerCodeBase": "EXTRA",
   "StandardImage": "https://dp.image-qoo10.jp/GMKT.IMG/loading_2017/qoo10_loading.v_20170420.png",
   "ExtraImages": [
     "https://dp.image-qoo10.jp/GMKT.IMG/loading_2017/qoo10_loading.v_20170420.png",
@@ -16,8 +15,6 @@
   "ExpireDate": "2030-12-31",
   "Weight": "500",
   "PromotionName": "Extra Images Test",
-  "ProductionPlaceType": "1",
-  "ProductionPlace": "Japan",
-  "IndustrialCodeType": "J",
-  "IndustrialCode": ""
+  "ProductionPlaceType": "2",
+  "ProductionPlace": "Overseas"
 }
