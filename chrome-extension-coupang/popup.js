@@ -529,3 +529,57 @@ function extractDescriptionText() {
     return '';
   }
 }
+
+/**
+ * Extract breadcrumb segments from the page
+ * Returns array of category names (excluding "쿠팡 홈")
+ */
+function extractBreadcrumbSegments() {
+  try {
+    const segments = [];
+    
+    // Try various breadcrumb selectors
+    const breadcrumbSelectors = [
+      '.breadcrumb a',
+      '.breadcrumb-item a',
+      '[class*="breadcrumb"] a',
+      '.prod-breadcrumb a',
+      'nav[aria-label*="breadcrumb"] a',
+      '.category-breadcrumb a'
+    ];
+    
+    for (const selector of breadcrumbSelectors) {
+      const links = document.querySelectorAll(selector);
+      if (links.length > 0) {
+        links.forEach(link => {
+          const text = link.textContent.trim();
+          if (text && text !== '쿠팡 홈' && text !== 'Coupang Home' && text !== '>') {
+            segments.push(text);
+          }
+        });
+        if (segments.length > 0) break;
+      }
+    }
+    
+    // Fallback: try to find any breadcrumb-like structure
+    if (segments.length === 0) {
+      const possibleBreadcrumbs = document.querySelectorAll('[class*="breadcrumb"], [class*="Breadcrumb"]');
+      for (const el of possibleBreadcrumbs) {
+        const links = el.querySelectorAll('a');
+        links.forEach(link => {
+          const text = link.textContent.trim();
+          if (text && text !== '쿠팡 홈' && text !== 'Coupang Home' && text !== '>') {
+            segments.push(text);
+          }
+        });
+        if (segments.length > 0) break;
+      }
+    }
+    
+    return segments;
+    
+  } catch (err) {
+    console.error('Breadcrumb extraction error:', err);
+    return [];
+  }
+}
