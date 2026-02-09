@@ -1,22 +1,61 @@
 # Google Sheet Schema
 
-This document defines the schema for the `coupang_datas` tab used in the Coupang-to-Qoo10 pipeline.
+This document defines the schema for the Google Sheets used in the Coupang-to-Qoo10 pipeline.
 
-> **Status**: IMPLEMENTED. Step 2 scraper writes to this schema.
+> **Status**: IMPLEMENTED. Step 2 scraper writes to both tabs.
 
 ---
 
 ## Overview
 
 The Google Sheet serves as the central data store between:
-- **Step 2**: Coupang scraper (writes product data)
+- **Step 2**: Coupang scraper (writes product data + category dictionary)
 - **Step 3**: Qoo10 registration (reads product data, writes Qoo10 IDs)
 
 ---
 
-## Sheet Structure
+## Sheet Tabs
 
-### Tab: `coupang_datas`
+| Tab Name | Purpose |
+|----------|---------|
+| `coupang_datas` | Product data storage |
+| `coupang_categorys` | Category dictionary for future mapping |
+
+---
+
+## Tab: `coupang_categorys`
+
+Category dictionary accumulated from scraped products. Used for future Qoo10 category mapping.
+
+| Column | Header Name | Type | Description |
+|--------|-------------|------|-------------|
+| A | `coupangCategoryId` | string | **PRIMARY KEY** - Coupang category ID from URL |
+| B | `depth2Path` | string | Last 2 breadcrumb segments (e.g., "사과 > 청송사과") |
+| C | `depth3Path` | string | Last 3 breadcrumb segments (e.g., "과일 > 사과 > 청송사과") |
+| D | `rootName` | string | First segment of depth3Path |
+| E | `parentName` | string | Second-to-last segment of depth3Path |
+| F | `leafName` | string | Last segment (most specific category) |
+| G | `firstSeenAt` | ISO datetime | First time this category was encountered |
+| H | `lastSeenAt` | ISO datetime | Most recent encounter |
+| I | `usedCount` | number | Count of products using this category |
+
+### Category Upsert Logic
+
+1. Extract `categoryId` from product URL query string
+2. Extract breadcrumb segments from page DOM
+3. If both exist:
+   - **New category**: Insert row with `usedCount: 1`
+   - **Existing category**: Update `lastSeenAt`, increment `usedCount`
+
+### Example Row
+
+| coupangCategoryId | depth2Path | depth3Path | rootName | parentName | leafName | firstSeenAt | lastSeenAt | usedCount |
+|-------------------|------------|------------|----------|------------|----------|-------------|------------|-----------|
+| 317679 | 사과 > 청송사과 | 과일 > 사과 > 청송사과 | 과일 | 사과 | 청송사과 | 2025-02-09T07:00:00Z | 2025-02-09T08:30:00Z | 5 |
+
+---
+
+## Tab: `coupang_datas`
 
 | Column | Header Name | Type | Source | Description |
 |--------|-------------|------|--------|-------------|
