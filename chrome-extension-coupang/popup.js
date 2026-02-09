@@ -656,6 +656,38 @@ function extractBreadcrumbSegments() {
       }
     }
     
+    // Fallback 4: Look for links that contain /np/categories/ in href
+    if (segments.length === 0) {
+      const categoryLinks = document.querySelectorAll('a[href*="/np/categories/"], a[href*="/categories/"]');
+      const seen = new Set();
+      categoryLinks.forEach(link => {
+        const text = link.textContent.trim();
+        if (text && text.length > 0 && text.length < 40 && 
+            text !== '쿠팡 홈' && text !== 'Coupang Home' && text !== '홈' &&
+            !seen.has(text)) {
+          seen.add(text);
+          segments.push(text);
+        }
+      });
+      if (segments.length > 0) {
+        console.log('[Coupang Extension] Breadcrumb found via /categories/ href links');
+      }
+    }
+    
+    // Fallback 5: Look for elements with ">" separator pattern in text
+    if (segments.length === 0) {
+      const possibleBreadcrumbTexts = document.body.innerText.match(/([가-힣a-zA-Z\s]+\s*>\s*){2,}[가-힣a-zA-Z\s]+/);
+      if (possibleBreadcrumbTexts) {
+        const parts = possibleBreadcrumbTexts[0].split('>').map(p => p.trim()).filter(p => 
+          p && p !== '쿠팡 홈' && p !== '홈' && p.length < 40
+        );
+        if (parts.length >= 2) {
+          segments.push(...parts);
+          console.log('[Coupang Extension] Breadcrumb found via text pattern matching');
+        }
+      }
+    }
+    
     console.log('[Coupang Extension] Final breadcrumb segments:', segments);
     return segments;
     
