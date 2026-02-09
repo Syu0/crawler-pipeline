@@ -252,32 +252,24 @@ function extractProductData(html, urlInfo) {
   trace('Starting HTML extraction...');
   
   const result = {
-    // From URL
-    source_url: urlInfo.sourceUrl,
-    coupang_product_id: urlInfo.coupangProductId,
-    itemId: urlInfo.itemId,
+    // From URL - identifiers
     vendorItemId: urlInfo.vendorItemId,
-    coupang_category_id: urlInfo.coupangCategoryId,
+    itemId: urlInfo.itemId,
+    coupang_product_id: urlInfo.coupangProductId,
+    categoryId: urlInfo.coupangCategoryId,
+    ProductURL: urlInfo.sourceUrl,  // Exact input URL, full query string preserved
     
     // To be extracted
     ItemTitle: '',
     ItemPrice: '',
     StandardImage: '',
-    StandardImageFullUrl: '',
-    ExtraImagesJson: '[]',
-    ItemDescriptionHtml: '',
-    WeightKg: '1',
-    SecondSubCat: '', // Placeholder - requires resolver module
+    ExtraImages: [],
+    WeightKg: '1',  // Fixed to 1
+    Options: null,
+    ItemDescriptionText: '',
     
-    // Tier-2 (best effort)
-    brand: '',
-    optionRaw: '',
-    specsJson: '{}',
-    reviewSummary: '',
-    
-    // Timestamps
-    collected_at_iso: new Date().toISOString(),
-    updated_at_iso: new Date().toISOString(),
+    // Timestamp
+    updatedAt: new Date().toISOString(),
   };
   
   // ===== Extract Title =====
