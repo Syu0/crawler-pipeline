@@ -199,31 +199,47 @@ async function sendToReceiver(data, retries = 2) {
 /**
  * Extract product data from the page DOM
  * This function runs in the context of the Coupang page
+ * 
+ * Tier-1 fields: categoryId (URL only), ItemPrice, WeightKg (fixed to 1)
+ * Tier-2 fields: Options (single type), ItemDescriptionText, ProductURL
  */
 function extractProductData() {
   const result = {
+    // Tier-1 Required
     coupang_product_id: '',
     itemId: '',
     vendorItemId: '',
-    categoryId: '',
+    categoryId: '',        // From URL query string ONLY
     ItemTitle: '',
-    ItemPrice: '',
+    ItemPrice: '',         // Number, no commas/symbols
     StandardImage: '',
+    WeightKg: '1',         // FIXED: Always 1, no scraping
+    
+    // Tier-2
+    Options: null,         // { type: "SIZE", values: ["S", "M", "L"] }
+    ItemDescriptionText: '', // Plain text, no HTML/images
+    ProductURL: '',        // Full URL as-is
+    
+    // Keep for compatibility
     ExtraImages: [],
-    WeightKg: '1',
   };
   
   try {
-    // Parse URL for IDs
+    // ========== URL Parsing (Tier-1) ==========
     const url = new URL(window.location.href);
     const pathMatch = url.pathname.match(/\/vp\/products\/(\d+)/);
     
     result.coupang_product_id = pathMatch ? pathMatch[1] : '';
     result.itemId = url.searchParams.get('itemId') || '';
     result.vendorItemId = url.searchParams.get('vendorItemId') || '';
+    
+    // categoryId: ONLY from URL query string
     result.categoryId = url.searchParams.get('categoryId') || '';
     
-    // Extract title
+    // ProductURL: Full URL as-is
+    result.ProductURL = window.location.href;
+    
+    // ========== Title (Tier-1) ==========
     const titleEl = document.querySelector('.prod-buy-header__title') ||
                     document.querySelector('h1.prod-title') ||
                     document.querySelector('[class*="ProductName"]') ||
@@ -232,23 +248,29 @@ function extractProductData() {
     if (titleEl) {
       result.ItemTitle = titleEl.textContent.trim();
     } else {
-      // Fallback to page title
       const pageTitle = document.title.split('|')[0].trim();
       result.ItemTitle = pageTitle;
     }
     
-    // Extract price
+    // ========== Price (Tier-1) ==========
+    // Scrape displayed price, convert "5,800원" → 5800
     const priceEl = document.querySelector('.total-price strong') ||
                     document.querySelector('.prod-sale-price .total-price') ||
                     document.querySelector('[class*="ProductPrice"]') ||
-                    document.querySelector('.prod-price .total-price');
+                    document.querySelector('.prod-price .total-price') ||
+                    document.querySelector('.prod-coupon-price .total-price');
     
     if (priceEl) {
+      // Remove all non-digit characters (commas, 원, spaces, etc.)
       const priceText = priceEl.textContent.replace(/[^\d]/g, '');
-      result.ItemPrice = priceText;
+      result.ItemPrice = priceText ? parseInt(priceText, 10) : '';
     }
     
-    // Extract main image
+    // ========== WeightKg (Tier-1) ==========
+    // FIXED: Always 1, no scraping per requirements
+    result.WeightKg = '1';
+    
+    // ========== Main Image ==========
     const mainImgEl = document.querySelector('.prod-image__detail img') ||
                       document.querySelector('.prod-image img') ||
                       document.querySelector('[class*="ProductImage"] img') ||
@@ -256,8 +278,6 @@ function extractProductData() {
     
     if (mainImgEl) {
       let imgSrc = mainImgEl.src || mainImgEl.getAttribute('data-src') || '';
-      
-      // Normalize to thumbnails/... path
       const thumbnailsIdx = imgSrc.indexOf('thumbnails/');
       if (thumbnailsIdx !== -1) {
         result.StandardImage = imgSrc.substring(thumbnailsIdx);
@@ -266,7 +286,7 @@ function extractProductData() {
       }
     }
     
-    // Also check og:image as fallback
+    // Fallback to og:image
     if (!result.StandardImage) {
       const ogImage = document.querySelector('meta[property="og:image"]');
       if (ogImage) {
@@ -280,8 +300,20 @@ function extractProductData() {
       }
     }
     
-    // Extract extra images
-    const extraImgEls = document.querySelectorAll('.prod-image__items img, .prod-image__sub img, [class*="thumbnail"] img');
+    // ========== Options (Tier-2) ==========
+    // Single option type only: SIZE OR COLOR OR one arbitrary type
+    const optionResult = extractSingleOption();
+    if (optionResult) {
+      result.Options = optionResult;
+    }
+    
+    // ========== ItemDescriptionText (Tier-2) ==========
+    // Extract text-only description, no HTML/images
+    result.ItemDescriptionText = extractDescriptionText();
+    
+    // ========== Extra Images (keep for compatibility, but not Tier-3) ==========
+    // Minimal extraction - exclude thumbnail gallery divs per requirements
+    const extraImgEls = document.querySelectorAll('.prod-image__items img, .prod-image__sub img');
     const seenImages = new Set();
     
     if (result.StandardImage) {
@@ -289,65 +321,199 @@ function extractProductData() {
     }
     
     extraImgEls.forEach(img => {
+      // Skip if inside twc-w-[70px] thumbnail gallery (out of scope)
+      if (img.closest('[class*="twc-w-[70px]"]')) return;
+      
       let imgSrc = img.src || img.getAttribute('data-src') || '';
       if (!imgSrc || imgSrc.includes('loading') || imgSrc.includes('placeholder')) return;
       
-      // Normalize
       const thumbnailsIdx = imgSrc.indexOf('thumbnails/');
       const normalizedSrc = thumbnailsIdx !== -1 ? imgSrc.substring(thumbnailsIdx) : imgSrc;
       
-      if (!seenImages.has(normalizedSrc) && result.ExtraImages.length < 10) {
+      if (!seenImages.has(normalizedSrc) && result.ExtraImages.length < 5) {
         seenImages.add(normalizedSrc);
-        result.ExtraImages.push(imgSrc); // Store full URL for extra images
+        result.ExtraImages.push(imgSrc);
       }
     });
     
-    // Extract weight (best effort)
-    const bodyText = document.body.innerText;
+  } catch (err) {
+    console.error('Coupang extraction error:', err);
+  }
+  
+  return result;
+}
+
+/**
+ * Extract single option type from the page
+ * Returns { type: "SIZE", values: ["S", "M", "L"] } or null
+ */
+function extractSingleOption() {
+  try {
+    // Look for option selectors
+    const optionContainers = document.querySelectorAll(
+      '.prod-option, ' +
+      '.prod-option__item, ' +
+      '[class*="OptionSelector"], ' +
+      '.prod-buy-option, ' +
+      '.option-wrapper'
+    );
     
-    // Try various weight patterns
-    const weightPatterns = [
-      /총\s*중량\s*[:：]?\s*([\d,.]+)\s*(g|kg|그램|킬로그램)/i,
-      /중량\s*[:：]?\s*([\d,.]+)\s*(g|kg|그램|킬로그램)/i,
-      /무게\s*[:：]?\s*([\d,.]+)\s*(g|kg|그램|킬로그램)/i,
-      /내용량\s*[:：]?\s*([\d,.]+)\s*(g|kg|그램|킬로그램)/i,
-      /([\d,.]+)\s*(g|kg)\b/i,
-    ];
+    // Try to find option title/type
+    let optionType = null;
+    let optionValues = [];
     
-    for (const pattern of weightPatterns) {
-      const match = bodyText.match(pattern);
-      if (match) {
-        const value = parseFloat(match[1].replace(/,/g, ''));
-        const unit = match[2].toLowerCase();
-        
-        if (!isNaN(value)) {
-          if (unit === 'g' || unit === '그램') {
-            result.WeightKg = String(Math.round((value / 1000) * 1000) / 1000);
-          } else if (unit === 'kg' || unit === '킬로그램') {
-            result.WeightKg = String(value);
+    // Check for labeled option sections
+    const optionLabels = document.querySelectorAll('.prod-option__title, .option-title, [class*="optionName"]');
+    
+    for (const label of optionLabels) {
+      const labelText = label.textContent.trim().toLowerCase();
+      
+      // Identify option type
+      if (labelText.includes('사이즈') || labelText.includes('size')) {
+        optionType = 'SIZE';
+      } else if (labelText.includes('색상') || labelText.includes('color') || labelText.includes('컬러')) {
+        optionType = 'COLOR';
+      } else if (labelText.includes('옵션') || labelText.includes('option')) {
+        optionType = 'OPTION';
+      }
+      
+      if (optionType) break;
+    }
+    
+    // Extract option values from buttons/items
+    const optionItems = document.querySelectorAll(
+      '.prod-option__item button, ' +
+      '.prod-option__selected-container button, ' +
+      '[class*="optionItem"], ' +
+      '.option-value, ' +
+      'select.prod-option__selector option'
+    );
+    
+    const seenValues = new Set();
+    
+    optionItems.forEach(item => {
+      let value = '';
+      
+      if (item.tagName === 'OPTION') {
+        value = item.textContent.trim();
+      } else {
+        // Get text content, excluding price info
+        const clone = item.cloneNode(true);
+        // Remove price elements
+        clone.querySelectorAll('[class*="price"], [class*="won"]').forEach(el => el.remove());
+        value = clone.textContent.trim();
+      }
+      
+      // Clean up value
+      value = value.replace(/[₩\d,원]/g, '').trim();
+      
+      if (value && value.length > 0 && value.length < 50 && !seenValues.has(value)) {
+        seenValues.add(value);
+        optionValues.push(value);
+      }
+    });
+    
+    // Also try select dropdowns
+    if (optionValues.length === 0) {
+      const selects = document.querySelectorAll('select[class*="option"], select[name*="option"]');
+      selects.forEach(select => {
+        select.querySelectorAll('option').forEach(opt => {
+          const value = opt.textContent.trim().replace(/[₩\d,원]/g, '').trim();
+          if (value && value !== '선택하세요' && value !== '옵션선택' && !seenValues.has(value)) {
+            seenValues.add(value);
+            optionValues.push(value);
           }
-          break;
+        });
+        
+        // Try to determine type from select name/id
+        if (!optionType) {
+          const selectId = (select.id + select.name + select.className).toLowerCase();
+          if (selectId.includes('size') || selectId.includes('사이즈')) {
+            optionType = 'SIZE';
+          } else if (selectId.includes('color') || selectId.includes('색상')) {
+            optionType = 'COLOR';
+          }
         }
+      });
+    }
+    
+    // Return result if we found options
+    if (optionValues.length > 0) {
+      return {
+        type: optionType || 'OPTION',
+        values: optionValues.slice(0, 20) // Limit to 20 values
+      };
+    }
+    
+    return null;
+    
+  } catch (err) {
+    console.error('Option extraction error:', err);
+    return null;
+  }
+}
+
+/**
+ * Extract text-only product description
+ * Removes all images and HTML tags
+ */
+function extractDescriptionText() {
+  try {
+    // Find description container
+    const descContainers = document.querySelectorAll(
+      '.product-detail-content-inside, ' +
+      '.prod-description, ' +
+      '#productDetail, ' +
+      '.product-detail, ' +
+      '[class*="ProductDescription"]'
+    );
+    
+    let descText = '';
+    
+    for (const container of descContainers) {
+      // Clone to avoid modifying DOM
+      const clone = container.cloneNode(true);
+      
+      // Remove all images
+      clone.querySelectorAll('img, video, iframe, script, style').forEach(el => el.remove());
+      
+      // Get text content
+      const text = clone.textContent || '';
+      
+      // Clean up whitespace
+      const cleaned = text
+        .replace(/\s+/g, ' ')
+        .replace(/\n\s*\n/g, '\n')
+        .trim();
+      
+      if (cleaned.length > descText.length) {
+        descText = cleaned;
       }
     }
     
-    // Try to find additional data in page scripts
-    const scripts = document.querySelectorAll('script');
-    scripts.forEach(script => {
-      const text = script.textContent;
-      
-      // Look for structured data
-      if (text.includes('__NEXT_DATA__') || text.includes('initialState')) {
-        try {
-          // Try to extract product data from JSON
-          const jsonMatch = text.match(/\{[^{}]*"productId"[^{}]*\}/);
-          if (jsonMatch) {
-            const data = JSON.parse(jsonMatch[0]);
-            if (data.productId && !result.coupang_product_id) {
-              result.coupang_product_id = String(data.productId);
-            }
-          }
-        } catch (e) {
+    // Fallback: try to get from product info section
+    if (descText.length < 50) {
+      const infoSections = document.querySelectorAll('.prod-attr, .prod-essential-info, [class*="productInfo"]');
+      infoSections.forEach(section => {
+        const text = section.textContent.replace(/\s+/g, ' ').trim();
+        if (text.length > descText.length) {
+          descText = text;
+        }
+      });
+    }
+    
+    // Limit length
+    if (descText.length > 5000) {
+      descText = descText.substring(0, 5000) + '...';
+    }
+    
+    return descText;
+    
+  } catch (err) {
+    console.error('Description extraction error:', err);
+    return '';
+  }
+}
           // Ignore parsing errors
         }
       }
