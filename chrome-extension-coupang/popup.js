@@ -253,17 +253,25 @@ function extractProductData() {
     }
     
     // ========== Price (Tier-1) ==========
-    // Scrape displayed price, convert "5,800원" → 5800
-    const priceEl = document.querySelector('.total-price strong') ||
-                    document.querySelector('.prod-sale-price .total-price') ||
-                    document.querySelector('[class*="ProductPrice"]') ||
-                    document.querySelector('.prod-price .total-price') ||
-                    document.querySelector('.prod-coupon-price .total-price');
+    // Target: .final-price-amount
+    // Parse "5,800원" → 5800
+    result.ItemPrice = null; // Default to null if not found
     
-    if (priceEl) {
-      // Remove all non-digit characters (commas, 원, spaces, etc.)
-      const priceText = priceEl.textContent.replace(/[^\d]/g, '');
-      result.ItemPrice = priceText ? parseInt(priceText, 10) : '';
+    try {
+      const priceEl = document.querySelector('.final-price-amount');
+      
+      if (priceEl) {
+        const priceText = priceEl.textContent || '';
+        // Remove commas and "원", extract digits only
+        const cleaned = priceText.replace(/,/g, '').replace(/원/g, '').trim();
+        const parsed = parseInt(cleaned, 10);
+        
+        if (!isNaN(parsed) && parsed > 0) {
+          result.ItemPrice = parsed;
+        }
+      }
+    } catch (e) {
+      // Parsing failed, keep ItemPrice = null
     }
     
     // ========== WeightKg (Tier-1) ==========
