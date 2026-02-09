@@ -138,6 +138,33 @@ Expected output:
 
 4. **Check your Google Sheet**
    - A new row should appear in the `coupang_datas` tab
+   - The `coupang_categorys` tab should also have a new row with category data
+
+### Step 2.5: Verify Category Accumulation
+
+When scraping products, the system automatically extracts breadcrumb categories:
+
+1. **Check the `coupang_categorys` tab** in your Google Sheet
+2. **Expected columns**:
+   | Column | Description |
+   |--------|-------------|
+   | `coupangCategoryId` | Category ID from URL |
+   | `depth2Path` | Last 2 category segments |
+   | `depth3Path` | Last 3 category segments |
+   | `rootName` | Root category name |
+   | `parentName` | Parent category name |
+   | `leafName` | Leaf category name |
+   | `firstSeenAt` | First time this category was seen |
+   | `lastSeenAt` | Last update timestamp |
+   | `usedCount` | Number of products with this category |
+
+3. **Behavior**:
+   - New category → Creates new row with `usedCount: 1`
+   - Existing category → Updates `lastSeenAt` and increments `usedCount`
+
+4. **Note**: Categories are only saved if:
+   - `categoryId` is present in the product URL
+   - Breadcrumb segments are successfully extracted from the page
 
 ### Troubleshooting Extension Mode
 
