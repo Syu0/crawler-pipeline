@@ -323,6 +323,9 @@ function extractProductData() {
     // Extract text-only description, no HTML/images
     result.ItemDescriptionText = extractDescriptionText();
     
+    // ========== Breadcrumb Extraction (Category Dictionary) ==========
+    result.breadcrumbSegments = extractBreadcrumbSegments();
+    
     // ========== Extra Images (keep for compatibility, but not Tier-3) ==========
     // Minimal extraction - exclude thumbnail gallery divs per requirements
     const extraImgEls = document.querySelectorAll('.prod-image__items img, .prod-image__sub img');
