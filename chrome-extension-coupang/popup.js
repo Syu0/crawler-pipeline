@@ -211,7 +211,7 @@ function extractProductData() {
     vendorItemId: '',
     categoryId: '',        // From URL query string ONLY
     ItemTitle: '',
-    ItemPrice: '',         // Number, no commas/symbols
+    ItemPrice: null,       // Number (integer KRW) or null if not found
     StandardImage: '',
     WeightKg: '1',         // FIXED: Always 1, no scraping
     
