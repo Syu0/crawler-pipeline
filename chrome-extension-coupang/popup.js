@@ -538,14 +538,30 @@ function extractBreadcrumbSegments() {
   try {
     const segments = [];
     
-    // Try various breadcrumb selectors
+    // Extended list of breadcrumb selectors for Coupang
+    // Ordered by specificity (most likely to work first)
     const breadcrumbSelectors = [
+      // Coupang-specific selectors
+      '.prod-breadcrumb a',
+      '.prod-breadcrumb-wrap a',
+      '[data-testid="breadcrumb"] a',
+      'nav[aria-label="브레드크럼"] a',
+      'nav[aria-label="breadcrumb"] a',
+      // Category path variants
+      '.category-path a',
+      '.category-breadcrumb a',
+      // Generic breadcrumb selectors
       '.breadcrumb a',
       '.breadcrumb-item a',
+      '.breadcrumbs a',
+      '.breadcrumbs__item a',
+      // Attribute-based selectors
       '[class*="breadcrumb"] a',
-      '.prod-breadcrumb a',
-      'nav[aria-label*="breadcrumb"] a',
-      '.category-breadcrumb a'
+      '[class*="Breadcrumb"] a',
+      '[class*="category-path"] a',
+      // List-based breadcrumbs
+      'ul.breadcrumb li a',
+      'ol.breadcrumb li a',
     ];
     
     for (const selector of breadcrumbSelectors) {
@@ -553,33 +569,92 @@ function extractBreadcrumbSegments() {
       if (links.length > 0) {
         links.forEach(link => {
           const text = link.textContent.trim();
-          if (text && text !== '쿠팡 홈' && text !== 'Coupang Home' && text !== '>') {
+          if (text && text !== '쿠팡 홈' && text !== 'Coupang Home' && text !== '>' && text !== '홈') {
             segments.push(text);
           }
         });
-        if (segments.length > 0) break;
+        if (segments.length > 0) {
+          console.log('[Coupang Extension] Breadcrumb found with selector:', selector);
+          break;
+        }
       }
     }
     
-    // Fallback: try to find any breadcrumb-like structure
+    // Fallback 1: Search for any element containing breadcrumb-like structure
     if (segments.length === 0) {
-      const possibleBreadcrumbs = document.querySelectorAll('[class*="breadcrumb"], [class*="Breadcrumb"]');
-      for (const el of possibleBreadcrumbs) {
+      const possibleContainers = document.querySelectorAll(
+        '[class*="breadcrumb"], [class*="Breadcrumb"], [class*="category"], [class*="path"]'
+      );
+      for (const el of possibleContainers) {
         const links = el.querySelectorAll('a');
-        links.forEach(link => {
-          const text = link.textContent.trim();
-          if (text && text !== '쿠팡 홈' && text !== 'Coupang Home' && text !== '>') {
-            segments.push(text);
+        if (links.length >= 2) { // At least 2 links suggests breadcrumb
+          links.forEach(link => {
+            const text = link.textContent.trim();
+            if (text && text !== '쿠팡 홈' && text !== 'Coupang Home' && text !== '>' && text !== '홈' && text.length < 50) {
+              segments.push(text);
+            }
+          });
+          if (segments.length > 0) {
+            console.log('[Coupang Extension] Breadcrumb found via fallback container');
+            break;
           }
-        });
-        if (segments.length > 0) break;
+        }
       }
     }
     
+    // Fallback 2: Try structured data (JSON-LD BreadcrumbList)
+    if (segments.length === 0) {
+      const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
+      for (const script of jsonLdScripts) {
+        try {
+          const data = JSON.parse(script.textContent);
+          // Handle array of schema objects
+          const schemas = Array.isArray(data) ? data : [data];
+          for (const schema of schemas) {
+            if (schema['@type'] === 'BreadcrumbList' && schema.itemListElement) {
+              schema.itemListElement.forEach(item => {
+                const name = item.name || item.item?.name;
+                if (name && name !== '쿠팡 홈' && name !== 'Coupang Home' && name !== '홈') {
+                  segments.push(name);
+                }
+              });
+              if (segments.length > 0) {
+                console.log('[Coupang Extension] Breadcrumb found via JSON-LD structured data');
+                break;
+              }
+            }
+          }
+        } catch (e) {
+          // Invalid JSON, skip
+        }
+      }
+    }
+    
+    // Fallback 3: Look for navigation with category-like links
+    if (segments.length === 0) {
+      const navElements = document.querySelectorAll('nav, header');
+      for (const nav of navElements) {
+        const links = nav.querySelectorAll('a[href*="categories"]');
+        if (links.length >= 2 && links.length <= 6) {
+          links.forEach(link => {
+            const text = link.textContent.trim();
+            if (text && text.length < 30 && text !== '쿠팡 홈') {
+              segments.push(text);
+            }
+          });
+          if (segments.length > 0) {
+            console.log('[Coupang Extension] Breadcrumb found via category links in nav');
+            break;
+          }
+        }
+      }
+    }
+    
+    console.log('[Coupang Extension] Final breadcrumb segments:', segments);
     return segments;
     
   } catch (err) {
-    console.error('Breadcrumb extraction error:', err);
+    console.error('[Coupang Extension] Breadcrumb extraction error:', err);
     return [];
   }
 }
