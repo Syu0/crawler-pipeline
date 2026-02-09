@@ -202,6 +202,7 @@ async function sendToReceiver(data, retries = 2) {
  * 
  * Tier-1 fields: categoryId (URL only), ItemPrice, WeightKg (fixed to 1)
  * Tier-2 fields: Options (single type), ItemDescriptionText, ProductURL
+ * Category fields: breadcrumbSegments (for category dictionary)
  */
 function extractProductData() {
   const result = {
@@ -219,6 +220,9 @@ function extractProductData() {
     Options: null,         // { type: "SIZE", values: ["S", "M", "L"] }
     ItemDescriptionText: '', // Plain text, no HTML/images
     ProductURL: '',        // Full URL as-is
+    
+    // Category accumulation
+    breadcrumbSegments: [], // Category path segments for dictionary
     
     // Keep for compatibility
     ExtraImages: [],
