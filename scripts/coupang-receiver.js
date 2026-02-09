@@ -267,19 +267,26 @@ function startServer() {
   
   server.listen(PORT, '127.0.0.1', () => {
     console.log('');
-    console.log('='.repeat(50));
+    console.log('='.repeat(60));
     console.log('  Coupang Data Receiver');
-    console.log('='.repeat(50));
+    console.log('='.repeat(60));
     console.log(`  Server:    http://127.0.0.1:${PORT}`);
     console.log(`  Endpoint:  POST /api/coupang/upsert`);
     console.log(`  Health:    GET /health`);
     console.log('');
-    console.log(`  Sheet ID:  ${SHEET_ID || '(not set!)'}`);
+    console.log(`  Sheet ID:  ${SHEET_ID || '⚠️  NOT SET! Add GOOGLE_SHEET_ID to backend/.env'}`);
     console.log(`  Tab:       ${TAB_NAME}`);
     console.log(`  Tracer:    ${TRACER ? 'ON' : 'OFF'}`);
     console.log('');
+    console.log('  📦 Features:');
+    console.log('    - Product data → coupang_datas');
+    console.log('    - Category accumulation → coupang_categorys');
+    console.log('');
+    console.log('  🔍 Category Accumulation:');
+    console.log('    Requires both categoryId AND breadcrumbSegments from extension');
+    console.log('');
     console.log('  Press Ctrl+C to stop');
-    console.log('='.repeat(50));
+    console.log('='.repeat(60));
     console.log('');
   });
   
