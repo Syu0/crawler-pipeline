@@ -26,13 +26,32 @@ The Google Sheet serves as the central data store between:
 | D | `categoryId` | string | URL param | Coupang category ID (from URL ONLY) |
 | E | `ProductURL` | string | System | Full Coupang product URL as-is |
 | F | `ItemTitle` | string | DOM | Product title |
-| G | `ItemPrice` | number | DOM | Price (integer, no commas/symbols) |
+| G | `ItemPrice` | number | DOM | Coupang price (integer, no commas/symbols) |
 | H | `StandardImage` | string | DOM | **Normalized** path: `thumbnails/...` |
 | I | `ExtraImages` | JSON string | DOM | Array of image URLs |
 | J | `WeightKg` | string | Fixed | **ALWAYS "1"** (no scraping) |
 | K | `Options` | JSON string | DOM | Single option: `{"type":"SIZE","values":["S","M"]}` |
 | L | `ItemDescriptionText` | string | DOM | Plain text description (no HTML/images) |
 | M | `updatedAt` | ISO datetime | System | Last update timestamp |
+| N | `qoo10SellingPrice` | number | Step 5-2 | **OUTPUT**: Calculated Qoo10 price |
+| O | `qoo10ItemId` | string | Step 5-2 | **OUTPUT**: Qoo10 ItemCode/ItemNo |
+
+---
+
+## Qoo10 Registration Output Fields
+
+These fields are written back after successful Qoo10 registration:
+
+| Field | Description |
+|-------|-------------|
+| `qoo10SellingPrice` | CEILING(ItemPrice × 1.12 × 1.03, 10) |
+| `qoo10ItemId` | ItemCode or ItemNo from Qoo10 API response |
+| `updatedAt` | Timestamp of last update (ISO 8601) |
+
+**Rules:**
+- Only written after successful API call
+- `qoo10ItemId` is never overwritten if already exists
+- Rows with existing `qoo10ItemId` are skipped
 
 ---
 
