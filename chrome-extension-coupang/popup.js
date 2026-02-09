@@ -326,6 +326,12 @@ function extractProductData() {
     // ========== Breadcrumb Extraction (Category Dictionary) ==========
     result.breadcrumbSegments = extractBreadcrumbSegments();
     
+    // Debug: Log extraction results in browser console
+    console.log('[Coupang Extension] === Extraction Summary ===');
+    console.log('[Coupang Extension] categoryId:', result.categoryId);
+    console.log('[Coupang Extension] breadcrumbSegments:', result.breadcrumbSegments);
+    console.log('[Coupang Extension] breadcrumbSegments.length:', result.breadcrumbSegments.length);
+    
     // ========== Extra Images (keep for compatibility, but not Tier-3) ==========
     // Minimal extraction - exclude thumbnail gallery divs per requirements
     const extraImgEls = document.querySelectorAll('.prod-image__items img, .prod-image__sub img');
