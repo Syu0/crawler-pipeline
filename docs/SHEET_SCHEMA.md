@@ -23,22 +23,40 @@ The Google Sheet serves as the central data store between:
 | A | `vendorItemId` | string | URL param | **PRIMARY KEY** for upsert |
 | B | `itemId` | string | URL param | Fallback key if vendorItemId missing |
 | C | `coupang_product_id` | string | URL path | Product ID from /vp/products/{id} |
-| D | `coupang_category_id` | string | URL param | Coupang category ID (categoryId) |
-| E | `source_url` | string | Input | Original Coupang URL |
-| F | `ItemTitle` | string | HTML | Product title (Qoo10 field name) |
-| G | `ItemPrice` | string | HTML | Price in KRW, numeric string |
-| H | `StandardImage` | string | HTML | **Normalized** path: `thumbnails/...` |
-| I | `StandardImageFullUrl` | string | HTML | Full CDN URL (optional) |
-| J | `ExtraImagesJson` | JSON string | HTML | Array of image paths |
-| K | `ItemDescriptionHtml` | string | HTML | HTML description with images |
-| L | `WeightKg` | string | HTML | Weight in Kg (default: "1") |
-| M | `SecondSubCat` | string | - | **PLACEHOLDER**: Qoo10 category ID |
-| N | `brand` | string | HTML | Brand/manufacturer (best effort) |
-| O | `optionRaw` | string | HTML | Raw option text (best effort) |
-| P | `specsJson` | JSON string | HTML | Key-value specs table |
-| Q | `reviewSummary` | string | HTML | Review rating (best effort) |
-| R | `collected_at_iso` | ISO datetime | System | First collection timestamp |
-| S | `updated_at_iso` | ISO datetime | System | Last update timestamp |
+| D | `categoryId` | string | URL param | Coupang category ID (from URL ONLY) |
+| E | `ProductURL` | string | System | Full Coupang product URL as-is |
+| F | `ItemTitle` | string | DOM | Product title |
+| G | `ItemPrice` | number | DOM | Price (integer, no commas/symbols) |
+| H | `StandardImage` | string | DOM | **Normalized** path: `thumbnails/...` |
+| I | `ExtraImages` | JSON string | DOM | Array of image URLs |
+| J | `WeightKg` | string | Fixed | **ALWAYS "1"** (no scraping) |
+| K | `Options` | JSON string | DOM | Single option: `{"type":"SIZE","values":["S","M"]}` |
+| L | `ItemDescriptionText` | string | DOM | Plain text description (no HTML/images) |
+| M | `updatedAt` | ISO datetime | System | Last update timestamp |
+
+---
+
+## Field Rules
+
+### Tier-1 Required Fields
+
+| Field | Rule |
+|-------|------|
+| `categoryId` | Extract ONLY from URL query string. Do NOT parse HTML. |
+| `ItemPrice` | Scrape displayed price, convert "5,800원" → 5800 (integer) |
+| `WeightKg` | **FIXED to 1**. No scraping. No inference. |
+
+### Tier-2 Fields
+
+| Field | Rule |
+|-------|------|
+| `Options` | Single option type only (SIZE OR COLOR). Store as JSON. |
+| `ItemDescriptionText` | Plain text only. Remove all images and HTML tags. |
+| `ProductURL` | Store the full Coupang URL as-is. |
+
+### Out of Scope
+- Thumbnail gallery images (`<div class="twc-w-[70px]...">`)
+- Any Tier-3 image scraping
 
 ---
 
