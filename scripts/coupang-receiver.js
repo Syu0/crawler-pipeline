@@ -177,6 +177,26 @@ async function handleUpsert(req, res) {
     
     console.log(`[${new Date().toISOString()}] ${result.action === 'updated' ? 'Updated' : 'Inserted'} row ${result.row} (${keyUsed})`);
     
+    // ===== Category Dictionary Accumulation =====
+    let categoryResult = null;
+    if (data.categoryId && data.breadcrumbSegments && data.breadcrumbSegments.length > 0) {
+      try {
+        const categoryInfo = parseBreadcrumbSegments(data.breadcrumbSegments);
+        
+        if (categoryInfo) {
+          categoryResult = await upsertCategory(SHEET_ID, data.categoryId, categoryInfo);
+          
+          if (categoryResult.action === 'CREATED') {
+            console.log(`[${new Date().toISOString()}] Category CREATED: ${data.categoryId} → ${categoryInfo.depth3Path}`);
+          } else {
+            console.log(`[${new Date().toISOString()}] Category UPDATED: ${data.categoryId} (usedCount: ${categoryResult.usedCount})`);
+          }
+        }
+      } catch (catErr) {
+        console.error(`[${new Date().toISOString()}] Category upsert error:`, catErr.message);
+      }
+    }
+    
     return sendJson(res, 200, {
       ok: true,
       mode: result.action === 'updated' ? 'update' : 'insert',
