@@ -14,6 +14,7 @@
  *   GOOGLE_SHEET_TAB_NAME - Tab name (default: coupang_datas)
  *   GOOGLE_SERVICE_ACCOUNT_JSON_PATH - Path to service account key
  *   COUPANG_RECEIVER_PORT - Server port (default: 8787)
+ *   COUPANG_TRACER - Enable verbose logging (1=on)
  */
 
 // Load environment
@@ -26,18 +27,31 @@ const { ensureHeaders, upsertRow } = require('./lib/sheetsClient');
 const PORT = parseInt(process.env.COUPANG_RECEIVER_PORT || '8787', 10);
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
 const TAB_NAME = process.env.GOOGLE_SHEET_TAB_NAME || 'coupang_datas';
+const TRACER = process.env.COUPANG_TRACER === '1' || process.env.COUPANG_TRACER === 'true';
 
-// Canonical sheet headers
+/**
+ * Log tracer message
+ */
+function trace(...args) {
+  if (TRACER) {
+    console.log('[TRACER]', ...args);
+  }
+}
+
+// Canonical sheet headers (Tier-1 + Tier-2)
 const SHEET_HEADERS = [
   'vendorItemId',
   'itemId',
   'coupang_product_id',
-  'categoryId',
+  'categoryId',           // Tier-1: From URL only
+  'ProductURL',           // Tier-2: Full URL
   'ItemTitle',
-  'ItemPrice',
+  'ItemPrice',            // Tier-1: Number, no symbols
   'StandardImage',
   'ExtraImages',
-  'WeightKg',
+  'WeightKg',             // Tier-1: Fixed to 1
+  'Options',              // Tier-2: JSON { type, values }
+  'ItemDescriptionText',  // Tier-2: Plain text, no HTML
   'updatedAt',
 ];
 
@@ -111,17 +125,35 @@ async function handleUpsert(req, res) {
     
     console.log(`[${new Date().toISOString()}] Received data for product: ${data.coupang_product_id || 'unknown'}`);
     
-    // Prepare row data
+    // ===== Tracer Logging =====
+    trace('categoryId source: URL query string');
+    trace('categoryId value:', data.categoryId || '(empty)');
+    
+    if (data.ItemPrice !== undefined) {
+      trace('ItemPrice raw:', data.ItemPrice);
+      trace('ItemPrice parsed:', typeof data.ItemPrice === 'number' ? data.ItemPrice : parseInt(data.ItemPrice, 10) || '');
+    }
+    
+    trace('WeightKg: fixed default = 1 (no scraping per requirements)');
+    
+    if (data.Options) {
+      trace('Options:', JSON.stringify(data.Options));
+    }
+    
+    // ===== Prepare row data =====
     const rowData = {
       vendorItemId: data.vendorItemId || '',
       itemId: data.itemId || '',
       coupang_product_id: data.coupang_product_id || '',
-      categoryId: data.categoryId || '',
+      categoryId: data.categoryId || '',                    // From URL only
+      ProductURL: data.ProductURL || '',                    // Full URL
       ItemTitle: data.ItemTitle || '',
-      ItemPrice: data.ItemPrice || '',
+      ItemPrice: data.ItemPrice || '',                      // Number
       StandardImage: data.StandardImage || '',
       ExtraImages: Array.isArray(data.ExtraImages) ? JSON.stringify(data.ExtraImages) : '[]',
-      WeightKg: data.WeightKg || '1',
+      WeightKg: '1',                                        // FIXED to 1
+      Options: data.Options ? JSON.stringify(data.Options) : '',  // JSON
+      ItemDescriptionText: data.ItemDescriptionText || '',  // Plain text
       updatedAt: new Date().toISOString(),
     };
     
@@ -202,6 +234,7 @@ function startServer() {
     console.log('');
     console.log(`  Sheet ID:  ${SHEET_ID || '(not set!)'}`);
     console.log(`  Tab:       ${TAB_NAME}`);
+    console.log(`  Tracer:    ${TRACER ? 'ON' : 'OFF'}`);
     console.log('');
     console.log('  Press Ctrl+C to stop');
     console.log('='.repeat(50));
