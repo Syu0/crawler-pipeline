@@ -19,27 +19,21 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend'
 const { scrapeCoupangProduct } = require('./lib/coupangScraper');
 const { ensureHeaders, upsertRow } = require('./lib/sheetsClient');
 
-// Sheet configuration
+// Sheet configuration - must match coupang-receiver.js
 const SHEET_HEADERS = [
   'vendorItemId',
   'itemId',
   'coupang_product_id',
-  'coupang_category_id',
-  'source_url',
+  'categoryId',
+  'ProductURL',
   'ItemTitle',
   'ItemPrice',
   'StandardImage',
-  'StandardImageFullUrl',
-  'ExtraImagesJson',
-  'ItemDescriptionHtml',
+  'ExtraImages',
   'WeightKg',
-  'SecondSubCat',
-  'brand',
-  'optionRaw',
-  'specsJson',
-  'reviewSummary',
-  'collected_at_iso',
-  'updated_at_iso',
+  'Options',
+  'ItemDescriptionText',
+  'updatedAt',
 ];
 
 /**
