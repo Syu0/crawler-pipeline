@@ -128,6 +128,10 @@ async function handleUpsert(req, res) {
     
     console.log(`[${new Date().toISOString()}] Received data for product: ${data.coupang_product_id || 'unknown'}`);
     
+    // ===== CRITICAL: Log breadcrumb data for debugging =====
+    console.log(`[${new Date().toISOString()}] BREADCRUMB SEGMENTS:`, data.breadcrumbSegments || '(NOT PROVIDED)');
+    console.log(`[${new Date().toISOString()}] categoryId:`, data.categoryId || '(NOT PROVIDED)');
+    
     // ===== Tracer Logging =====
     trace('categoryId source: URL query string');
     trace('categoryId value:', data.categoryId || '(empty)');
@@ -179,7 +183,10 @@ async function handleUpsert(req, res) {
     
     // ===== Category Dictionary Accumulation =====
     let categoryResult = null;
-    if (data.categoryId && data.breadcrumbSegments && data.breadcrumbSegments.length > 0) {
+    const hasCategoryId = data.categoryId && data.categoryId.trim() !== '';
+    const hasBreadcrumbs = Array.isArray(data.breadcrumbSegments) && data.breadcrumbSegments.length > 0;
+    
+    if (hasCategoryId && hasBreadcrumbs) {
       try {
         const categoryInfo = parseBreadcrumbSegments(data.breadcrumbSegments);
         
@@ -187,14 +194,24 @@ async function handleUpsert(req, res) {
           categoryResult = await upsertCategory(SHEET_ID, data.categoryId, categoryInfo);
           
           if (categoryResult.action === 'CREATED') {
-            console.log(`[${new Date().toISOString()}] Category CREATED: ${data.categoryId} → ${categoryInfo.depth3Path}`);
+            console.log(`[${new Date().toISOString()}] ✅ Category CREATED: ${data.categoryId} → ${categoryInfo.depth3Path}`);
           } else {
-            console.log(`[${new Date().toISOString()}] Category UPDATED: ${data.categoryId} (usedCount: ${categoryResult.usedCount})`);
+            console.log(`[${new Date().toISOString()}] ✅ Category UPDATED: ${data.categoryId} (usedCount: ${categoryResult.usedCount})`);
           }
+        } else {
+          console.warn(`[${new Date().toISOString()}] ⚠️ Category parse failed for product ${data.coupang_product_id}: parseBreadcrumbSegments returned null`);
         }
       } catch (catErr) {
-        console.error(`[${new Date().toISOString()}] Category upsert error:`, catErr.message);
+        // Category error should NOT block product upsert
+        console.error(`[${new Date().toISOString()}] ⚠️ Category upsert error (product still saved):`, catErr.message);
       }
+    } else {
+      // Log warning with specific reason
+      const reasons = [];
+      if (!hasCategoryId) reasons.push('categoryId missing or empty');
+      if (!hasBreadcrumbs) reasons.push('breadcrumbSegments missing or empty');
+      
+      console.warn(`[${new Date().toISOString()}] ⚠️ Category accumulation SKIPPED for product ${data.coupang_product_id || 'unknown'}: ${reasons.join(', ')}`);
     }
     
     return sendJson(res, 200, {
@@ -202,7 +219,8 @@ async function handleUpsert(req, res) {
       mode: result.action === 'updated' ? 'update' : 'insert',
       rowIndex: result.row,
       key: keyUsed,
-      category: categoryResult
+      category: categoryResult,
+      categorySkipped: !categoryResult ? true : undefined
     });
     
   } catch (err) {
