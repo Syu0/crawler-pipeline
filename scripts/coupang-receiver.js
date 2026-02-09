@@ -4,6 +4,7 @@
  * 
  * Local HTTP server that receives product data from the Chrome extension
  * and upserts it to Google Sheets.
+ * Also accumulates category information into "coupang_categorys" sheet.
  * 
  * Usage:
  *   node scripts/coupang-receiver.js
@@ -22,6 +23,8 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend'
 
 const http = require('http');
 const { ensureHeaders, upsertRow } = require('./lib/sheetsClient');
+const { parseBreadcrumbSegments } = require('./lib/categoryParser');
+const { upsertCategory } = require('./lib/categorySheetClient');
 
 // Configuration
 const PORT = parseInt(process.env.COUPANG_RECEIVER_PORT || '8787', 10);
