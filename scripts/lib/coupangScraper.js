@@ -433,13 +433,12 @@ async function scrapeCoupangProduct(productUrl) {
   
   // Summary
   console.log(`\n=== Extraction Summary ===`);
+  console.log(`ProductURL: ${productData.ProductURL.substring(0, 60)}...`);
   console.log(`Title: ${productData.ItemTitle.substring(0, 60)}${productData.ItemTitle.length > 60 ? '...' : ''}`);
   console.log(`Price: ${productData.ItemPrice || '(not found)'}`);
   console.log(`Main Image: ${productData.StandardImage ? 'OK' : '(not found)'}`);
-  console.log(`Extra Images: ${JSON.parse(productData.ExtraImagesJson).length}`);
-  console.log(`Weight: ${productData.WeightKg} Kg`);
-  console.log(`Brand: ${productData.brand || '(not found)'}`);
-  console.log(`SecondSubCat: (placeholder - requires resolver)`);
+  console.log(`Extra Images: ${productData.ExtraImages.length}`);
+  console.log(`WeightKg: ${productData.WeightKg} (fixed)`);
   
   return productData;
 }
