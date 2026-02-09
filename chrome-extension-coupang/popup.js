@@ -514,14 +514,3 @@ function extractDescriptionText() {
     return '';
   }
 }
-          // Ignore parsing errors
-        }
-      }
-    });
-    
-  } catch (err) {
-    console.error('Coupang extraction error:', err);
-  }
-  
-  return result;
-}
