@@ -202,6 +202,7 @@ async function handleUpsert(req, res) {
       mode: result.action === 'updated' ? 'update' : 'insert',
       rowIndex: result.row,
       key: keyUsed,
+      category: categoryResult
     });
     
   } catch (err) {
