@@ -172,22 +172,81 @@ This allows flexible reconstruction with different CDN prefixes for Qoo10.
 | `ExtraImagesJson` | `ExtraImages` | Parse JSON array |
 | `ItemDescriptionHtml` | `ItemDescription` | Direct mapping |
 | `WeightKg` | `Weight` | Qoo10 expects Kg |
-| `SecondSubCat` | `SecondSubCat` | **TODO: Resolver needed** |
+| `SecondSubCat` | `SecondSubCat` | Resolved via categoryResolver |
 
 ---
 
-## Status Values (TODO: Add column)
+## Tab: `japan_categories`
 
-| Status | Description |
-|--------|-------------|
+Full JP category list from Qoo10 API (`CommonInfoLookup.GetCatagoryListAll`).
 
-| Status | Description |
-|--------|-------------|
-| `pending` | Ready for registration |
-| `processing` | Currently being registered |
-| `registered` | Successfully registered, GdNo populated |
-| `error` | Registration failed, see `error_message` |
-| `skipped` | Manually marked to skip |
+| Column | Type | Description |
+|--------|------|-------------|
+| `jpCategoryId` | string | **PRIMARY KEY** - Qoo10 JP category ID |
+| `parentJpCategoryId` | string | Parent category ID |
+| `depth` | number | 1=root, 2=mid, 3=leaf... |
+| `name` | string | Category name |
+| `fullPath` | string | Full path ("Top > Mid > Leaf") |
+| `sortOrder` | string | API-provided sort order |
+| `isLeaf` | boolean | true if no children |
+| `updatedAt` | ISO datetime | Sync timestamp |
+
+**Sync Command**: `npm run qoo10:sync:japan-categories`
+
+---
+
+## Tab: `category_mapping`
+
+KR(Coupang) → JP(Qoo10) category mapping table.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `coupangCategoryId` | string | **PRIMARY KEY** - Coupang category ID |
+| `coupangPath2` | string | Last 2 breadcrumb segments |
+| `coupangPath3` | string | Last 3 breadcrumb segments |
+| `jpCategoryId` | string | Resolved JP category ID |
+| `jpFullPath` | string | JP category full path |
+| `matchType` | string | MANUAL, AUTO, or FALLBACK |
+| `confidence` | number | 0-1 confidence score (AUTO only) |
+| `note` | string | Free text notes |
+| `updatedAt` | ISO datetime | Last update timestamp |
+| `updatedBy` | string | "system" or "user" |
+
+### Match Types
+
+| Type | Description |
+|------|-------------|
+| `MANUAL` | User manually set jpCategoryId |
+| `AUTO` | System auto-matched by keyword similarity |
+| `FALLBACK` | No match found, using default category (review required) |
+
+### Resolution Order
+
+1. **MANUAL**: Exact match by coupangCategoryId where jpCategoryId is set
+2. **AUTO**: Keyword matching in japan_categories.fullPath
+3. **FALLBACK**: Fixed JP category ID `320002604`
+
+---
+
+## coupang_datas Registration Columns
+
+Added after Qoo10 registration:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `jpCategoryIdUsed` | string | JP category ID used for registration |
+| `categoryMatchType` | string | MANUAL, AUTO, or FALLBACK |
+| `categoryMatchConfidence` | number | Confidence score |
+| `registrationStatus` | string | SUCCESS, WARNING, or FAILED |
+| `registrationMessage` | string | Status message |
+
+### Registration Status Rules
+
+| Status | Condition |
+|--------|-----------|
+| `SUCCESS` | API succeeded + matchType is MANUAL or AUTO |
+| `WARNING` | API succeeded + matchType is FALLBACK |
+| `FAILED` | API call failed |
 
 ---
 
