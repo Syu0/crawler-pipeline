@@ -168,6 +168,10 @@ async function handleUpsert(req, res) {
       trace('Options:', JSON.stringify(data.Options));
     }
     
+    // ===== Compute category paths from breadcrumbSegments =====
+    const { categoryPath2, categoryPath3 } = computeCategoryPaths(data.breadcrumbSegments);
+    console.log(`[${new Date().toISOString()}] categoryPath2: "${categoryPath2}", categoryPath3: "${categoryPath3}"`);
+    
     // ===== Prepare row data =====
     const rowData = {
       vendorItemId: data.vendorItemId || '',
@@ -183,6 +187,8 @@ async function handleUpsert(req, res) {
       Options: data.Options ? JSON.stringify(data.Options) : '',  // JSON
       ItemDescriptionText: data.ItemDescriptionText || '',  // Plain text
       updatedAt: new Date().toISOString(),
+      categoryPath2,                                        // Last 2 breadcrumb segments
+      categoryPath3,                                        // Last 3 breadcrumb segments
     };
     
     // Ensure headers exist
