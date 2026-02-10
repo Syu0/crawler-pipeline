@@ -541,14 +541,9 @@ function extractDescriptionText() {
  * Returns array of category names (excluding "쿠팡 홈")
  */
 function extractBreadcrumbSegments() {
-  const anchors = Array.from(
-    document.querySelectorAll(
-      'ul[class*="breadcrumb"] a, a[href*="/np/categories/"]'
-    )
-  );
-
-  return anchors
+  return Array.from(
+    document.querySelectorAll('ul.breadcrumb a[href*="/np/categories/"]')
+  )
     .map(a => a.textContent.trim())
-    .filter(Boolean)
-    .filter(text => text !== '쿠팡 홈');
+    .filter(Boolean);
 }
