@@ -235,6 +235,21 @@ async function sendToReceiver(data, retries = 2) {
  * Category fields: breadcrumbSegments (for category dictionary)
  */
 function extractProductData() {
+  // [C2S][PAGE] Log B1: Entry point diagnostics
+  console.log('[C2S][PAGE] extractProductData() called');
+  console.log('[C2S][PAGE] window.location.href:', window.location.href);
+  console.log('[C2S][PAGE] document.readyState:', document.readyState);
+  console.log('[C2S][PAGE] ul.breadcrumb exists:', !!document.querySelector('ul.breadcrumb'));
+  
+  // [C2S][PAGE] Log B4: DOM snippet
+  const breadcrumbEl = document.querySelector('ul.breadcrumb');
+  if (breadcrumbEl) {
+    const snippet = breadcrumbEl.outerHTML.substring(0, 300);
+    console.log('[C2S][PAGE] ul.breadcrumb outerHTML (first 300 chars):', snippet);
+  } else {
+    console.log('[C2S][PAGE] ul.breadcrumb NOT FOUND in DOM');
+  }
+  
   const result = {
     // Tier-1 Required
     coupang_product_id: '',
