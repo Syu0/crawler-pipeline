@@ -281,8 +281,27 @@ async function registerProduct(row, dryRun = false) {
     };
   }
   
-  // Build payload
-  const { payload, sellerCode, sellingPrice } = buildRegistrationPayload(row);
+  // Resolve JP category (never fails - has FALLBACK)
+  let categoryResolution;
+  try {
+    categoryResolution = await resolveJpCategoryId({
+      categoryId: row.categoryId,
+      categoryPath2: row.categoryPath2 || '',
+      categoryPath3: row.categoryPath3 || ''
+    });
+  } catch (catErr) {
+    console.warn(`[Registration] Category resolution error: ${catErr.message}, using FALLBACK`);
+    categoryResolution = {
+      jpCategoryId: '320002604', // Hardcoded fallback
+      matchType: 'FALLBACK',
+      confidence: 0
+    };
+  }
+  
+  console.log(`  Category: ${row.categoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
+  
+  // Build payload with resolved category
+  const { payload, sellerCode, sellingPrice } = buildRegistrationPayload(row, categoryResolution);
   
   if (dryRun) {
     return {
@@ -290,6 +309,7 @@ async function registerProduct(row, dryRun = false) {
       vendorItemId,
       sellerCode,
       qoo10SellingPrice: sellingPrice,
+      categoryResolution,
       payload
     };
   }
@@ -302,12 +322,17 @@ async function registerProduct(row, dryRun = false) {
       const result = await registerNewGoods(payload);
       
       if (result.success && result.createdItemId) {
+        // Determine registration status based on matchType
+        // FALLBACK = WARNING even if API succeeds
+        const registrationStatus = categoryResolution.matchType === 'FALLBACK' ? 'WARNING' : 'SUCCESS';
+        
         return {
-          status: 'SUCCESS',
+          status: registrationStatus,
           vendorItemId,
           qoo10ItemId: result.createdItemId,
           qoo10SellingPrice: sellingPrice,
-          sellerCode: result.sellerCodeUsed
+          sellerCode: result.sellerCodeUsed,
+          categoryResolution
         };
       }
       
@@ -320,7 +345,8 @@ async function registerProduct(row, dryRun = false) {
           status: 'DRY_RUN_API',
           vendorItemId,
           qoo10SellingPrice: sellingPrice,
-          reason: 'QOO10_ALLOW_REAL_REG not enabled'
+          reason: 'QOO10_ALLOW_REAL_REG not enabled',
+          categoryResolution
         };
       }
       
@@ -337,7 +363,8 @@ async function registerProduct(row, dryRun = false) {
   return {
     status: 'FAILED',
     vendorItemId,
-    apiError: lastError
+    apiError: lastError,
+    categoryResolution
   };
 }
 
