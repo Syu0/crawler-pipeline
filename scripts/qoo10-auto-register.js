@@ -213,17 +213,22 @@ function parseExtraImages(extraImages) {
 
 /**
  * Build Qoo10 registration payload from sheet row
+ * @param {object} row - Sheet row data
+ * @param {object} categoryResolution - Resolved JP category from categoryResolver
  */
-function buildRegistrationPayload(row) {
+function buildRegistrationPayload(row, categoryResolution) {
   const sellingPrice = calculateSellingPrice(row.ItemPrice);
   const sellerCode = `auto_${row.vendorItemId || row.itemId}`;
   
   // Parse extra images
   const extraImages = parseExtraImages(row.ExtraImages);
   
+  // Use resolved JP category ID (never null due to FALLBACK)
+  const jpCategoryId = categoryResolution?.jpCategoryId || row.categoryId;
+  
   // Build payload matching registerNewGoods.js expected format
   const payload = {
-    SecondSubCat: row.categoryId,
+    SecondSubCat: jpCategoryId,
     ItemTitle: row.ItemTitle,
     ItemPrice: String(sellingPrice),
     ItemQty: '100',
