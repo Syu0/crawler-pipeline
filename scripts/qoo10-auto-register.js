@@ -428,6 +428,15 @@ async function main() {
       
       const result = await registerProduct(row, options.dryRun);
       
+      // Prepare sheet update with category tracking
+      const categoryUpdate = result.categoryResolution ? {
+        jpCategoryIdUsed: result.categoryResolution.jpCategoryId || '',
+        categoryMatchType: result.categoryResolution.matchType || '',
+        categoryMatchConfidence: result.categoryResolution.confidence !== undefined 
+          ? String(result.categoryResolution.confidence) 
+          : ''
+      } : {};
+      
       switch (result.status) {
         case 'SUCCESS':
           console.log(`  ✓ SUCCESS: qoo10ItemId=${result.qoo10ItemId}, price=${result.qoo10SellingPrice}`);
@@ -438,9 +447,32 @@ async function main() {
             await updateSheetRow(row._rowIndex, {
               qoo10ItemId: result.qoo10ItemId,
               qoo10SellingPrice: result.qoo10SellingPrice,
+              ...categoryUpdate,
+              registrationStatus: 'SUCCESS',
+              registrationMessage: 'Registered successfully',
               updatedAt: new Date().toISOString()
             });
             console.log(`  ✓ Sheet updated`);
+          } catch (sheetErr) {
+            console.log(`  ✗ Sheet update failed: ${sheetErr.message}`);
+          }
+          break;
+          
+        case 'WARNING':
+          console.log(`  ⚠ WARNING: qoo10ItemId=${result.qoo10ItemId}, price=${result.qoo10SellingPrice} (FALLBACK category used)`);
+          results.success.push(result); // Still counts as successful registration
+          
+          // Update Google Sheet with WARNING status
+          try {
+            await updateSheetRow(row._rowIndex, {
+              qoo10ItemId: result.qoo10ItemId,
+              qoo10SellingPrice: result.qoo10SellingPrice,
+              ...categoryUpdate,
+              registrationStatus: 'WARNING',
+              registrationMessage: 'Registered with FALLBACK category - review required',
+              updatedAt: new Date().toISOString()
+            });
+            console.log(`  ⚠ Sheet updated (WARNING status)`);
           } catch (sheetErr) {
             console.log(`  ✗ Sheet update failed: ${sheetErr.message}`);
           }
@@ -454,11 +486,23 @@ async function main() {
         case 'FAILED':
           console.log(`  ✗ FAILED: ${result.apiError}`);
           results.failed.push(result);
+          
+          // Update sheet with FAILED status
+          try {
+            await updateSheetRow(row._rowIndex, {
+              ...categoryUpdate,
+              registrationStatus: 'FAILED',
+              registrationMessage: result.apiError || 'API error',
+              updatedAt: new Date().toISOString()
+            });
+          } catch (sheetErr) {
+            // Ignore sheet update error on failed registration
+          }
           break;
           
         case 'DRY_RUN':
         case 'DRY_RUN_API':
-          console.log(`  → DRY-RUN: price=${result.qoo10SellingPrice}`);
+          console.log(`  → DRY-RUN: price=${result.qoo10SellingPrice}, jpCat=${result.categoryResolution?.jpCategoryId}`);
           results.dryRun.push(result);
           break;
       }
