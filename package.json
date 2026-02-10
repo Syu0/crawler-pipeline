@@ -14,6 +14,7 @@
     "qoo10:generate-payloads:dry": "node scripts/qoo10-generate-payloads.js --dry-run",
     "qoo10:auto-register": "node scripts/qoo10-auto-register.js",
     "qoo10:auto-register:dry": "node scripts/qoo10-auto-register.js --dry-run",
+    "qoo10:sync:japan-categories": "node scripts/qoo10-sync-japan-categories.js",
     "coupang:receiver:start": "node scripts/coupang-receiver.js",
     "coupang:scrape:dry": "cross-env COUPANG_SCRAPE_DRY_RUN=1 node scripts/coupang-scrape-to-sheet.js --url \"https://www.coupang.com/vp/products/7107426071?itemId=17757771253&vendorItemId=84922122516&categoryId=317679\"",
     "coupang:scrape:dry:trace": "cross-env COUPANG_SCRAPE_DRY_RUN=1 COUPANG_TRACER=1 node scripts/coupang-scrape-to-sheet.js --url \"https://www.coupang.com/vp/products/7107426071?itemId=17757771253&vendorItemId=84922122516&categoryId=317679\"",
