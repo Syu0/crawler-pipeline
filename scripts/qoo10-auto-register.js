@@ -491,9 +491,10 @@ async function main() {
           try {
             await updateSheetRow(row._rowIndex, {
               ...categoryUpdate,
+              registrationMode: 'REAL',
               registrationStatus: 'FAILED',
               registrationMessage: result.apiError || 'API error',
-              updatedAt: new Date().toISOString()
+              lastRegisteredAt: new Date().toISOString()
             });
           } catch (sheetErr) {
             // Ignore sheet update error on failed registration
@@ -502,8 +503,30 @@ async function main() {
           
         case 'DRY_RUN':
         case 'DRY_RUN_API':
-          console.log(`  → DRY-RUN: price=${result.qoo10SellingPrice}, jpCat=${result.categoryResolution?.jpCategoryId}`);
+          // Determine DRY-RUN status based on matchType
+          const dryRunStatus = result.categoryResolution?.matchType === 'FALLBACK' ? 'WARNING' : 'DRY_RUN';
+          const dryRunMessage = result.categoryResolution?.matchType === 'FALLBACK' 
+            ? 'DRY-RUN with FALLBACK category (review required)'
+            : 'DRY-RUN completed';
+          
+          console.log(`  → DRY-RUN: price=${result.qoo10SellingPrice}, jpCat=${result.categoryResolution?.jpCategoryId} (${result.categoryResolution?.matchType})`);
           results.dryRun.push(result);
+          
+          // ALWAYS write back category resolution even in DRY-RUN
+          try {
+            await updateSheetRow(row._rowIndex, {
+              ...categoryUpdate,
+              qoo10SellingPrice: result.qoo10SellingPrice,
+              qoo10SellerCode: result.sellerCode || '',
+              registrationMode: 'DRY_RUN',
+              registrationStatus: dryRunStatus,
+              registrationMessage: dryRunMessage,
+              lastRegisteredAt: new Date().toISOString()
+            });
+            console.log(`  ✓ Sheet updated (DRY-RUN)`);
+          } catch (sheetErr) {
+            console.log(`  ✗ Sheet update failed: ${sheetErr.message}`);
+          }
           break;
       }
       
