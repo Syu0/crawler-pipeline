@@ -374,13 +374,20 @@ async function registerProduct(row, dryRun = false) {
 async function main() {
   const options = parseArgs();
   
+  const isRealMode = !options.dryRun && process.env.QOO10_ALLOW_REAL_REG === '1';
+  
   console.log('='.repeat(60));
   console.log('  Qoo10 Auto Registration Executor');
   console.log('='.repeat(60));
   console.log(`  Sheet ID: ${SHEET_ID || '(not set!)'}`);
   console.log(`  Tab: ${TAB_NAME}`);
-  console.log(`  Mode: ${options.dryRun ? 'DRY-RUN' : 'LIVE'}`);
+  console.log(`  Mode: ${options.dryRun ? 'DRY-RUN' : (isRealMode ? 'REAL' : 'DRY-RUN (QOO10_ALLOW_REAL_REG=0)')}`);
   console.log(`  QOO10_ALLOW_REAL_REG: ${process.env.QOO10_ALLOW_REAL_REG || '0'}`);
+  console.log('');
+  console.log('  Write-back columns:');
+  console.log('    - jpCategoryIdUsed, categoryMatchType, categoryMatchConfidence');
+  console.log('    - registrationMode, registrationStatus, registrationMessage');
+  console.log('    - qoo10ItemId, qoo10SellerCode, qoo10SellingPrice, lastRegisteredAt');
   console.log('='.repeat(60));
   console.log('');
   
