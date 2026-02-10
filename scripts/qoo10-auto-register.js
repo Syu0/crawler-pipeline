@@ -2,8 +2,8 @@
 /**
  * Qoo10 Auto Registration Executor
  * 
- * Reads Coupang products from Google Sheets, registers to Qoo10,
- * and writes back qoo10ItemId and qoo10SellingPrice.
+ * Reads Coupang products from Google Sheets, resolves JP categories,
+ * registers to Qoo10, and writes back results.
  * 
  * Usage:
  *   node scripts/qoo10-auto-register.js [--limit <n>] [--dry-run]
@@ -18,6 +18,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend'
 const { getSheetsClient } = require('./lib/sheetsClient');
 const { registerNewGoods } = require('../backend/qoo10/registerNewGoods');
 const { calculateSellingPrice } = require('./lib/qoo10PayloadGenerator');
+const { resolveJpCategoryId } = require('./lib/categoryResolver');
 
 // Configuration
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
