@@ -369,7 +369,16 @@ function extractProductData() {
     result.ItemDescriptionText = extractDescriptionText();
     
     // ========== Breadcrumb Extraction (Category Dictionary) ==========
+    // [C2S][PAGE] Log B2: Before calling extractBreadcrumbSegments
+    const breadcrumbAnchorsCount = document.querySelectorAll('ul.breadcrumb a[href*="/np/categories/"]').length;
+    console.log('[C2S][PAGE] Before extractBreadcrumbSegments, matching anchors count:', breadcrumbAnchorsCount);
+    
     result.breadcrumbSegments = extractBreadcrumbSegments();
+    
+    // [C2S][PAGE] Log B3: After setting breadcrumbSegments
+    console.log('[C2S][PAGE] After extractBreadcrumbSegments');
+    console.log('[C2S][PAGE] result.breadcrumbSegments:', result.breadcrumbSegments);
+    console.log('[C2S][PAGE] result.breadcrumbSegments.length:', result.breadcrumbSegments.length);
     
     // Debug: Log extraction results in browser console
     console.log('[Coupang Extension] === Extraction Summary ===');
