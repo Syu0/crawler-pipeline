@@ -112,9 +112,17 @@ async function handleSendClick() {
     
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     
+    // [C2S][POPUP] Log A1: handleSendClick start
+    console.log('[C2S][POPUP] handleSendClick started');
+    console.log('[C2S][POPUP] tab.url:', tab?.url);
+    console.log('[C2S][POPUP] tab.id:', tab?.id);
+    
     if (!tab || !tab.id) {
       throw new Error('Cannot access current tab');
     }
+    
+    // [C2S][POPUP] Log A2: Before executeScript
+    console.log('[C2S][POPUP] Calling chrome.scripting.executeScript...');
     
     // Inject and execute content script to extract data
     const results = await chrome.scripting.executeScript({
@@ -122,11 +130,24 @@ async function handleSendClick() {
       func: extractProductData,
     });
     
+    // [C2S][POPUP] Log A3: After executeScript
+    console.log('[C2S][POPUP] executeScript returned');
+    console.log('[C2S][POPUP] results exists:', !!results);
+    console.log('[C2S][POPUP] results[0]?.result exists:', !!results?.[0]?.result);
+    
     if (!results || !results[0] || !results[0].result) {
       throw new Error('Failed to extract product data');
     }
     
     currentProductData = results[0].result;
+    
+    // [C2S][POPUP] Log A3 continued: Key fields from currentProductData
+    console.log('[C2S][POPUP] currentProductData.coupang_product_id:', currentProductData.coupang_product_id);
+    console.log('[C2S][POPUP] currentProductData.itemId:', currentProductData.itemId);
+    console.log('[C2S][POPUP] currentProductData.vendorItemId:', currentProductData.vendorItemId);
+    console.log('[C2S][POPUP] currentProductData.categoryId:', currentProductData.categoryId);
+    console.log('[C2S][POPUP] currentProductData.breadcrumbSegments:', currentProductData.breadcrumbSegments);
+    console.log('[C2S][POPUP] currentProductData.breadcrumbSegments.length:', currentProductData.breadcrumbSegments?.length);
     
     // Validate required fields
     if (!currentProductData.vendorItemId && !currentProductData.itemId) {
@@ -138,7 +159,13 @@ async function handleSendClick() {
     // Step 2: Send to receiver
     setStatus('sending', 'Sending to Sheet...');
     
+    // [C2S][POPUP] Log A4: Before sending to receiver
+    console.log('[C2S][POPUP] Sending to receiver, payload breadcrumbSegments.length:', currentProductData.breadcrumbSegments?.length);
+    
     const response = await sendToReceiver(currentProductData);
+    
+    // [C2S][POPUP] Log A5: After sendToReceiver
+    console.log('[C2S][POPUP] Receiver response:', { ok: response?.ok, mode: response?.mode });
     
     if (!response.ok) {
       throw new Error(response.error || 'Failed to save to sheet');
@@ -147,6 +174,9 @@ async function handleSendClick() {
     setStatus('done', `Saved! (${response.mode})`);
     
   } catch (err) {
+    // [C2S][POPUP] Log A6: Error details
+    console.error('[C2S][POPUP] Error caught:', err);
+    console.error('[C2S][POPUP] Error stack:', err?.stack);
     setStatus('error', 'Failed');
     showError(err.message);
   } finally {
