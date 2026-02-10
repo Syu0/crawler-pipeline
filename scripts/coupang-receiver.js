@@ -191,14 +191,14 @@ async function handleUpsert(req, res) {
       categoryPath3,                                        // Last 3 breadcrumb segments
     };
     
-    // Ensure headers exist
-    await ensureHeaders(SHEET_ID, TAB_NAME, SHEET_HEADERS);
+    // Ensure headers exist (may extend if new columns added)
+    const actualHeaders = await ensureHeaders(SHEET_ID, TAB_NAME, SHEET_HEADERS);
     
     // Upsert row
     const result = await upsertRow(
       SHEET_ID,
       TAB_NAME,
-      SHEET_HEADERS,
+      actualHeaders,
       rowData,
       'vendorItemId',
       'itemId'
