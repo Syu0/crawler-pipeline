@@ -447,10 +447,12 @@ async function main() {
             await updateSheetRow(row._rowIndex, {
               qoo10ItemId: result.qoo10ItemId,
               qoo10SellingPrice: result.qoo10SellingPrice,
+              qoo10SellerCode: result.sellerCode || '',
               ...categoryUpdate,
+              registrationMode: 'REAL',
               registrationStatus: 'SUCCESS',
               registrationMessage: 'Registered successfully',
-              updatedAt: new Date().toISOString()
+              lastRegisteredAt: new Date().toISOString()
             });
             console.log(`  ✓ Sheet updated`);
           } catch (sheetErr) {
@@ -467,10 +469,12 @@ async function main() {
             await updateSheetRow(row._rowIndex, {
               qoo10ItemId: result.qoo10ItemId,
               qoo10SellingPrice: result.qoo10SellingPrice,
+              qoo10SellerCode: result.sellerCode || '',
               ...categoryUpdate,
+              registrationMode: 'REAL',
               registrationStatus: 'WARNING',
-              registrationMessage: 'Registered with FALLBACK category - review required',
-              updatedAt: new Date().toISOString()
+              registrationMessage: 'FALLBACK category used (review required)',
+              lastRegisteredAt: new Date().toISOString()
             });
             console.log(`  ⚠ Sheet updated (WARNING status)`);
           } catch (sheetErr) {
