@@ -20,6 +20,8 @@ The Google Sheet serves as the central data store between:
 |----------|---------|
 | `coupang_datas` | Product data storage |
 | `coupang_categorys` | Category dictionary for future mapping |
+| `japan_categories` | Full JP category list from Qoo10 API |
+| `category_mapping` | KR→JP category mapping (manual + auto) |
 
 ---
 
