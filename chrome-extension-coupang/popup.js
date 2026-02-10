@@ -357,28 +357,34 @@ function extractProductData() {
       }
     }
     
-    // ========== Options (Tier-2) ==========
-    // Single option type only: SIZE OR COLOR OR one arbitrary type
-    const optionResult = extractSingleOption();
-    if (optionResult) {
-      result.Options = optionResult;
-    }
-    
-    // ========== ItemDescriptionText (Tier-2) ==========
-    // Extract text-only description, no HTML/images
-    result.ItemDescriptionText = extractDescriptionText();
-    
     // ========== Breadcrumb Extraction (Category Dictionary) ==========
     // [C2S][PAGE] Log B2: Before calling extractBreadcrumbSegments
     const breadcrumbAnchorsCount = document.querySelectorAll('ul.breadcrumb a[href*="/np/categories/"]').length;
     console.log('[C2S][PAGE] Before extractBreadcrumbSegments, matching anchors count:', breadcrumbAnchorsCount);
     
-    result.breadcrumbSegments = extractBreadcrumbSegments();
+    result.breadcrumbSegments = (typeof extractBreadcrumbSegments === 'function')
+      ? extractBreadcrumbSegments()
+      : Array.from(document.querySelectorAll('ul.breadcrumb a[href*="/np/categories/"]'))
+          .map(a => a.textContent.trim())
+          .filter(Boolean);
     
     // [C2S][PAGE] Log B3: After setting breadcrumbSegments
-    console.log('[C2S][PAGE] After extractBreadcrumbSegments');
-    console.log('[C2S][PAGE] result.breadcrumbSegments:', result.breadcrumbSegments);
-    console.log('[C2S][PAGE] result.breadcrumbSegments.length:', result.breadcrumbSegments.length);
+    console.log('[C2S][PAGE] breadcrumbSegments length:', result.breadcrumbSegments.length);
+    
+    // ========== Options (Tier-2) ==========
+    // Single option type only: SIZE OR COLOR OR one arbitrary type
+    if (typeof extractSingleOption === 'function') {
+      const optionResult = extractSingleOption();
+      if (optionResult) {
+        result.Options = optionResult;
+      }
+    }
+    
+    // ========== ItemDescriptionText (Tier-2) ==========
+    // Extract text-only description, no HTML/images
+    if (typeof extractDescriptionText === 'function') {
+      result.ItemDescriptionText = extractDescriptionText();
+    }
     
     // Debug: Log extraction results in browser console
     console.log('[Coupang Extension] === Extraction Summary ===');
