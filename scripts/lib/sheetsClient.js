@@ -38,6 +38,7 @@ async function getSheetsClient() {
 
 /**
  * Ensure header row exists in the sheet
+ * If sheet exists with headers, append any missing headers at the end
  * @param {string} sheetId - Google Sheet ID
  * @param {string} tabName - Tab/sheet name
  * @param {string[]} headers - Array of header names
@@ -64,7 +65,7 @@ async function ensureHeaders(sheetId, tabName, headers) {
     }
   }
   
-  // If headers are empty or don't match, write them
+  // If headers are empty, write all headers
   if (existingHeaders.length === 0) {
     console.log(`Writing headers to ${tabName}...`);
     await sheets.spreadsheets.values.update({
@@ -76,6 +77,27 @@ async function ensureHeaders(sheetId, tabName, headers) {
       },
     });
     return headers;
+  }
+  
+  // Check for missing headers and append them at the end
+  const missingHeaders = headers.filter(h => !existingHeaders.includes(h));
+  
+  if (missingHeaders.length > 0) {
+    const nextColIndex = existingHeaders.length;
+    const nextColLetter = String.fromCharCode(65 + nextColIndex); // A=0, B=1, etc.
+    
+    console.log(`[${new Date().toISOString()}] Extending headers: adding ${missingHeaders.join(', ')} at column ${nextColLetter}`);
+    
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId,
+      range: `${tabName}!${nextColLetter}1`,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [missingHeaders],
+      },
+    });
+    
+    return [...existingHeaders, ...missingHeaders];
   }
   
   return existingHeaders;
