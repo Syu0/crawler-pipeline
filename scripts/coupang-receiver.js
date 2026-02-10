@@ -56,7 +56,28 @@ const SHEET_HEADERS = [
   'Options',              // Tier-2: JSON { type, values }
   'ItemDescriptionText',  // Tier-2: Plain text, no HTML
   'updatedAt',
+  'categoryPath2',        // Last 2 breadcrumb segments joined by " > "
+  'categoryPath3',        // Last 3 breadcrumb segments joined by " > "
 ];
+
+/**
+ * Compute categoryPath2 and categoryPath3 from breadcrumbSegments
+ * @param {string[]} segments - Array of breadcrumb segments
+ * @returns {{ categoryPath2: string, categoryPath3: string }}
+ */
+function computeCategoryPaths(segments) {
+  if (!Array.isArray(segments) || segments.length === 0) {
+    return { categoryPath2: '', categoryPath3: '' };
+  }
+  
+  const last2 = segments.slice(-2);
+  const last3 = segments.slice(-3);
+  
+  return {
+    categoryPath2: last2.join(' > '),
+    categoryPath3: last3.join(' > ')
+  };
+}
 
 /**
  * Parse JSON body from request
