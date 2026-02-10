@@ -230,23 +230,30 @@ KR(Coupang) → JP(Qoo10) category mapping table.
 
 ## coupang_datas Registration Columns
 
-Added after Qoo10 registration:
+Added after Qoo10 registration (both DRY-RUN and REAL modes):
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `jpCategoryIdUsed` | string | JP category ID used for registration |
 | `categoryMatchType` | string | MANUAL, AUTO, or FALLBACK |
-| `categoryMatchConfidence` | number | Confidence score |
-| `registrationStatus` | string | SUCCESS, WARNING, or FAILED |
+| `categoryMatchConfidence` | number | Confidence score (0-1, AUTO only) |
+| `registrationMode` | string | DRY_RUN or REAL |
+| `registrationStatus` | string | SUCCESS, WARNING, DRY_RUN, or FAILED |
 | `registrationMessage` | string | Status message |
+| `qoo10ItemId` | string | Qoo10 item ID (REAL mode only) |
+| `qoo10SellerCode` | string | Seller code used |
+| `qoo10SellingPrice` | number | Calculated selling price (JPY) |
+| `lastRegisteredAt` | ISO datetime | Last registration attempt timestamp |
 
 ### Registration Status Rules
 
-| Status | Condition |
-|--------|-----------|
-| `SUCCESS` | API succeeded + matchType is MANUAL or AUTO |
-| `WARNING` | API succeeded + matchType is FALLBACK |
-| `FAILED` | API call failed |
+| Mode | matchType | API Result | registrationStatus |
+|------|-----------|------------|-------------------|
+| DRY_RUN | MANUAL/AUTO | N/A | DRY_RUN |
+| DRY_RUN | FALLBACK | N/A | WARNING |
+| REAL | MANUAL/AUTO | Success | SUCCESS |
+| REAL | FALLBACK | Success | WARNING |
+| REAL | Any | Failed | FAILED |
 
 ---
 
