@@ -554,11 +554,33 @@ async function main() {
     console.log(`  DRY-RUN:  ${results.dryRun.length}`);
     console.log('');
     
+    // Category match type breakdown
+    const allProcessed = [...results.success, ...results.dryRun, ...results.failed];
+    const matchTypeCounts = { MANUAL: 0, AUTO: 0, FALLBACK: 0 };
+    allProcessed.forEach(r => {
+      if (r.categoryResolution?.matchType) {
+        matchTypeCounts[r.categoryResolution.matchType] = (matchTypeCounts[r.categoryResolution.matchType] || 0) + 1;
+      }
+    });
+    console.log('  Category Match Types:');
+    console.log(`    MANUAL:   ${matchTypeCounts.MANUAL}`);
+    console.log(`    AUTO:     ${matchTypeCounts.AUTO}`);
+    console.log(`    FALLBACK: ${matchTypeCounts.FALLBACK}`);
+    console.log('');
+    
     // Detailed results
     if (results.success.length > 0) {
       console.log('=== Successful Registrations ===');
       results.success.forEach(r => {
-        console.log(`  ${r.vendorItemId}: qoo10ItemId=${r.qoo10ItemId}, price=${r.qoo10SellingPrice}`);
+        console.log(`  ${r.vendorItemId}: qoo10ItemId=${r.qoo10ItemId}, price=${r.qoo10SellingPrice}, match=${r.categoryResolution?.matchType}`);
+      });
+      console.log('');
+    }
+    
+    if (results.dryRun.length > 0) {
+      console.log('=== DRY-RUN Results (sheet updated) ===');
+      results.dryRun.forEach(r => {
+        console.log(`  ${r.vendorItemId}: jpCat=${r.categoryResolution?.jpCategoryId}, match=${r.categoryResolution?.matchType}, price=${r.qoo10SellingPrice}`);
       });
       console.log('');
     }
