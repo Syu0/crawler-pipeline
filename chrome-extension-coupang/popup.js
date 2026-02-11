@@ -278,12 +278,32 @@ function extractProductData() {
     const url = new URL(window.location.href);
     const pathMatch = url.pathname.match(/\/vp\/products\/(\d+)/);
     
+    // A) coupang_product_id: Always from URL path (required)
     result.coupang_product_id = pathMatch ? pathMatch[1] : '';
-    result.itemId = url.searchParams.get('itemId') || '';
+    
+    // B) itemId: Keep for backward compatibility but no longer required
+    result.itemId = ''; // Not used - do not rely on URL query param
+    
+    // vendorItemId: Still from URL query (optional)
     result.vendorItemId = url.searchParams.get('vendorItemId') || '';
     
-    // categoryId: ONLY from URL query string
-    result.categoryId = url.searchParams.get('categoryId') || '';
+    // C) categoryId: Primary from URL query, fallback from breadcrumb
+    let categoryId = url.searchParams.get('categoryId') || '';
+    
+    if (!categoryId) {
+      // Fallback: Extract from last breadcrumb category link
+      const categoryLinks = document.querySelectorAll('ul.breadcrumb a[href*="/np/categories/"]');
+      if (categoryLinks.length > 0) {
+        const lastCategoryLink = categoryLinks[categoryLinks.length - 1];
+        const hrefMatch = lastCategoryLink.href.match(/\/np\/categories\/(\d+)/);
+        if (hrefMatch) {
+          categoryId = hrefMatch[1];
+          console.log('[C2S][PAGE] categoryId derived from breadcrumb:', categoryId);
+        }
+      }
+    }
+    
+    result.categoryId = categoryId;
     
     // ProductURL: Full URL as-is
     result.ProductURL = window.location.href;
