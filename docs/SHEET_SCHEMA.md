@@ -197,13 +197,13 @@ Full JP category list from Qoo10 API (`CommonInfoLookup.GetCatagoryListAll`).
 
 ## Tab: `category_mapping`
 
-KR(Coupang) → JP(Qoo10) category mapping table.
+KR(Coupang) → JP(Qoo10) category mapping table. **Keyed by normalized categoryPath3**.
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `coupangCategoryId` | string | **PRIMARY KEY** - Coupang category ID |
+| `coupangCategoryKey` | string | **PRIMARY KEY** - Normalized categoryPath3 |
 | `coupangPath2` | string | Last 2 breadcrumb segments |
-| `coupangPath3` | string | Last 3 breadcrumb segments |
+| `coupangPath3` | string | Original path3 before normalization |
 | `jpCategoryId` | string | Resolved JP category ID |
 | `jpFullPath` | string | JP category full path |
 | `matchType` | string | MANUAL, AUTO, or FALLBACK |
@@ -212,19 +212,46 @@ KR(Coupang) → JP(Qoo10) category mapping table.
 | `updatedAt` | ISO datetime | Last update timestamp |
 | `updatedBy` | string | "system" or "user" |
 
+### Key Normalization
+
+The `coupangCategoryKey` is derived from `categoryPath3` by:
+1. Split by ">"
+2. Trim each segment
+3. Join with " > "
+4. Remove duplicate spaces
+
+**Example**:
+- Input: `"완구/취미>물놀이/계절완구>목욕놀이"`
+- Key: `"완구/취미 > 물놀이/계절완구 > 목욕놀이"`
+
+### Key Benefit
+
+Products with different `categoryId` but same `categoryPath3` share one mapping row.
+
+| categoryId | categoryPath3 | coupangCategoryKey (same) |
+|------------|---------------|---------------------------|
+| 317679 | 완구/취미 > 물놀이/계절완구 > 목욕놀이 | 완구/취미 > 물놀이/계절완구 > 목욕놀이 |
+| 332850 | 완구/취미 > 물놀이/계절완구 > 목욕놀이 | 완구/취미 > 물놀이/계절완구 > 목욕놀이 |
+
 ### Match Types
 
 | Type | Description |
 |------|-------------|
-| `MANUAL` | User manually set jpCategoryId |
-| `AUTO` | System auto-matched by keyword similarity |
-| `FALLBACK` | No match found, using default category (review required) |
+| `MANUAL` | User manually set jpCategoryId (highest priority) |
+| `AUTO` | System auto-matched by keyword similarity (for review) |
+| `FALLBACK` | No match found, using default category |
 
 ### Resolution Order
 
-1. **MANUAL**: Exact match by coupangCategoryId where jpCategoryId is set
-2. **AUTO**: Keyword matching in japan_categories.fullPath
+1. **MANUAL**: Exact match by coupangCategoryKey where matchType=MANUAL
+2. **AUTO**: Keyword matching writes suggestions (not auto-applied)
 3. **FALLBACK**: Fixed JP category ID `320002604`
+
+### Migration
+
+If old `category_mapping` exists with `coupangCategoryId` as primary key:
+- Rows with `categoryPath3` are migrated to new schema
+- Rows without path are backed up to `category_mapping_legacy`
 
 ---
 
