@@ -252,22 +252,22 @@ function extractProductData() {
   
   const result = {
     // Tier-1 Required
-    coupang_product_id: '',
-    itemId: '',
-    vendorItemId: '',
-    categoryId: '',        // From URL query string ONLY
+    coupang_product_id: '',  // From URL path /vp/products/<productsId>
+    itemId: '',              // Deprecated - kept for backward compatibility
+    vendorItemId: '',        // From URL query (optional)
+    categoryId: '',          // Primary: URL query, Fallback: breadcrumb
     ItemTitle: '',
-    ItemPrice: null,       // Number (integer KRW) or null if not found
+    ItemPrice: null,         // Number (integer KRW) or null if not found
     StandardImage: '',
-    WeightKg: '1',         // FIXED: Always 1, no scraping
+    WeightKg: '1',           // FIXED: Always 1, no scraping
     
     // Tier-2
-    Options: null,         // { type: "SIZE", values: ["S", "M", "L"] }
+    Options: null,           // { type: "SIZE", values: ["S", "M", "L"] }
     ItemDescriptionText: '', // Plain text, no HTML/images
-    ProductURL: '',        // Full URL as-is
+    ProductURL: '',          // Full URL as-is
     
     // Category accumulation
-    breadcrumbSegments: [], // Category path segments for dictionary
+    breadcrumbSegments: [],  // Category path segments for dictionary
     
     // Keep for compatibility
     ExtraImages: [],
