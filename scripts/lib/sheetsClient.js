@@ -139,6 +139,37 @@ async function findRowByKey(sheetId, tabName, keyColumnIndex, keyValue) {
 }
 
 /**
+ * Get full row data by row number
+ * @param {string} sheetId - Google Sheet ID
+ * @param {string} tabName - Tab/sheet name
+ * @param {number} rowNumber - 1-based row number
+ * @param {string[]} headers - Header names to map values
+ * @returns {Promise<object|null>} Row data object or null
+ */
+async function getRowData(sheetId, tabName, rowNumber, headers) {
+  const sheets = await getSheetsClient();
+  
+  try {
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId,
+      range: `${tabName}!A${rowNumber}:ZZ${rowNumber}`,
+    });
+    
+    const values = response.data.values?.[0] || [];
+    const rowData = {};
+    
+    headers.forEach((header, idx) => {
+      rowData[header] = values[idx] || '';
+    });
+    
+    return rowData;
+  } catch (err) {
+    console.error('Error getting row data:', err.message);
+    return null;
+  }
+}
+
+/**
  * Upsert a row into the sheet
  * @param {string} sheetId - Google Sheet ID
  * @param {string} tabName - Tab/sheet name
@@ -146,8 +177,10 @@ async function findRowByKey(sheetId, tabName, keyColumnIndex, keyValue) {
  * @param {Object} data - Data object with keys matching headers
  * @param {string} primaryKey - Header name to use as primary key
  * @param {string} [fallbackKey] - Fallback header name if primary key is empty
+ * @param {string[]} [preserveColumns] - Columns to preserve from existing row (don't overwrite if new is empty)
+ * @returns {Promise<{action: string, row: number, existingData: object|null}>}
  */
-async function upsertRow(sheetId, tabName, headers, data, primaryKey, fallbackKey = null) {
+async function upsertRow(sheetId, tabName, headers, data, primaryKey, fallbackKey = null, preserveColumns = []) {
   const sheets = await getSheetsClient();
   
   // Determine key value
@@ -169,29 +202,46 @@ async function upsertRow(sheetId, tabName, headers, data, primaryKey, fallbackKe
     throw new Error(`Key column "${keyColumn}" not found in headers`);
   }
   
+  // Find existing row
+  const existingRowNum = await findRowByKey(sheetId, tabName, keyColumnIndex, keyValue);
+  let existingData = null;
+  
+  // If row exists, get full existing data for change detection and preservation
+  if (existingRowNum && existingRowNum > 1) {
+    existingData = await getRowData(sheetId, tabName, existingRowNum, headers);
+  }
+  
+  // Merge data: new data wins, but preserve specified columns from existing if new is empty
+  const mergedData = { ...data };
+  if (existingData && preserveColumns.length > 0) {
+    for (const col of preserveColumns) {
+      // Only preserve if existing has a non-empty value and new data is empty/undefined
+      if (existingData[col] && (data[col] === undefined || data[col] === '' || data[col] === null)) {
+        mergedData[col] = existingData[col];
+      }
+    }
+  }
+  
   // Build row values in header order
   const rowValues = headers.map(h => {
-    const val = data[h];
+    const val = mergedData[h];
     if (val === undefined || val === null) return '';
     if (typeof val === 'object') return JSON.stringify(val);
     return String(val);
   });
   
-  // Find existing row
-  const existingRow = await findRowByKey(sheetId, tabName, keyColumnIndex, keyValue);
-  
-  if (existingRow && existingRow > 1) {
+  if (existingRowNum && existingRowNum > 1) {
     // Update existing row
-    console.log(`Updating existing row ${existingRow} for ${keyColumn}=${keyValue}`);
+    console.log(`Updating existing row ${existingRowNum} for ${keyColumn}=${keyValue}`);
     await sheets.spreadsheets.values.update({
       spreadsheetId: sheetId,
-      range: `${tabName}!A${existingRow}`,
+      range: `${tabName}!A${existingRowNum}`,
       valueInputOption: 'RAW',
       requestBody: {
         values: [rowValues],
       },
     });
-    return { action: 'updated', row: existingRow };
+    return { action: 'updated', row: existingRowNum, existingData };
   } else {
     // Append new row
     console.log(`Appending new row for ${keyColumn}=${keyValue}`);
@@ -210,7 +260,7 @@ async function upsertRow(sheetId, tabName, headers, data, primaryKey, fallbackKe
     const match = updatedRange.match(/!A(\d+)/);
     const appendedRow = match ? parseInt(match[1], 10) : null;
     
-    return { action: 'appended', row: appendedRow };
+    return { action: 'appended', row: appendedRow, existingData: null };
   }
 }
 
@@ -218,5 +268,6 @@ module.exports = {
   getSheetsClient,
   ensureHeaders,
   findRowByKey,
+  getRowData,
   upsertRow,
 };
