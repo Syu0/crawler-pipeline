@@ -240,28 +240,31 @@ function calculateMatchScore(coupangTokens, jpFullPath, jpIsLeaf, jpDepth) {
 }
 
 /**
- * Find best AUTO match from JP categories
+ * Find Top N AUTO match candidates from JP categories
  * @param {string} coupangPath2 
  * @param {string} coupangPath3 
  * @param {Array<object>} jpCategories 
- * @returns {object|null} Best match or null
+ * @param {number} topN - Number of top candidates to return (default 3)
+ * @returns {Array<object>} Array of match candidates sorted by score desc
  */
-function findBestAutoMatch(coupangPath2, coupangPath3, jpCategories) {
+function findTopAutoMatches(coupangPath2, coupangPath3, jpCategories, topN = 3) {
   if (!jpCategories || jpCategories.length === 0) {
-    return null;
+    return [];
   }
   
-  // Tokenize Coupang paths
+  // Tokenize Coupang paths (path3 has higher priority)
   const tokens3 = tokenizePath(coupangPath3);
   const tokens2 = tokenizePath(coupangPath2);
+  
+  // Combine tokens, giving slight priority to path3 tokens
   const allTokens = [...new Set([...tokens3, ...tokens2])];
   
   if (allTokens.length === 0) {
-    return null;
+    return [];
   }
   
-  let bestMatch = null;
-  let bestScore = 0;
+  // Score all JP categories
+  const scoredCandidates = [];
   
   for (const jpCat of jpCategories) {
     const score = calculateMatchScore(
@@ -271,21 +274,40 @@ function findBestAutoMatch(coupangPath2, coupangPath3, jpCategories) {
       jpCat.depth
     );
     
-    if (score > bestScore && score >= 0.3) { // Minimum threshold
-      bestScore = score;
-      bestMatch = jpCat;
+    // Minimum threshold to be considered
+    if (score >= 0.25) {
+      scoredCandidates.push({
+        jpCategoryId: jpCat.jpCategoryId,
+        jpFullPath: jpCat.fullPath,
+        isLeaf: jpCat.isLeaf,
+        depth: jpCat.depth,
+        confidence: Math.round(score * 100) / 100
+      });
     }
   }
   
-  if (bestMatch) {
-    return {
-      jpCategoryId: bestMatch.jpCategoryId,
-      jpFullPath: bestMatch.fullPath,
-      confidence: Math.round(bestScore * 100) / 100
-    };
-  }
+  // Sort by score desc, then by depth desc (prefer more specific), then by isLeaf
+  scoredCandidates.sort((a, b) => {
+    if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+    if (b.depth !== a.depth) return b.depth - a.depth;
+    if (a.isLeaf !== b.isLeaf) return a.isLeaf ? -1 : 1;
+    return 0;
+  });
   
-  return null;
+  // Return top N
+  return scoredCandidates.slice(0, topN);
+}
+
+/**
+ * Find best AUTO match from JP categories (legacy - uses findTopAutoMatches internally)
+ * @param {string} coupangPath2 
+ * @param {string} coupangPath3 
+ * @param {Array<object>} jpCategories 
+ * @returns {object|null} Best match or null
+ */
+function findBestAutoMatch(coupangPath2, coupangPath3, jpCategories) {
+  const topMatches = findTopAutoMatches(coupangPath2, coupangPath3, jpCategories, 1);
+  return topMatches.length > 0 ? topMatches[0] : null;
 }
 
 /**
