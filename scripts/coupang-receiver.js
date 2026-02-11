@@ -114,6 +114,101 @@ function computeCategoryPaths(segments) {
 }
 
 /**
+ * Normalize Options to a stable, sortable format
+ * @param {any} options - Options data (string or object)
+ * @returns {string} Normalized JSON string
+ */
+function normalizeOptions(options) {
+  if (!options || options === '' || options === '[]' || options === '{}') {
+    return '[]';
+  }
+  
+  let parsed;
+  if (typeof options === 'string') {
+    try {
+      parsed = JSON.parse(options);
+    } catch (e) {
+      return '[]';
+    }
+  } else {
+    parsed = options;
+  }
+  
+  // Handle single option format { type, values }
+  if (parsed && parsed.type && Array.isArray(parsed.values)) {
+    // Sort values for stable comparison
+    const sortedValues = [...parsed.values].sort();
+    return JSON.stringify({ type: parsed.type, values: sortedValues });
+  }
+  
+  // Handle array format
+  if (Array.isArray(parsed)) {
+    // Sort array items by name/type
+    const sorted = [...parsed].sort((a, b) => {
+      const aKey = (a.optionName || a.name || a.type || '').toLowerCase();
+      const bKey = (b.optionName || b.name || b.type || '').toLowerCase();
+      return aKey.localeCompare(bKey);
+    });
+    return JSON.stringify(sorted);
+  }
+  
+  return JSON.stringify(parsed);
+}
+
+/**
+ * Compute a stable hash for Options data
+ * @param {any} options - Options data
+ * @returns {string} Hash string (8 chars)
+ */
+function computeOptionsHash(options) {
+  const crypto = require('crypto');
+  const normalized = normalizeOptions(options);
+  return crypto.createHash('sha1').update(normalized).digest('hex').substring(0, 8);
+}
+
+/**
+ * Detect changes between old and new data
+ * @param {object} existingData - Existing row data
+ * @param {object} newData - New scraped data
+ * @returns {{ flags: string[], prevItemPrice: string, prevOptionsHash: string, newOptionsHash: string }}
+ */
+function detectChanges(existingData, newData) {
+  const flags = [];
+  let prevItemPrice = '';
+  let prevOptionsHash = '';
+  
+  // Compute new options hash
+  const newOptionsHash = computeOptionsHash(newData.Options);
+  
+  // 1) Price change detection
+  const oldPrice = parseInt(existingData.ItemPrice, 10) || 0;
+  const newPrice = parseInt(newData.ItemPrice, 10) || 0;
+  
+  if (oldPrice > 0 && newPrice > 0 && oldPrice !== newPrice) {
+    if (newPrice > oldPrice) {
+      flags.push('PRICE_UP');
+    } else {
+      flags.push('PRICE_DOWN');
+    }
+    prevItemPrice = String(oldPrice);
+  }
+  
+  // 2) Options change detection
+  // Get old hash from existing column, or compute from existing Options
+  let oldOptionsHash = existingData.optionsHash;
+  if (!oldOptionsHash && existingData.Options) {
+    oldOptionsHash = computeOptionsHash(existingData.Options);
+  }
+  
+  if (oldOptionsHash && newOptionsHash && oldOptionsHash !== newOptionsHash) {
+    flags.push('OPTIONS_CHANGED');
+    prevOptionsHash = oldOptionsHash;
+  }
+  
+  return { flags, prevItemPrice, prevOptionsHash, newOptionsHash };
+}
+
+/**
  * Parse JSON body from request
  */
 function parseBody(req) {
