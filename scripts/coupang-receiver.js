@@ -41,7 +41,7 @@ function trace(...args) {
   }
 }
 
-// Canonical sheet headers (Tier-1 + Tier-2)
+// Canonical sheet headers (Tier-1 + Tier-2 + Change Tracking)
 const SHEET_HEADERS = [
   'vendorItemId',
   'itemId',
@@ -58,6 +58,40 @@ const SHEET_HEADERS = [
   'updatedAt',
   'categoryPath2',        // Last 2 breadcrumb segments joined by " > "
   'categoryPath3',        // Last 3 breadcrumb segments joined by " > "
+  // Change tracking columns
+  'optionsHash',          // Hash of normalized Options
+  'prevItemPrice',        // Previous price when change detected
+  'prevOptionsHash',      // Previous optionsHash when change detected
+  'changeFlags',          // Pipe-separated flags (PRICE_UP|PRICE_DOWN|OPTIONS_CHANGED)
+  'needsUpdate',          // YES if changeFlags non-empty, else NO
+  'lastRescrapedAt',      // Set on re-scrape (row existed)
+  // Qoo10/JP registration columns (preserved on re-scrape)
+  'qoo10ItemId',
+  'qoo10SellerCode',
+  'qoo10SellingPrice',
+  'jpCategoryIdUsed',
+  'categoryMatchType',
+  'categoryMatchConfidence',
+  'coupangCategoryKeyUsed',
+  'registrationMode',
+  'registrationStatus',
+  'registrationMessage',
+  'lastRegisteredAt',
+];
+
+// Columns to preserve on re-scrape (JP/Qoo10 registration data)
+const PRESERVE_COLUMNS = [
+  'qoo10ItemId',
+  'qoo10SellerCode',
+  'qoo10SellingPrice',
+  'jpCategoryIdUsed',
+  'categoryMatchType',
+  'categoryMatchConfidence',
+  'coupangCategoryKeyUsed',
+  'registrationMode',
+  'registrationStatus',
+  'registrationMessage',
+  'lastRegisteredAt',
 ];
 
 /**
