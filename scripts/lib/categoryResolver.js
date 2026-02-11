@@ -420,25 +420,6 @@ async function resolveJpCategoryId(product) {
     jpFullPath: FALLBACK_JP_FULL_PATH,
     candidates: topCandidates // Include candidates for reference
   };
-        jpCategoryId: FALLBACK_JP_CATEGORY_ID,
-        jpFullPath: FALLBACK_JP_FULL_PATH,
-        matchType: 'FALLBACK',
-        confidence: '0',
-        note: 'No match found - requires manual review',
-        updatedAt: new Date().toISOString(),
-        updatedBy: 'system'
-      });
-    } catch (writeErr) {
-      console.warn(`[CategoryResolver] Failed to write FALLBACK mapping: ${writeErr.message}`);
-    }
-  }
-  
-  return {
-    jpCategoryId: FALLBACK_JP_CATEGORY_ID,
-    matchType: 'FALLBACK',
-    confidence: 0,
-    jpFullPath: FALLBACK_JP_FULL_PATH
-  };
 }
 
 module.exports = {
@@ -446,6 +427,7 @@ module.exports = {
   ensureMappingSheet,
   getMappings,
   getJpCategories,
+  findTopAutoMatches,
   MAPPING_HEADERS,
   MAPPING_TAB,
   FALLBACK_JP_CATEGORY_ID,
