@@ -282,12 +282,65 @@ function extractProductData() {
     result.coupang_product_id = pathMatch ? pathMatch[1] : '';
     
     // B) itemId: Keep for backward compatibility but no longer required
-    result.itemId = ''; // Not used - do not rely on URL query param
+    result.itemId = ''; // Deprecated - do not use
     
-    // vendorItemId: Still from URL query (optional)
-    result.vendorItemId = url.searchParams.get('vendorItemId') || '';
+    // C) vendorItemId: Primary from URL query, with multiple fallbacks
+    let vendorItemId = url.searchParams.get('vendorItemId') || '';
     
-    // C) categoryId: Primary from URL query, fallback from breadcrumb
+    // Fallback 1: Try og:url meta tag
+    if (!vendorItemId) {
+      const ogUrl = document.querySelector('meta[property="og:url"]')?.content || '';
+      if (ogUrl) {
+        try {
+          const ogVendorId = new URL(ogUrl).searchParams.get('vendorItemId');
+          if (ogVendorId) {
+            vendorItemId = ogVendorId;
+            console.log('[C2S][PAGE] vendorItemId derived from meta/canonical:', vendorItemId);
+          }
+        } catch (e) { /* Invalid URL */ }
+      }
+    }
+    
+    // Fallback 2: Try canonical link
+    if (!vendorItemId) {
+      const canonUrl = document.querySelector('link[rel="canonical"]')?.href || '';
+      if (canonUrl) {
+        try {
+          const canonVendorId = new URL(canonUrl).searchParams.get('vendorItemId');
+          if (canonVendorId) {
+            vendorItemId = canonVendorId;
+            console.log('[C2S][PAGE] vendorItemId derived from meta/canonical:', vendorItemId);
+          }
+        } catch (e) { /* Invalid URL */ }
+      }
+    }
+    
+    // Fallback 3: Try page text patterns
+    if (!vendorItemId) {
+      const text = document.body?.innerText || '';
+      
+      // Pattern a: 쿠팡상품번호: XXXXX-YYYYY (YYYYY is vendorItemId)
+      let textMatch = text.match(/쿠팡상품번호\s*[:：]\s*\d+\s*-\s*(\d+)/);
+      
+      // Pattern b: 상품번호: XXXXX-YYYYY
+      if (!textMatch) {
+        textMatch = text.match(/상품번호\s*[:：]\s*\d+\s*-\s*(\d+)/);
+      }
+      
+      if (textMatch && textMatch[1]) {
+        vendorItemId = textMatch[1];
+        console.log('[C2S][PAGE] vendorItemId derived from page text:', vendorItemId);
+      }
+    }
+    
+    // Log warning if still missing
+    if (!vendorItemId) {
+      console.warn('[C2S][PAGE] vendorItemId missing after all fallbacks:', window.location.href);
+    }
+    
+    result.vendorItemId = vendorItemId;
+    
+    // D) categoryId: Primary from URL query, fallback from breadcrumb
     let categoryId = url.searchParams.get('categoryId') || '';
     
     if (!categoryId) {
