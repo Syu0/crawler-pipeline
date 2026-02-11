@@ -149,9 +149,9 @@ async function handleSendClick() {
     console.log('[C2S][POPUP] currentProductData.breadcrumbSegments:', currentProductData.breadcrumbSegments);
     console.log('[C2S][POPUP] currentProductData.breadcrumbSegments.length:', currentProductData.breadcrumbSegments?.length);
     
-    // Validate required fields
-    if (!currentProductData.vendorItemId && !currentProductData.itemId) {
-      throw new Error('Missing required field: vendorItemId or itemId');
+    // Validate required fields - coupang_product_id or vendorItemId required
+    if (!currentProductData.coupang_product_id && !currentProductData.vendorItemId) {
+      throw new Error('Missing required field: coupang_product_id or vendorItemId');
     }
     
     updateProductInfo(currentProductData);
