@@ -301,7 +301,10 @@ async function handleUpsert(req, res) {
     const { categoryPath2, categoryPath3 } = computeCategoryPaths(data.breadcrumbSegments);
     console.log(`[${new Date().toISOString()}] categoryPath2: "${categoryPath2}", categoryPath3: "${categoryPath3}"`);
     
-    // ===== Prepare row data =====
+    // ===== Compute options hash =====
+    const newOptionsHash = computeOptionsHash(data.Options);
+    
+    // ===== Prepare base row data (scraped fields only) =====
     const rowData = {
       vendorItemId: data.vendorItemId || '',
       itemId: data.itemId || '',
@@ -318,24 +321,90 @@ async function handleUpsert(req, res) {
       updatedAt: new Date().toISOString(),
       categoryPath2,                                        // Last 2 breadcrumb segments
       categoryPath3,                                        // Last 3 breadcrumb segments
+      optionsHash: newOptionsHash,                          // Options hash for change detection
     };
     
     // Ensure headers exist (may extend if new columns added)
     const actualHeaders = await ensureHeaders(SHEET_ID, TAB_NAME, SHEET_HEADERS);
     
-    // Upsert row
+    // Upsert row with preserve columns for JP/Qoo10 data
     const result = await upsertRow(
       SHEET_ID,
       TAB_NAME,
       actualHeaders,
       rowData,
       'vendorItemId',
-      'itemId'
+      'itemId',
+      PRESERVE_COLUMNS  // Preserve JP/Qoo10 registration data on re-scrape
     );
     
     const keyUsed = data.vendorItemId ? `vendorItemId:${data.vendorItemId}` : `itemId:${data.itemId}`;
+    const isUpdate = result.action === 'updated';
     
-    console.log(`[${new Date().toISOString()}] ${result.action === 'updated' ? 'Updated' : 'Inserted'} row ${result.row} (${keyUsed})`);
+    // ===== Change Detection (only for existing rows) =====
+    let changeFlags = [];
+    let prevItemPrice = '';
+    let prevOptionsHash = '';
+    
+    if (isUpdate && result.existingData) {
+      const changes = detectChanges(result.existingData, {
+        ItemPrice: data.ItemPrice,
+        Options: data.Options
+      });
+      
+      changeFlags = changes.flags;
+      prevItemPrice = changes.prevItemPrice;
+      prevOptionsHash = changes.prevOptionsHash;
+      
+      // Log changes
+      if (changeFlags.length > 0) {
+        console.log(`[Upsert] vendorItemId=${data.vendorItemId || data.itemId} flags=${changeFlags.join('|')}`);
+      } else {
+        console.log(`[Upsert] vendorItemId=${data.vendorItemId || data.itemId} no changes`);
+      }
+      
+      // Update change tracking fields in the sheet
+      const changeTrackingData = {
+        changeFlags: changeFlags.join('|'),
+        needsUpdate: changeFlags.length > 0 ? 'YES' : 'NO',
+        lastRescrapedAt: new Date().toISOString(),
+      };
+      
+      // Only set prev values if there was a change
+      if (prevItemPrice) {
+        changeTrackingData.prevItemPrice = prevItemPrice;
+      }
+      if (prevOptionsHash) {
+        changeTrackingData.prevOptionsHash = prevOptionsHash;
+      }
+      
+      // Merge change tracking into row data and re-upsert
+      Object.assign(rowData, changeTrackingData);
+      
+      // Re-upsert with change tracking data
+      await upsertRow(
+        SHEET_ID,
+        TAB_NAME,
+        actualHeaders,
+        rowData,
+        'vendorItemId',
+        'itemId',
+        PRESERVE_COLUMNS
+      );
+    } else {
+      // New row - set initial change tracking values
+      rowData.changeFlags = '';
+      rowData.needsUpdate = 'NO';
+      rowData.prevItemPrice = '';
+      rowData.prevOptionsHash = '';
+      // lastRescrapedAt stays empty for new inserts
+      
+      console.log(`[${new Date().toISOString()}] Inserted new row ${result.row} (${keyUsed})`);
+    }
+    
+    if (isUpdate) {
+      console.log(`[${new Date().toISOString()}] Updated row ${result.row} (${keyUsed})`);
+    };
     
     // ===== Category Dictionary Accumulation =====
     let categoryResult = null;
