@@ -2,9 +2,12 @@
  * KR(Coupang) → JP(Qoo10) Category Mapping Resolver
  * 
  * Resolves JP category IDs for Coupang products using:
- * 1. MANUAL mappings from category_mapping sheet
+ * 1. MANUAL mappings from category_mapping sheet (keyed by normalized categoryPath3)
  * 2. AUTO matching by keyword search in japan_categories
  * 3. FALLBACK to a fixed JP category ID (never returns null)
+ * 
+ * KEY CHANGE: Primary key is now normalized categoryPath3, not categoryId.
+ * This ensures products with different categoryIds but same path share one mapping.
  */
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '..', 'backend', '.env') });
@@ -13,15 +16,29 @@ const { getSheetsClient } = require('./sheetsClient');
 
 // Sheet configuration
 const MAPPING_TAB = 'category_mapping';
+const MAPPING_LEGACY_TAB = 'category_mapping_legacy';
 const JP_CATEGORIES_TAB = 'japan_categories';
 
 // FALLBACK JP Category: "320002604" (Toothpaste Set sample category)
-// This ensures registration NEVER fails due to missing category
 const FALLBACK_JP_CATEGORY_ID = '320002604';
 const FALLBACK_JP_FULL_PATH = 'Fallback Category (Review Required)';
 
-// Headers for category_mapping sheet
+// New headers for path-keyed category_mapping sheet
 const MAPPING_HEADERS = [
+  'coupangCategoryKey',    // PRIMARY KEY: normalized categoryPath3
+  'coupangPath2',
+  'coupangPath3',          // Original path3 before normalization
+  'jpCategoryId',
+  'jpFullPath',
+  'matchType',             // MANUAL | AUTO | FALLBACK
+  'confidence',            // 0-1
+  'note',
+  'updatedAt',
+  'updatedBy'
+];
+
+// Old headers (for migration detection)
+const OLD_MAPPING_HEADERS = [
   'coupangCategoryId',
   'coupangPath2',
   'coupangPath3',
@@ -35,7 +52,182 @@ const MAPPING_HEADERS = [
 ];
 
 /**
- * Ensure category_mapping sheet exists with headers
+ * Normalize a category path string into canonical key format
+ * - Split by ">"
+ * - Trim each segment
+ * - Join with " > "
+ * - Remove duplicate spaces
+ * @param {string} path - Raw category path (e.g., "완구/취미>물놀이/계절완구> 목욕놀이")
+ * @returns {string} Normalized path (e.g., "완구/취미 > 물놀이/계절완구 > 목욕놀이")
+ */
+function normalizeCategoryPath(path) {
+  if (!path || typeof path !== 'string') return '';
+  
+  return path
+    .split('>')
+    .map(segment => segment.trim())
+    .filter(segment => segment.length > 0)
+    .join(' > ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Check if sheet has old schema (coupangCategoryId as first column)
+ */
+function isOldSchema(headers) {
+  return headers && headers[0] === 'coupangCategoryId';
+}
+
+/**
+ * Migrate old category_mapping to new path-keyed schema
+ */
+async function migrateToPathKeyedSchema(sheets, sheetId) {
+  console.log('[CategoryResolver] Checking for schema migration...');
+  
+  try {
+    // Read existing data
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId,
+      range: `${MAPPING_TAB}!A:J`,
+    });
+    
+    const rows = response.data.values || [];
+    if (rows.length < 1) return false;
+    
+    const headers = rows[0];
+    
+    // Check if migration needed
+    if (!isOldSchema(headers)) {
+      console.log('[CategoryResolver] Schema already up-to-date (path-keyed)');
+      return false;
+    }
+    
+    console.log('[CategoryResolver] Old schema detected, migrating...');
+    
+    // Collect old data
+    const oldRows = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const obj = {};
+      headers.forEach((h, idx) => {
+        obj[h] = row[idx] || '';
+      });
+      oldRows.push(obj);
+    }
+    
+    // Migrate to legacy sheet first (backup)
+    try {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: sheetId,
+        requestBody: {
+          requests: [{
+            addSheet: { properties: { title: MAPPING_LEGACY_TAB } }
+          }]
+        }
+      });
+    } catch (e) {
+      // Tab might already exist
+    }
+    
+    // Write old data to legacy sheet
+    if (oldRows.length > 0) {
+      const legacyValues = [
+        OLD_MAPPING_HEADERS,
+        ...oldRows.map(r => OLD_MAPPING_HEADERS.map(h => r[h] || ''))
+      ];
+      
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: sheetId,
+        range: `${MAPPING_LEGACY_TAB}!A1`,
+        valueInputOption: 'RAW',
+        requestBody: { values: legacyValues }
+      });
+      
+      console.log(`[CategoryResolver] Backed up ${oldRows.length} rows to ${MAPPING_LEGACY_TAB}`);
+    }
+    
+    // Clear main sheet and write new headers
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: sheetId,
+      range: `${MAPPING_TAB}!A:Z`,
+    });
+    
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId,
+      range: `${MAPPING_TAB}!A1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [MAPPING_HEADERS] }
+    });
+    
+    // Migrate rows that have categoryPath3
+    const migratedRows = [];
+    const unmigratableRows = [];
+    
+    for (const oldRow of oldRows) {
+      if (oldRow.coupangPath3) {
+        const key = normalizeCategoryPath(oldRow.coupangPath3);
+        if (key) {
+          migratedRows.push({
+            coupangCategoryKey: key,
+            coupangPath2: oldRow.coupangPath2 || '',
+            coupangPath3: oldRow.coupangPath3,
+            jpCategoryId: oldRow.jpCategoryId || '',
+            jpFullPath: oldRow.jpFullPath || '',
+            matchType: oldRow.matchType || 'AUTO',
+            confidence: oldRow.confidence || '',
+            note: `Migrated from categoryId: ${oldRow.coupangCategoryId}`,
+            updatedAt: new Date().toISOString(),
+            updatedBy: 'migration'
+          });
+        } else {
+          unmigratableRows.push(oldRow);
+        }
+      } else {
+        unmigratableRows.push(oldRow);
+      }
+    }
+    
+    // Dedupe migrated rows by key (keep first occurrence with jpCategoryId, or first overall)
+    const deduped = new Map();
+    for (const row of migratedRows) {
+      const existing = deduped.get(row.coupangCategoryKey);
+      if (!existing || (!existing.jpCategoryId && row.jpCategoryId)) {
+        deduped.set(row.coupangCategoryKey, row);
+      }
+    }
+    
+    // Write migrated rows
+    if (deduped.size > 0) {
+      const newValues = Array.from(deduped.values()).map(r => 
+        MAPPING_HEADERS.map(h => r[h] || '')
+      );
+      
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: sheetId,
+        range: `${MAPPING_TAB}!A:J`,
+        valueInputOption: 'RAW',
+        insertDataOption: 'INSERT_ROWS',
+        requestBody: { values: newValues }
+      });
+      
+      console.log(`[CategoryResolver] Migrated ${deduped.size} rows to new schema`);
+    }
+    
+    if (unmigratableRows.length > 0) {
+      console.log(`[CategoryResolver] ${unmigratableRows.length} rows could not be migrated (no path3), kept in ${MAPPING_LEGACY_TAB}`);
+    }
+    
+    return true;
+    
+  } catch (err) {
+    console.error('[CategoryResolver] Migration error:', err.message);
+    return false;
+  }
+}
+
+/**
+ * Ensure category_mapping sheet exists with new headers
  */
 async function ensureMappingSheet(sheets, sheetId) {
   try {
@@ -47,17 +239,24 @@ async function ensureMappingSheet(sheets, sheetId) {
     const existingHeaders = response.data.values?.[0] || [];
     
     if (existingHeaders.length === 0) {
-      // Write headers
+      // Write new headers
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
         range: `${MAPPING_TAB}!A1`,
         valueInputOption: 'RAW',
         requestBody: { values: [MAPPING_HEADERS] }
       });
-      console.log(`[CategoryResolver] Created category_mapping sheet with headers`);
+      console.log(`[CategoryResolver] Created category_mapping sheet with path-keyed schema`);
+      return MAPPING_HEADERS;
     }
     
-    return existingHeaders.length > 0 ? existingHeaders : MAPPING_HEADERS;
+    // Check if old schema and migrate
+    if (isOldSchema(existingHeaders)) {
+      await migrateToPathKeyedSchema(sheets, sheetId);
+      return MAPPING_HEADERS;
+    }
+    
+    return existingHeaders;
     
   } catch (err) {
     if (err.message.includes('Unable to parse range')) {
@@ -88,7 +287,7 @@ async function ensureMappingSheet(sheets, sheetId) {
 
 /**
  * Get all mappings from category_mapping sheet
- * @returns {Map<string, object>} Map of coupangCategoryId → mapping object
+ * @returns {Map<string, object>} Map of coupangCategoryKey → mapping object
  */
 async function getMappings(sheets, sheetId) {
   await ensureMappingSheet(sheets, sheetId);
@@ -105,6 +304,13 @@ async function getMappings(sheets, sheetId) {
     const headers = rows[0];
     const mappings = new Map();
     
+    // Find the key column index
+    const keyColIndex = headers.indexOf('coupangCategoryKey');
+    if (keyColIndex === -1) {
+      console.warn('[CategoryResolver] coupangCategoryKey column not found in headers');
+      return new Map();
+    }
+    
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       const obj = { _rowIndex: i + 1 };
@@ -113,8 +319,15 @@ async function getMappings(sheets, sheetId) {
         obj[h] = row[idx] || '';
       });
       
-      if (obj.coupangCategoryId) {
-        mappings.set(obj.coupangCategoryId, obj);
+      const key = obj.coupangCategoryKey;
+      if (key) {
+        // For duplicate keys, prefer MANUAL over AUTO, then first occurrence
+        const existing = mappings.get(key);
+        if (!existing || 
+            (existing.matchType !== 'MANUAL' && obj.matchType === 'MANUAL') ||
+            (!existing.jpCategoryId && obj.jpCategoryId)) {
+          mappings.set(key, obj);
+        }
       }
     }
     
@@ -168,7 +381,7 @@ async function getJpCategories(sheets, sheetId) {
 }
 
 /**
- * Write a new mapping to category_mapping sheet
+ * Write a new mapping row to category_mapping sheet
  */
 async function writeMappingRow(sheets, sheetId, mapping) {
   await ensureMappingSheet(sheets, sheetId);
@@ -299,22 +512,15 @@ function findTopAutoMatches(coupangPath2, coupangPath3, jpCategories, topN = 3) 
 }
 
 /**
- * Find best AUTO match from JP categories (legacy - uses findTopAutoMatches internally)
- * @param {string} coupangPath2 
- * @param {string} coupangPath3 
- * @param {Array<object>} jpCategories 
- * @returns {object|null} Best match or null
- */
-function findBestAutoMatch(coupangPath2, coupangPath3, jpCategories) {
-  const topMatches = findTopAutoMatches(coupangPath2, coupangPath3, jpCategories, 1);
-  return topMatches.length > 0 ? topMatches[0] : null;
-}
-
-/**
  * Main resolver function: Resolve JP category ID for a product
  * 
- * @param {object} product - Product object with categoryId, categoryPath2, categoryPath3
- * @returns {Promise<{jpCategoryId: string, matchType: string, confidence?: number, jpFullPath?: string, candidates?: Array}>}
+ * Resolution order:
+ * 1. MANUAL: category_mapping row where coupangCategoryKey == normalize(product.categoryPath3)
+ * 2. AUTO: keyword match in japan_categories, write suggestions to sheet
+ * 3. FALLBACK: fixed JP category ID
+ * 
+ * @param {object} product - Product object with categoryPath3, categoryPath2, categoryId
+ * @returns {Promise<{jpCategoryId: string, matchType: string, confidence?: number, jpFullPath?: string, coupangCategoryKey?: string, candidates?: Array}>}
  */
 async function resolveJpCategoryId(product) {
   const sheetId = process.env.GOOGLE_SHEET_ID;
@@ -324,28 +530,35 @@ async function resolveJpCategoryId(product) {
     return {
       jpCategoryId: FALLBACK_JP_CATEGORY_ID,
       matchType: 'FALLBACK',
-      jpFullPath: FALLBACK_JP_FULL_PATH
+      jpFullPath: FALLBACK_JP_FULL_PATH,
+      coupangCategoryKey: ''
     };
   }
   
   const sheets = await getSheetsClient();
-  const coupangCategoryId = String(product.categoryId || '');
-  const coupangPath2 = product.categoryPath2 || '';
-  const coupangPath3 = product.categoryPath3 || '';
   
-  console.log(`[CategoryResolver] Resolving: coupangCategoryId=${coupangCategoryId}`);
+  // Extract inputs
+  const categoryPath3 = product.categoryPath3 || '';
+  const categoryPath2 = product.categoryPath2 || '';
+  const categoryId = String(product.categoryId || ''); // Secondary/debug only
   
-  // 1) Check for MANUAL mapping (highest priority - always use if exists)
+  // Compute the canonical key from path3
+  const coupangCategoryKey = normalizeCategoryPath(categoryPath3);
+  
+  console.log(`[CategoryResolver] key="${coupangCategoryKey}" (from path3), categoryId=${categoryId}`);
+  
+  // 1) Check for MANUAL mapping by key
   const mappings = await getMappings(sheets, sheetId);
-  const existingMapping = mappings.get(coupangCategoryId);
+  const existingMapping = mappings.get(coupangCategoryKey);
   
   if (existingMapping && existingMapping.jpCategoryId && existingMapping.matchType === 'MANUAL') {
-    console.log(`[CategoryResolver] MANUAL match found: jpCategoryId=${existingMapping.jpCategoryId}`);
+    console.log(`[CategoryResolver] MANUAL match: jpCategoryId=${existingMapping.jpCategoryId}`);
     return {
       jpCategoryId: existingMapping.jpCategoryId,
       matchType: 'MANUAL',
       confidence: existingMapping.confidence ? parseFloat(existingMapping.confidence) : 1.0,
-      jpFullPath: existingMapping.jpFullPath || undefined
+      jpFullPath: existingMapping.jpFullPath || undefined,
+      coupangCategoryKey
     };
   }
   
@@ -353,14 +566,14 @@ async function resolveJpCategoryId(product) {
   const jpCategories = await getJpCategories(sheets, sheetId);
   let topCandidates = [];
   
-  if (jpCategories.length > 0 && (coupangPath2 || coupangPath3)) {
-    topCandidates = findTopAutoMatches(coupangPath2, coupangPath3, jpCategories, 3);
+  if (jpCategories.length > 0 && coupangCategoryKey) {
+    topCandidates = findTopAutoMatches(categoryPath2, categoryPath3, jpCategories, 3);
     
     if (topCandidates.length > 0) {
-      console.log(`[CategoryResolver] AUTO suggestions: ${topCandidates.length} candidates for coupangCategoryId=${coupangCategoryId}`);
+      console.log(`[CategoryResolver] AUTO suggestions: ${topCandidates.length} candidates`);
       console.log(`[CategoryResolver]   jpCategoryIds: ${topCandidates.map(c => c.jpCategoryId).join(', ')}`);
       
-      // Write Top 3 candidates to category_mapping (only if no existing rows for this coupangCategoryId)
+      // Write AUTO suggestions (only if no existing mapping for this key)
       if (!existingMapping) {
         try {
           const now = new Date().toISOString();
@@ -368,9 +581,9 @@ async function resolveJpCategoryId(product) {
           for (let i = 0; i < topCandidates.length; i++) {
             const candidate = topCandidates[i];
             await writeMappingRow(sheets, sheetId, {
-              coupangCategoryId,
-              coupangPath2,
-              coupangPath3,
+              coupangCategoryKey,
+              coupangPath2: categoryPath2,
+              coupangPath3: categoryPath3,
               jpCategoryId: candidate.jpCategoryId,
               jpFullPath: candidate.jpFullPath,
               matchType: 'AUTO',
@@ -381,7 +594,7 @@ async function resolveJpCategoryId(product) {
             });
           }
           
-          console.log(`[CategoryResolver] AUTO suggestions written: ${topCandidates.length} rows for coupangCategoryId=${coupangCategoryId}`);
+          console.log(`[CategoryResolver] AUTO mapping created: ${topCandidates.length} rows`);
         } catch (writeErr) {
           console.warn(`[CategoryResolver] Failed to write AUTO suggestions: ${writeErr.message}`);
         }
@@ -389,17 +602,16 @@ async function resolveJpCategoryId(product) {
     }
   }
   
-  // 3) Return result - use FALLBACK for actual registration
-  // AUTO suggestions are for human review only, NOT auto-applied
-  console.log(`[CategoryResolver] FALLBACK category used for registration (review AUTO suggestions): jpCategoryId=${FALLBACK_JP_CATEGORY_ID}`);
+  // 3) Return FALLBACK - AUTO suggestions are for review only, not auto-applied
+  console.log(`[CategoryResolver] FALLBACK used (review required): jpCategoryId=${FALLBACK_JP_CATEGORY_ID}`);
   
-  // Write FALLBACK row if no mappings exist
+  // Write FALLBACK row if no mappings exist and no AUTO candidates
   if (!existingMapping && topCandidates.length === 0) {
     try {
       await writeMappingRow(sheets, sheetId, {
-        coupangCategoryId,
-        coupangPath2,
-        coupangPath3,
+        coupangCategoryKey,
+        coupangPath2: categoryPath2,
+        coupangPath3: categoryPath3,
         jpCategoryId: FALLBACK_JP_CATEGORY_ID,
         jpFullPath: FALLBACK_JP_FULL_PATH,
         matchType: 'FALLBACK',
@@ -418,16 +630,19 @@ async function resolveJpCategoryId(product) {
     matchType: 'FALLBACK',
     confidence: 0,
     jpFullPath: FALLBACK_JP_FULL_PATH,
-    candidates: topCandidates // Include candidates for reference
+    coupangCategoryKey,
+    candidates: topCandidates
   };
 }
 
 module.exports = {
   resolveJpCategoryId,
+  normalizeCategoryPath,
   ensureMappingSheet,
   getMappings,
   getJpCategories,
   findTopAutoMatches,
+  migrateToPathKeyedSchema,
   MAPPING_HEADERS,
   MAPPING_TAB,
   FALLBACK_JP_CATEGORY_ID,
