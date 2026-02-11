@@ -435,13 +435,14 @@ async function main() {
       
       const result = await registerProduct(row, options.dryRun);
       
-      // Prepare sheet update with category tracking
+      // Prepare sheet update with category tracking (including coupangCategoryKeyUsed)
       const categoryUpdate = result.categoryResolution ? {
         jpCategoryIdUsed: result.categoryResolution.jpCategoryId || '',
         categoryMatchType: result.categoryResolution.matchType || '',
         categoryMatchConfidence: result.categoryResolution.confidence !== undefined 
           ? String(result.categoryResolution.confidence) 
-          : ''
+          : '',
+        coupangCategoryKeyUsed: result.categoryResolution.coupangCategoryKey || ''
       } : {};
       
       switch (result.status) {
