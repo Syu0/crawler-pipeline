@@ -314,7 +314,7 @@ function findBestAutoMatch(coupangPath2, coupangPath3, jpCategories) {
  * Main resolver function: Resolve JP category ID for a product
  * 
  * @param {object} product - Product object with categoryId, categoryPath2, categoryPath3
- * @returns {Promise<{jpCategoryId: string, matchType: string, confidence?: number, jpFullPath?: string}>}
+ * @returns {Promise<{jpCategoryId: string, matchType: string, confidence?: number, jpFullPath?: string, candidates?: Array}>}
  */
 async function resolveJpCategoryId(product) {
   const sheetId = process.env.GOOGLE_SHEET_ID;
@@ -335,69 +335,91 @@ async function resolveJpCategoryId(product) {
   
   console.log(`[CategoryResolver] Resolving: coupangCategoryId=${coupangCategoryId}`);
   
-  // 1) Check for MANUAL mapping
+  // 1) Check for MANUAL mapping (highest priority - always use if exists)
   const mappings = await getMappings(sheets, sheetId);
   const existingMapping = mappings.get(coupangCategoryId);
   
-  if (existingMapping && existingMapping.jpCategoryId) {
+  if (existingMapping && existingMapping.jpCategoryId && existingMapping.matchType === 'MANUAL') {
     console.log(`[CategoryResolver] MANUAL match found: jpCategoryId=${existingMapping.jpCategoryId}`);
     return {
       jpCategoryId: existingMapping.jpCategoryId,
-      matchType: existingMapping.matchType || 'MANUAL',
-      confidence: existingMapping.confidence ? parseFloat(existingMapping.confidence) : undefined,
+      matchType: 'MANUAL',
+      confidence: existingMapping.confidence ? parseFloat(existingMapping.confidence) : 1.0,
       jpFullPath: existingMapping.jpFullPath || undefined
     };
   }
   
-  // 2) Attempt AUTO matching
+  // 2) Generate Top 3 AUTO suggestions (for human review)
   const jpCategories = await getJpCategories(sheets, sheetId);
+  let topCandidates = [];
   
   if (jpCategories.length > 0 && (coupangPath2 || coupangPath3)) {
-    const autoMatch = findBestAutoMatch(coupangPath2, coupangPath3, jpCategories);
+    topCandidates = findTopAutoMatches(coupangPath2, coupangPath3, jpCategories, 3);
     
-    if (autoMatch) {
-      console.log(`[CategoryResolver] AUTO match found: jpCategoryId=${autoMatch.jpCategoryId}, confidence=${autoMatch.confidence}`);
+    if (topCandidates.length > 0) {
+      console.log(`[CategoryResolver] AUTO suggestions: ${topCandidates.length} candidates for coupangCategoryId=${coupangCategoryId}`);
+      console.log(`[CategoryResolver]   jpCategoryIds: ${topCandidates.map(c => c.jpCategoryId).join(', ')}`);
       
-      // Write back AUTO mapping (only if no existing mapping for this coupangCategoryId)
+      // Write Top 3 candidates to category_mapping (only if no existing rows for this coupangCategoryId)
       if (!existingMapping) {
         try {
-          await writeMappingRow(sheets, sheetId, {
-            coupangCategoryId,
-            coupangPath2,
-            coupangPath3,
-            jpCategoryId: autoMatch.jpCategoryId,
-            jpFullPath: autoMatch.jpFullPath,
-            matchType: 'AUTO',
-            confidence: autoMatch.confidence,
-            note: 'Auto-matched by keyword similarity',
-            updatedAt: new Date().toISOString(),
-            updatedBy: 'system'
-          });
-          console.log(`[CategoryResolver] AUTO mapping created for coupangCategoryId=${coupangCategoryId}`);
+          const now = new Date().toISOString();
+          
+          for (let i = 0; i < topCandidates.length; i++) {
+            const candidate = topCandidates[i];
+            await writeMappingRow(sheets, sheetId, {
+              coupangCategoryId,
+              coupangPath2,
+              coupangPath3,
+              jpCategoryId: candidate.jpCategoryId,
+              jpFullPath: candidate.jpFullPath,
+              matchType: 'AUTO',
+              confidence: candidate.confidence,
+              note: `AUTO suggestion #${i + 1} of ${topCandidates.length} (review required)`,
+              updatedAt: now,
+              updatedBy: 'system'
+            });
+          }
+          
+          console.log(`[CategoryResolver] AUTO suggestions written: ${topCandidates.length} rows for coupangCategoryId=${coupangCategoryId}`);
         } catch (writeErr) {
-          console.warn(`[CategoryResolver] Failed to write AUTO mapping: ${writeErr.message}`);
+          console.warn(`[CategoryResolver] Failed to write AUTO suggestions: ${writeErr.message}`);
         }
       }
-      
-      return {
-        jpCategoryId: autoMatch.jpCategoryId,
-        matchType: 'AUTO',
-        confidence: autoMatch.confidence,
-        jpFullPath: autoMatch.jpFullPath
-      };
     }
   }
   
-  // 3) FALLBACK - always return a valid category
-  console.log(`[CategoryResolver] FALLBACK category used (review required): jpCategoryId=${FALLBACK_JP_CATEGORY_ID}`);
+  // 3) Return result - use FALLBACK for actual registration
+  // AUTO suggestions are for human review only, NOT auto-applied
+  console.log(`[CategoryResolver] FALLBACK category used for registration (review AUTO suggestions): jpCategoryId=${FALLBACK_JP_CATEGORY_ID}`);
   
-  // Write FALLBACK mapping for tracking
-  if (!existingMapping) {
+  // Write FALLBACK row if no mappings exist
+  if (!existingMapping && topCandidates.length === 0) {
     try {
       await writeMappingRow(sheets, sheetId, {
         coupangCategoryId,
         coupangPath2,
         coupangPath3,
+        jpCategoryId: FALLBACK_JP_CATEGORY_ID,
+        jpFullPath: FALLBACK_JP_FULL_PATH,
+        matchType: 'FALLBACK',
+        confidence: '0',
+        note: 'No AUTO match found - requires manual review',
+        updatedAt: new Date().toISOString(),
+        updatedBy: 'system'
+      });
+    } catch (writeErr) {
+      console.warn(`[CategoryResolver] Failed to write FALLBACK mapping: ${writeErr.message}`);
+    }
+  }
+  
+  return {
+    jpCategoryId: FALLBACK_JP_CATEGORY_ID,
+    matchType: 'FALLBACK',
+    confidence: 0,
+    jpFullPath: FALLBACK_JP_FULL_PATH,
+    candidates: topCandidates // Include candidates for reference
+  };
         jpCategoryId: FALLBACK_JP_CATEGORY_ID,
         jpFullPath: FALLBACK_JP_FULL_PATH,
         matchType: 'FALLBACK',
