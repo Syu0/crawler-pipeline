@@ -264,6 +264,7 @@ Added after Qoo10 registration (both DRY-RUN and REAL modes):
 | `jpCategoryIdUsed` | string | JP category ID used for registration |
 | `categoryMatchType` | string | MANUAL, AUTO, or FALLBACK |
 | `categoryMatchConfidence` | number | Confidence score (0-1, AUTO only) |
+| `coupangCategoryKeyUsed` | string | Normalized categoryPath3 key used for lookup |
 | `registrationMode` | string | DRY_RUN or REAL |
 | `registrationStatus` | string | SUCCESS, WARNING, DRY_RUN, or FAILED |
 | `registrationMessage` | string | Status message |
