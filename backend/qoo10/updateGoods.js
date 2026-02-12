@@ -154,12 +154,33 @@ async function updateExistingGoods(input, existingRowData = {}) {
   
   console.log(`[UpdateGoods] Fields to update: [${Object.keys(fieldsToUpdate).join(', ')}]`);
   
-  // Build update payload
+  // TASK 1: Ensure SecondSubCat is ALWAYS included (required by Qoo10 UpdateGoods API)
+  let secondSubCat = fieldsToUpdate.SecondSubCat || input.SecondSubCat;
+  
+  // Priority: 1) From fieldsToUpdate, 2) From input, 3) From existing row
+  if (!nonEmpty(secondSubCat)) {
+    secondSubCat = existingRowData.jpCategoryIdUsed || existingRowData.SecondSubCat;
+  }
+  
+  if (!nonEmpty(secondSubCat)) {
+    console.error(`[UpdateGoods] SecondSubCat is required but not found`);
+    return {
+      success: false,
+      resultCode: -1,
+      resultMsg: 'SecondSubCat is required for UpdateGoods but could not be determined',
+      itemCode: input.ItemCode
+    };
+  }
+  
+  // Build update payload with SecondSubCat always included
   const updatePayload = {
     ItemCode: input.ItemCode,
+    SecondSubCat: secondSubCat,
     ...fieldsToUpdate,
     returnType: 'application/json'
   };
+  
+  console.log(`[UpdateGoods] SecondSubCat=${secondSubCat} (required field)`);
   
   // Log before API call
   const vendorItemId = existingRowData.vendorItemId || existingRowData.itemId || 'unknown';
