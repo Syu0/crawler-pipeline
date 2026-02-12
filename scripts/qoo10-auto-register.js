@@ -528,7 +528,12 @@ async function main() {
     for (const row of rowsToProcess) {
       const vendorItemId = row.vendorItemId || row.itemId;
       const isUpdate = row.qoo10ItemId && row.qoo10ItemId.trim() !== '';
-      console.log(`Processing: ${vendorItemId} [${isUpdate ? 'UPDATE' : 'CREATE'}]...`);
+      
+      if (isUpdate) {
+        console.log(`Processing: ${vendorItemId} [UPDATE requested via needsUpdate=YES]`);
+      } else {
+        console.log(`Processing: ${vendorItemId} [CREATE]`);
+      }
       
       const result = await registerProduct(row, options.dryRun);
       
