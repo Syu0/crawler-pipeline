@@ -219,10 +219,10 @@ function isCategoryManuallyChanged(oldData, newCategoryId) {
 /**
  * Update existing goods on Qoo10
  * @param {object} input - Update parameters (must include ItemCode)
- * @param {object} existingRowData - Existing row data from sheet for comparison
+ * @param {object} currentRowData - Current row data from sheet (SOURCE OF TRUTH)
  * @returns {Promise<object>} Result object
  */
-async function updateExistingGoods(input, existingRowData = {}) {
+async function updateExistingGoods(input, currentRowData = {}) {
   const ALLOW_REAL = process.env.QOO10_ALLOW_REAL_REG === '1';
   
   // Validate ItemCode (required for update)
@@ -235,9 +235,19 @@ async function updateExistingGoods(input, existingRowData = {}) {
   }
   
   console.log(`[UpdateGoods] Updating existing Qoo10 item: ${input.ItemCode}`);
+  console.log(`[UpdateGoods] Current row data keys: [${Object.keys(currentRowData).join(', ')}]`);
   
-  // Detect changed fields
-  const changedFields = detectChangedFields(existingRowData, input);
+  // Build "previous state" from prevItemPrice/prevOptionsHash in current row
+  // This represents what was registered BEFORE the detected change
+  const previousRowState = {
+    ...currentRowData,
+    // Override with "prev" values for change detection
+    qoo10SellingPrice: currentRowData.prevItemPrice || currentRowData.qoo10SellingPrice || '',
+    optionsHash: currentRowData.prevOptionsHash || currentRowData.optionsHash || '',
+  };
+  
+  // Detect changed fields: compare previous state vs current row (source of truth)
+  const changedFields = detectChangedFields(previousRowState, currentRowData);
   
   // Check for manual category change
   let categoryManuallyChanged = false;
