@@ -222,7 +222,7 @@ async function upsertRow(sheetId, tabName, headers, data, primaryKey, fallbackKe
     }
   }
   
-  // Build row values in header order
+  // Build row values in header order (ensure array length matches headers)
   const rowValues = headers.map(h => {
     const val = mergedData[h];
     if (val === undefined || val === null) return '';
@@ -231,11 +231,13 @@ async function upsertRow(sheetId, tabName, headers, data, primaryKey, fallbackKe
   });
   
   if (existingRowNum && existingRowNum > 1) {
-    // Update existing row
-    console.log(`Updating existing row ${existingRowNum} for ${keyColumn}=${keyValue}`);
+    // Update existing row with fixed-width range to avoid column growth issues
+    const updateRange = `${tabName}!A${existingRowNum}:ZZ${existingRowNum}`;
+    console.log(`[Sheets] Updating row ${existingRowNum} using range ${updateRange} (headers=${headers.length})`);
+    
     await sheets.spreadsheets.values.update({
       spreadsheetId: sheetId,
-      range: `${tabName}!A${existingRowNum}`,
+      range: updateRange,
       valueInputOption: 'RAW',
       requestBody: {
         values: [rowValues],
@@ -244,7 +246,7 @@ async function upsertRow(sheetId, tabName, headers, data, primaryKey, fallbackKe
     return { action: 'updated', row: existingRowNum, existingData };
   } else {
     // Append new row
-    console.log(`Appending new row for ${keyColumn}=${keyValue}`);
+    console.log(`[Sheets] Appending new row for ${keyColumn}=${keyValue} (headers=${headers.length})`);
     const response = await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId,
       range: `${tabName}!A:A`,
