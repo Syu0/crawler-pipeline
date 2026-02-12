@@ -17,7 +17,22 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const { updateGoods, qoo10PostMethod } = require('../../scripts/lib/qoo10Client');
 
 // Fields that MUST be included in UpdateGoods request (API requirement)
-const REQUIRED_FIELDS = ['SecondSubCat', 'ItemTitle'];
+const REQUIRED_FIELDS = [
+  'SecondSubCat',
+  'ItemTitle',
+  'ProductionPlaceType',
+  'AdultYN',
+  'AvailableDateType',
+  'AvailableDateValue'
+];
+
+// Default values for required fields (business rules)
+const REQUIRED_DEFAULTS = {
+  'ProductionPlaceType': '2',
+  'AdultYN': 'N',
+  'AvailableDateType': '0',
+  'AvailableDateValue': '5'
+};
 
 // Mapping: Qoo10 API field -> sheet column name
 const FIELD_TO_SHEET_MAP = {
@@ -27,6 +42,10 @@ const FIELD_TO_SHEET_MAP = {
   'ItemDescription': 'ItemDescriptionText',
   'StandardImage': 'StandardImage',
   'Weight': 'WeightKg',
+  'ProductionPlaceType': 'ProductionPlaceType',
+  'AdultYN': 'AdultYN',
+  'AvailableDateType': 'AvailableDateType',
+  'AvailableDateValue': 'AvailableDateValue',
 };
 
 // Fields that can be updated via UpdateGoods API
