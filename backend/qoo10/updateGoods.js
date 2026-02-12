@@ -287,12 +287,12 @@ async function updateExistingGoods(input, currentRowData = {}) {
   
   for (const reqField of REQUIRED_FIELDS) {
     // First try to resolve without fetching
-    let resolution = resolveFieldValue(reqField, input, existingRowData, existingRowData, null);
+    let resolution = resolveFieldValue(reqField, input, currentRowData, currentRowData, null);
     
     // If missing and we haven't fetched yet, fetch from Qoo10
     if (resolution.source === 'missing' && !qoo10Data) {
       qoo10Data = await fetchQoo10ItemData(input.ItemCode);
-      resolution = resolveFieldValue(reqField, input, existingRowData, existingRowData, qoo10Data);
+      resolution = resolveFieldValue(reqField, input, currentRowData, currentRowData, qoo10Data);
     }
     
     if (!nonEmpty(resolution.value)) {
