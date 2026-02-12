@@ -286,13 +286,14 @@ async function registerProduct(row, dryRun = false) {
   const existingQoo10ItemId = row.qoo10ItemId || '';
   const isUpdateMode = existingQoo10ItemId && existingQoo10ItemId.trim() !== '';
   
-  // Validate
-  const validation = validateRow(row);
+  // Validate - pass isUpdateMode so UPDATE rows don't get skipped
+  const validation = validateRow(row, isUpdateMode);
   if (!validation.valid) {
     return {
       status: 'SKIPPED',
       vendorItemId,
-      reason: validation.reason
+      reason: validation.reason,
+      mode: isUpdateMode ? 'UPDATE' : 'CREATE'
     };
   }
   
