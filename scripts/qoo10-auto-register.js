@@ -267,10 +267,13 @@ function buildRegistrationPayload(row, categoryResolution) {
 }
 
 /**
- * Register a single product to Qoo10
+ * Register or update a single product on Qoo10
+ * Mode: CREATE if qoo10ItemId is empty, UPDATE if qoo10ItemId exists
  */
 async function registerProduct(row, dryRun = false) {
   const vendorItemId = row.vendorItemId || row.itemId;
+  const existingQoo10ItemId = row.qoo10ItemId || '';
+  const isUpdateMode = existingQoo10ItemId && existingQoo10ItemId.trim() !== '';
   
   // Validate
   const validation = validateRow(row);
@@ -299,7 +302,23 @@ async function registerProduct(row, dryRun = false) {
     };
   }
   
-  console.log(`  Category: ${row.categoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
+  // Check if category was manually changed in sheet
+  const manualCategoryOverride = row.jpCategoryIdUsed && 
+    row.jpCategoryIdUsed !== categoryResolution.jpCategoryId &&
+    row.categoryMatchType === 'MANUAL';
+  
+  if (manualCategoryOverride) {
+    // Use the manually set category from sheet
+    categoryResolution = {
+      jpCategoryId: row.jpCategoryIdUsed,
+      matchType: 'MANUAL',
+      confidence: 1.0,
+      coupangCategoryKey: categoryResolution.coupangCategoryKey
+    };
+    console.log(`  Category: Using MANUAL override → ${categoryResolution.jpCategoryId}`);
+  } else {
+    console.log(`  Category: ${row.categoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
+  }
   
   // Build payload with resolved category
   const { payload, sellerCode, sellingPrice } = buildRegistrationPayload(row, categoryResolution);
@@ -311,9 +330,67 @@ async function registerProduct(row, dryRun = false) {
       sellerCode,
       qoo10SellingPrice: sellingPrice,
       categoryResolution,
-      payload
+      payload,
+      mode: isUpdateMode ? 'UPDATE' : 'CREATE',
+      qoo10ItemId: existingQoo10ItemId || null
     };
   }
+  
+  // ===== UPDATE MODE =====
+  if (isUpdateMode) {
+    console.log(`[Registration] Updating existing Qoo10 item: ${existingQoo10ItemId}`);
+    
+    const updateResult = await updateExistingGoods({
+      ItemCode: existingQoo10ItemId,
+      ItemTitle: payload.ItemTitle,
+      ItemPrice: payload.ItemPrice,
+      SecondSubCat: payload.SecondSubCat,
+      StandardImage: payload.StandardImage,
+      ItemDescription: payload.ItemDescription,
+      Weight: payload.Weight,
+    }, row);
+    
+    if (updateResult.skipped) {
+      return {
+        status: 'NO_CHANGES',
+        vendorItemId,
+        qoo10ItemId: existingQoo10ItemId,
+        qoo10SellingPrice: sellingPrice,
+        sellerCode: row.qoo10SellerCode || sellerCode,
+        categoryResolution,
+        message: 'No changes detected. Update skipped.'
+      };
+    }
+    
+    if (updateResult.success) {
+      // Determine status based on category match type
+      const registrationStatus = categoryResolution.matchType === 'FALLBACK' ? 'WARNING' : 'SUCCESS';
+      
+      return {
+        status: registrationStatus,
+        vendorItemId,
+        qoo10ItemId: existingQoo10ItemId,
+        qoo10SellingPrice: sellingPrice,
+        sellerCode: row.qoo10SellerCode || sellerCode,
+        categoryResolution,
+        mode: 'UPDATE',
+        fieldsUpdated: updateResult.fieldsUpdated || [],
+        categoryManuallyChanged: updateResult.categoryManuallyChanged
+      };
+    } else {
+      return {
+        status: 'FAILED',
+        vendorItemId,
+        qoo10ItemId: existingQoo10ItemId,
+        apiError: updateResult.resultMsg,
+        categoryResolution,
+        mode: 'UPDATE'
+      };
+    }
+  }
+  
+  // ===== CREATE MODE =====
+  console.log(`[Registration] Creating new Qoo10 item`);
   
   // Call Qoo10 API with retry
   let lastError = null;
@@ -333,7 +410,8 @@ async function registerProduct(row, dryRun = false) {
           qoo10ItemId: result.createdItemId,
           qoo10SellingPrice: sellingPrice,
           sellerCode: result.sellerCodeUsed,
-          categoryResolution
+          categoryResolution,
+          mode: 'CREATE'
         };
       }
       
@@ -347,7 +425,8 @@ async function registerProduct(row, dryRun = false) {
           vendorItemId,
           qoo10SellingPrice: sellingPrice,
           reason: 'QOO10_ALLOW_REAL_REG not enabled',
-          categoryResolution
+          categoryResolution,
+          mode: 'CREATE'
         };
       }
       
@@ -365,7 +444,8 @@ async function registerProduct(row, dryRun = false) {
     status: 'FAILED',
     vendorItemId,
     apiError: lastError,
-    categoryResolution
+    categoryResolution,
+    mode: 'CREATE'
   };
 }
 
