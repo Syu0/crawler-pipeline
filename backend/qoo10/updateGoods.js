@@ -251,7 +251,7 @@ async function updateExistingGoods(input, currentRowData = {}) {
   
   // Check for manual category change
   let categoryManuallyChanged = false;
-  if (input.SecondSubCat && isCategoryManuallyChanged(existingRowData, input.SecondSubCat)) {
+  if (input.SecondSubCat && isCategoryManuallyChanged(currentRowData, input.SecondSubCat)) {
     changedFields.SecondSubCat = input.SecondSubCat;
     categoryManuallyChanged = true;
     console.log(`[UpdateGoods] Category manually changed to: ${input.SecondSubCat}`);
