@@ -31,7 +31,8 @@ const REQUIRED_DEFAULTS = {
   'ProductionPlaceType': '2',
   'AdultYN': 'N',
   'AvailableDateType': '0',
-  'AvailableDateValue': '5'
+  'AvailableDateValue': '3',  // Type=0 (general shipping) requires Value 1~3
+  'ProductionPlace': 'KR'     // Required when ProductionPlaceType=2
 };
 
 // Mapping: Qoo10 API field -> sheet column name
