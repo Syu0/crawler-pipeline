@@ -303,6 +303,16 @@ async function updateExistingGoods(input, existingRowData = {}) {
     returnType: 'application/json'
   };
   
+  // Handle ProductionPlace: required when ProductionPlaceType=2
+  if (updatePayload.ProductionPlaceType === '2') {
+    if (!nonEmpty(updatePayload.ProductionPlace)) {
+      // Resolve ProductionPlace with same priority chain
+      const ppRes = resolveFieldValue('ProductionPlace', input, existingRowData, existingRowData, null);
+      updatePayload.ProductionPlace = ppRes.value || REQUIRED_DEFAULTS.ProductionPlace;
+      console.log(`[UpdateGoods] ProductionPlace resolved: ${updatePayload.ProductionPlace} (source: ${ppRes.source || 'default'})`);
+    }
+  }
+  
   // Log final payload verification
   const payloadKeys = Object.keys(updatePayload).filter(k => k !== 'returnType');
   console.log(`[UpdateGoods] Final payload keys: [${payloadKeys.join(', ')}]`);
@@ -310,6 +320,10 @@ async function updateExistingGoods(input, existingRowData = {}) {
   // Confirm all required fields present
   const reqCheck = REQUIRED_FIELDS.map(f => `${f}=${updatePayload[f] ? 'OK' : 'MISSING'}`).join(', ');
   console.log(`[UpdateGoods] Required params: ${reqCheck}`);
+  
+  // Log AvailableDateType/Value and ProductionPlaceType/Place
+  console.log(`[UpdateGoods] AvailableDateType=${updatePayload.AvailableDateType}, AvailableDateValue=${updatePayload.AvailableDateValue}`);
+  console.log(`[UpdateGoods] ProductionPlaceType=${updatePayload.ProductionPlaceType}, ProductionPlace=${updatePayload.ProductionPlace || '(not set)'}`);
   
   // Log urlencoded body preview
   const bodyPreview = Object.entries(updatePayload)
