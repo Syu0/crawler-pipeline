@@ -142,6 +142,10 @@ async function updateExistingGoods(input, existingRowData = {}) {
     returnType: 'application/json'
   };
   
+  // Log before API call
+  const vendorItemId = existingRowData.vendorItemId || existingRowData.itemId || 'unknown';
+  console.log(`[UPDATE] Calling Qoo10 update API for qoo10ItemId=${input.ItemCode} vendorItemId=${vendorItemId} fields=[${Object.keys(fieldsToUpdate).join(', ')}]`);
+  
   // Dry-run mode
   if (!ALLOW_REAL) {
     console.log('[UpdateGoods] Dry-run mode - API call skipped');
