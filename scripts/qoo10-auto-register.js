@@ -642,7 +642,7 @@ async function main() {
             ? 'DRY-RUN with FALLBACK category (review required)'
             : 'DRY-RUN completed';
           
-          console.log(`  → DRY-RUN: price=${result.qoo10SellingPrice}, jpCat=${result.categoryResolution?.jpCategoryId} (${result.categoryResolution?.matchType})`);
+          console.log(`  → DRY-RUN [${result.mode || 'CREATE'}]: price=${result.qoo10SellingPrice}, jpCat=${result.categoryResolution?.jpCategoryId} (${result.categoryResolution?.matchType})`);
           results.dryRun.push(result);
           
           // ALWAYS write back category resolution even in DRY-RUN
@@ -670,10 +670,19 @@ async function main() {
     console.log('='.repeat(60));
     console.log('  Summary');
     console.log('='.repeat(60));
-    console.log(`  SUCCESS:  ${results.success.length}`);
-    console.log(`  SKIPPED:  ${results.skipped.length}`);
-    console.log(`  FAILED:   ${results.failed.length}`);
-    console.log(`  DRY-RUN:  ${results.dryRun.length}`);
+    console.log(`  SUCCESS:    ${results.success.length}`);
+    console.log(`  NO_CHANGES: ${results.noChanges.length}`);
+    console.log(`  SKIPPED:    ${results.skipped.length}`);
+    console.log(`  FAILED:     ${results.failed.length}`);
+    console.log(`  DRY-RUN:    ${results.dryRun.length}`);
+    console.log('');
+    
+    // Mode breakdown
+    const createResults = [...results.success, ...results.dryRun].filter(r => r.mode === 'CREATE' || !r.mode);
+    const updateResults = [...results.success, ...results.dryRun, ...results.noChanges].filter(r => r.mode === 'UPDATE');
+    console.log('  Mode Breakdown:');
+    console.log(`    CREATE: ${createResults.length}`);
+    console.log(`    UPDATE: ${updateResults.length}`);
     console.log('');
     
     // Category match type breakdown
@@ -692,9 +701,18 @@ async function main() {
     
     // Detailed results
     if (results.success.length > 0) {
-      console.log('=== Successful Registrations ===');
+      console.log('=== Successful Results ===');
       results.success.forEach(r => {
-        console.log(`  ${r.vendorItemId}: qoo10ItemId=${r.qoo10ItemId}, price=${r.qoo10SellingPrice}, match=${r.categoryResolution?.matchType}`);
+        const mode = r.mode || 'CREATE';
+        console.log(`  [${mode}] ${r.vendorItemId}: qoo10ItemId=${r.qoo10ItemId}, price=${r.qoo10SellingPrice}, match=${r.categoryResolution?.matchType}`);
+      });
+      console.log('');
+    }
+    
+    if (results.noChanges.length > 0) {
+      console.log('=== No Changes (Update Skipped) ===');
+      results.noChanges.forEach(r => {
+        console.log(`  ${r.vendorItemId}: qoo10ItemId=${r.qoo10ItemId} - no updatable fields changed`);
       });
       console.log('');
     }
@@ -702,15 +720,17 @@ async function main() {
     if (results.dryRun.length > 0) {
       console.log('=== DRY-RUN Results (sheet updated) ===');
       results.dryRun.forEach(r => {
-        console.log(`  ${r.vendorItemId}: jpCat=${r.categoryResolution?.jpCategoryId}, match=${r.categoryResolution?.matchType}, price=${r.qoo10SellingPrice}`);
+        const mode = r.mode || 'CREATE';
+        console.log(`  [${mode}] ${r.vendorItemId}: jpCat=${r.categoryResolution?.jpCategoryId}, match=${r.categoryResolution?.matchType}, price=${r.qoo10SellingPrice}`);
       });
       console.log('');
     }
     
     if (results.failed.length > 0) {
-      console.log('=== Failed Registrations ===');
+      console.log('=== Failed Results ===');
       results.failed.forEach(r => {
-        console.log(`  ${r.vendorItemId}: ${r.apiError}`);
+        const mode = r.mode || 'CREATE';
+        console.log(`  [${mode}] ${r.vendorItemId}: ${r.apiError}`);
       });
       console.log('');
     }
