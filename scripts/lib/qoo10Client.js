@@ -152,8 +152,17 @@ function setNewGoods(params) {
   return qoo10PostMethod('ItemsBasic.SetNewGoods', params, '1.1');
 }
 
+/**
+ * UpdateGoods method - for updating existing items
+ * @param {object} params - Update parameters (must include ItemCode)
+ */
+function updateGoods(params) {
+  return qoo10PostMethod('ItemsBasic.UpdateGoods', params, '1.1');
+}
+
 module.exports = {
   qoo10PostMethod,
   testQoo10Connection,
-  setNewGoods
+  setNewGoods,
+  updateGoods
 };
