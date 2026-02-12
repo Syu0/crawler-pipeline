@@ -331,12 +331,47 @@ async function updateExistingGoods(input, existingRowData = {}) {
   console.log(`[UpdateGoods] AvailableDateType=${updatePayload.AvailableDateType}, AvailableDateValue=${updatePayload.AvailableDateValue}`);
   console.log(`[UpdateGoods] ProductionPlaceType=${updatePayload.ProductionPlaceType}, ProductionPlace=${updatePayload.ProductionPlace || '(not set)'}`);
   
-  // Log urlencoded body preview
-  const bodyPreview = Object.entries(updatePayload)
-    .filter(([k]) => k !== 'returnType')
-    .map(([k, v]) => `${k}=${encodeURIComponent(String(v).substring(0, 50))}`)
+  // ===== COMPREHENSIVE PAYLOAD LOGGING =====
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`[UpdateGoods] FINAL PAYLOAD DETAILS for ItemCode=${input.ItemCode}`);
+  console.log(`${'='.repeat(60)}`);
+  
+  // Log each key-value pair with full values for debugging
+  const payloadEntries = Object.entries(updatePayload).filter(([k]) => k !== 'returnType');
+  console.log(`[UpdateGoods] Total fields in payload: ${payloadEntries.length}`);
+  
+  for (const [key, value] of payloadEntries) {
+    const valStr = String(value);
+    const truncated = valStr.length > 100 ? valStr.substring(0, 100) + '...[truncated]' : valStr;
+    const isEmpty = !value || valStr === '' || valStr === 'undefined' || valStr === 'null';
+    const status = isEmpty ? '⚠️ EMPTY' : '✓';
+    console.log(`[UpdateGoods]   ${status} ${key}: "${truncated}"`);
+  }
+  
+  // Log full URL-encoded body for API debugging
+  const urlEncodedBody = payloadEntries
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
     .join('&');
-  console.log(`[UpdateGoods] URLEncoded body preview: ${bodyPreview.substring(0, 500)}...`);
+  console.log(`\n[UpdateGoods] URL-ENCODED BODY (full):`);
+  console.log(urlEncodedBody.substring(0, 2000));
+  if (urlEncodedBody.length > 2000) {
+    console.log(`... [body truncated, total length: ${urlEncodedBody.length}]`);
+  }
+  
+  // Verify required fields are NOT empty
+  console.log(`\n[UpdateGoods] REQUIRED FIELD CHECK:`);
+  const reqFieldCheck = [];
+  for (const reqField of REQUIRED_FIELDS) {
+    const val = updatePayload[reqField];
+    const isEmpty = !val || String(val).trim() === '';
+    reqFieldCheck.push(`${reqField}=${isEmpty ? 'EMPTY!' : 'OK'}`);
+    if (isEmpty) {
+      console.log(`[UpdateGoods]   ❌ MISSING REQUIRED: ${reqField}`);
+    }
+  }
+  console.log(`[UpdateGoods]   Summary: ${reqFieldCheck.join(', ')}`);
+  
+  console.log(`${'='.repeat(60)}\n`);
   
   // Log before API call
   const vendorItemId = existingRowData.vendorItemId || existingRowData.itemId || 'unknown';
