@@ -46,31 +46,31 @@ async function getSheetsClient() {
 async function ensureHeaders(sheetId, tabName, headers) {
   const sheets = await getSheetsClient();
   
-  // Read first row
-  const range = `${tabName}!A1:Z1`;
+  // Read first row with wide range to capture all existing headers
+  const readRange = `${tabName}!A1:ZZ1`;
   let existingHeaders = [];
   
   try {
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: sheetId,
-      range,
+      range: readRange,
     });
     existingHeaders = response.data.values?.[0] || [];
   } catch (err) {
     // Tab might not exist or be empty
     if (err.message.includes('Unable to parse range')) {
-      console.log(`Tab "${tabName}" may not exist. Will create headers.`);
+      console.log(`[Sheets] Tab "${tabName}" may not exist. Will create headers.`);
     } else {
       throw err;
     }
   }
   
-  // If headers are empty, write all headers
+  // If headers are empty, write all headers using fixed range
   if (existingHeaders.length === 0) {
-    console.log(`Writing headers to ${tabName}...`);
+    console.log(`[Sheets] Writing ${headers.length} headers to ${tabName}...`);
     await sheets.spreadsheets.values.update({
       spreadsheetId: sheetId,
-      range: `${tabName}!A1`,
+      range: `${tabName}!A1:ZZ1`,
       valueInputOption: 'RAW',
       requestBody: {
         values: [headers],
@@ -79,25 +79,28 @@ async function ensureHeaders(sheetId, tabName, headers) {
     return headers;
   }
   
-  // Check for missing headers and append them at the end
+  // Check for missing headers
   const missingHeaders = headers.filter(h => !existingHeaders.includes(h));
   
   if (missingHeaders.length > 0) {
-    const nextColIndex = existingHeaders.length;
-    const nextColLetter = String.fromCharCode(65 + nextColIndex); // A=0, B=1, etc.
+    // Build complete header row: existing + missing
+    const allHeaders = [...existingHeaders, ...missingHeaders];
     
-    console.log(`[${new Date().toISOString()}] Extending headers: adding ${missingHeaders.join(', ')} at column ${nextColLetter}`);
+    console.log(`[Sheets] Extending headers: adding ${missingHeaders.length} columns (${missingHeaders.join(', ')})`);
+    console.log(`[Sheets] Total headers: ${existingHeaders.length} existing + ${missingHeaders.length} new = ${allHeaders.length}`);
+    console.log(`[Sheets] Updating headers with range ${tabName}!A1:ZZ1`);
     
+    // Write entire header row using safe fixed range (avoids column letter calculation issues)
     await sheets.spreadsheets.values.update({
       spreadsheetId: sheetId,
-      range: `${tabName}!${nextColLetter}1`,
+      range: `${tabName}!A1:ZZ1`,
       valueInputOption: 'RAW',
       requestBody: {
-        values: [missingHeaders],
+        values: [allHeaders],
       },
     });
     
-    return [...existingHeaders, ...missingHeaders];
+    return allHeaders;
   }
   
   return existingHeaders;
