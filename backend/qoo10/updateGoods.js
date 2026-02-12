@@ -164,7 +164,7 @@ async function updateExistingGoods(input, existingRowData = {}) {
     const resultMsg = response.ResultMsg || response.resultMsg || 'Unknown';
     
     if (resultCode === 0) {
-      console.log(`[UpdateGoods] Update successful for item: ${input.ItemCode}`);
+      console.log(`[UpdateGoods] UPDATE success for item: ${input.ItemCode}`);
       return {
         success: true,
         resultCode,
@@ -174,7 +174,7 @@ async function updateExistingGoods(input, existingRowData = {}) {
         categoryManuallyChanged
       };
     } else {
-      console.error(`[UpdateGoods] API error: ${resultMsg} (code: ${resultCode})`);
+      console.error(`[UpdateGoods] UPDATE failed: ${resultMsg} (code: ${resultCode})`);
       return {
         success: false,
         resultCode,
