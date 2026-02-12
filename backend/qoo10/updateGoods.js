@@ -62,8 +62,9 @@ function detectChangedFields(oldData, newData) {
     const newVal = newData[apiField] || newData[sheetCol] || '';
     
     // Only include if new value is non-empty and different from old
-    if (newVal && String(newVal).trim() !== '' && String(oldVal) !== String(newVal)) {
+    if (newVal && String(newVal).trim() !== '' && String(oldVal).trim() !== String(newVal).trim()) {
       changedFields[apiField] = newVal;
+      console.log(`[UpdateGoods]   ${apiField}: "${String(oldVal).substring(0, 30)}" → "${String(newVal).substring(0, 30)}"`);
     }
   }
   
