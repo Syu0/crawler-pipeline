@@ -310,6 +310,13 @@ async function updateExistingGoods(input, existingRowData = {}) {
   const reqCheck = REQUIRED_FIELDS.map(f => `${f}=${updatePayload[f] ? 'OK' : 'MISSING'}`).join(', ');
   console.log(`[UpdateGoods] Required params: ${reqCheck}`);
   
+  // Log urlencoded body preview
+  const bodyPreview = Object.entries(updatePayload)
+    .filter(([k]) => k !== 'returnType')
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v).substring(0, 50))}`)
+    .join('&');
+  console.log(`[UpdateGoods] URLEncoded body preview: ${bodyPreview.substring(0, 500)}...`);
+  
   // Log before API call
   const vendorItemId = existingRowData.vendorItemId || existingRowData.itemId || 'unknown';
   console.log(`[UPDATE] Calling Qoo10 update API for qoo10ItemId=${input.ItemCode} vendorItemId=${vendorItemId} fields=[${Object.keys(fieldsToUpdate).join(', ')}]`);
@@ -317,6 +324,7 @@ async function updateExistingGoods(input, existingRowData = {}) {
   // Dry-run mode
   if (!ALLOW_REAL) {
     console.log('[UpdateGoods] Dry-run mode - API call skipped');
+    console.log('[UpdateGoods] Payload that would be sent:', JSON.stringify(updatePayload, null, 2));
     return {
       success: true,
       resultCode: -1,
