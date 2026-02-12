@@ -239,43 +239,50 @@ async function updateExistingGoods(input, existingRowData = {}) {
   
   console.log(`[UpdateGoods] Fields to update: [${Object.keys(fieldsToUpdate).join(', ')}]`);
   
-  // TASK 1: Ensure SecondSubCat is ALWAYS included (required by Qoo10 UpdateGoods API)
-  let secondSubCat = fieldsToUpdate.SecondSubCat || input.SecondSubCat;
+  // ===== RESOLVE REQUIRED FIELDS =====
+  // Fetch Qoo10 data if any required field might be missing
+  let qoo10Data = null;
+  const resolvedRequired = {};
+  const resolutionLog = {};
   
-  // Priority: 1) From fieldsToUpdate, 2) From input, 3) From existing row
-  if (!nonEmpty(secondSubCat)) {
-    secondSubCat = existingRowData.jpCategoryIdUsed || existingRowData.SecondSubCat;
+  for (const reqField of REQUIRED_FIELDS) {
+    // First try to resolve without fetching
+    let resolution = resolveFieldValue(reqField, input, existingRowData, existingRowData, null);
+    
+    // If missing and we haven't fetched yet, fetch from Qoo10
+    if (resolution.source === 'missing' && !qoo10Data) {
+      qoo10Data = await fetchQoo10ItemData(input.ItemCode);
+      resolution = resolveFieldValue(reqField, input, existingRowData, existingRowData, qoo10Data);
+    }
+    
+    if (!nonEmpty(resolution.value)) {
+      console.error(`[UpdateGoods] REQUIRED field ${reqField} is missing and could not be resolved for ItemCode=${input.ItemCode}`);
+      return {
+        success: false,
+        resultCode: -1,
+        resultMsg: `Required field ${reqField} could not be resolved`,
+        itemCode: input.ItemCode
+      };
+    }
+    
+    resolvedRequired[reqField] = resolution.value;
+    resolutionLog[reqField] = resolution.source;
   }
   
-  if (!nonEmpty(secondSubCat)) {
-    console.error(`[UpdateGoods] SecondSubCat is required but not found`);
-    return {
-      success: false,
-      resultCode: -1,
-      resultMsg: 'SecondSubCat is required for UpdateGoods but could not be determined',
-      itemCode: input.ItemCode
-    };
-  }
+  console.log(`[UpdateGoods] REQUIRED_FIELDS resolved:`, JSON.stringify(resolutionLog));
   
-  // Build update payload with SecondSubCat always included
+  // Build update payload: REQUIRED_FIELDS + fieldsToUpdate
   const updatePayload = {
     ItemCode: input.ItemCode,
-    SecondSubCat: secondSubCat,
-    ...fieldsToUpdate,
+    ...resolvedRequired,  // Required fields first
+    ...fieldsToUpdate,    // Changed fields (may override required if explicitly changed)
     returnType: 'application/json'
   };
   
-  console.log(`[UpdateGoods] SecondSubCat=${secondSubCat} (required field)`);
-  
-  // Verify final payload
-  console.log(`[UpdateGoods] Final payload:`, JSON.stringify({
-    ItemCode: updatePayload.ItemCode,
-    SecondSubCat: updatePayload.SecondSubCat,
-    ItemTitle: updatePayload.ItemTitle || '(not changed)',
-    ItemPrice: updatePayload.ItemPrice || '(not changed)',
-    ItemDescription: updatePayload.ItemDescription ? '(included)' : '(not changed)',
-    StandardImage: updatePayload.StandardImage ? '(included)' : '(not changed)',
-  }));
+  // Log final payload verification
+  const payloadKeys = Object.keys(updatePayload).filter(k => k !== 'returnType');
+  console.log(`[UpdateGoods] Final payload keys: [${payloadKeys.join(', ')}]`);
+  console.log(`[UpdateGoods] Verification - SecondSubCat=${updatePayload.SecondSubCat ? 'PRESENT' : 'MISSING'}, ItemTitle=${updatePayload.ItemTitle ? 'PRESENT' : 'MISSING'}`);
   
   // Log before API call
   const vendorItemId = existingRowData.vendorItemId || existingRowData.itemId || 'unknown';
