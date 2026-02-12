@@ -384,7 +384,7 @@ async function updateExistingGoods(input, currentRowData = {}) {
   console.log(`${'='.repeat(60)}\n`);
   
   // Log before API call
-  const vendorItemId = existingRowData.vendorItemId || existingRowData.itemId || 'unknown';
+  const vendorItemId = currentRowData.vendorItemId || currentRowData.itemId || 'unknown';
   console.log(`[UPDATE] Calling Qoo10 update API for qoo10ItemId=${input.ItemCode} vendorItemId=${vendorItemId} fields=[${Object.keys(fieldsToUpdate).join(', ')}]`);
   
   // Dry-run mode
