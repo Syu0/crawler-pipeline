@@ -65,16 +65,17 @@ Build a pipeline to scrape Coupang product URLs, store data in Google Sheets, an
 
 ## Prioritized Backlog
 
-### P0 - Next Up
-- [ ] **SecondSubCat Resolver Module** (Qoo10 category mapping)
-  - Download full Qoo10 category catalog
-  - Store as versioned JSON file
-  - Implement mapping strategy using `coupang_categorys` data
+### P0 - Completed
+- [x] **Qoo10 UpdateGoods Fix** (Feb 2025)
+  - Fixed change detection logic to use sheet data as source of truth
+  - Refactored `detectChangedFields` to compare `prevItemPrice` with `qoo10SellingPrice`
+  - Added comprehensive payload logging for debugging API calls
+  - All required fields (`SecondSubCat`, `ItemTitle`, `ProductionPlaceType`, `AdultYN`, `AvailableDateType`, `AvailableDateValue`) now properly resolved
 
 ### P1 - Future Enhancements
 - [ ] Multi-option support (SIZE + COLOR)
-- [ ] UpdateGoods endpoint
 - [ ] Batch registration from sheet
+- [ ] Automated category mapping (use AUTO instead of FALLBACK)
 
 ### P2 - Nice to Have
 - [ ] Web UI
