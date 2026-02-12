@@ -580,33 +580,31 @@ async function main() {
           results.noChanges.push(result);
           // Don't update sheet - nothing changed
           break;
-              registrationMode: 'REAL',
-              registrationStatus: 'SUCCESS',
-              registrationMessage: 'Registered successfully',
-              lastRegisteredAt: new Date().toISOString()
-            });
-            console.log(`  ✓ Sheet updated`);
-          } catch (sheetErr) {
-            console.log(`  ✗ Sheet update failed: ${sheetErr.message}`);
-          }
-          break;
           
         case 'WARNING':
-          console.log(`  ⚠ WARNING: qoo10ItemId=${result.qoo10ItemId}, price=${result.qoo10SellingPrice} (FALLBACK category used)`);
+          console.log(`  ⚠ WARNING [${result.mode || 'CREATE'}]: qoo10ItemId=${result.qoo10ItemId}, price=${result.qoo10SellingPrice} (FALLBACK category used)`);
           results.success.push(result); // Still counts as successful registration
           
           // Update Google Sheet with WARNING status
           try {
-            await updateSheetRow(row._rowIndex, {
-              qoo10ItemId: result.qoo10ItemId,
-              qoo10SellingPrice: result.qoo10SellingPrice,
-              qoo10SellerCode: result.sellerCode || '',
+            const warningUpdate = {
               ...categoryUpdate,
               registrationMode: 'REAL',
               registrationStatus: 'WARNING',
               registrationMessage: 'FALLBACK category used (review required)',
               lastRegisteredAt: new Date().toISOString()
-            });
+            };
+            
+            if (result.qoo10ItemId) warningUpdate.qoo10ItemId = result.qoo10ItemId;
+            if (result.qoo10SellingPrice) warningUpdate.qoo10SellingPrice = result.qoo10SellingPrice;
+            if (result.sellerCode) warningUpdate.qoo10SellerCode = result.sellerCode;
+            
+            if (result.mode === 'UPDATE') {
+              warningUpdate.needsUpdate = 'NO';
+              warningUpdate.changeFlags = '';
+            }
+            
+            await updateSheetRow(row._rowIndex, warningUpdate);
             console.log(`  ⚠ Sheet updated (WARNING status)`);
           } catch (sheetErr) {
             console.log(`  ✗ Sheet update failed: ${sheetErr.message}`);
@@ -619,7 +617,7 @@ async function main() {
           break;
           
         case 'FAILED':
-          console.log(`  ✗ FAILED: ${result.apiError}`);
+          console.log(`  ✗ FAILED [${result.mode || 'CREATE'}]: ${result.apiError}`);
           results.failed.push(result);
           
           // Update sheet with FAILED status
