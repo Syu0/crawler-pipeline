@@ -182,6 +182,16 @@ async function updateExistingGoods(input, existingRowData = {}) {
   
   console.log(`[UpdateGoods] SecondSubCat=${secondSubCat} (required field)`);
   
+  // Verify final payload
+  console.log(`[UpdateGoods] Final payload:`, JSON.stringify({
+    ItemCode: updatePayload.ItemCode,
+    SecondSubCat: updatePayload.SecondSubCat,
+    ItemTitle: updatePayload.ItemTitle || '(not changed)',
+    ItemPrice: updatePayload.ItemPrice || '(not changed)',
+    ItemDescription: updatePayload.ItemDescription ? '(included)' : '(not changed)',
+    StandardImage: updatePayload.StandardImage ? '(included)' : '(not changed)',
+  }));
+  
   // Log before API call
   const vendorItemId = existingRowData.vendorItemId || existingRowData.itemId || 'unknown';
   console.log(`[UPDATE] Calling Qoo10 update API for qoo10ItemId=${input.ItemCode} vendorItemId=${vendorItemId} fields=[${Object.keys(fieldsToUpdate).join(', ')}]`);
