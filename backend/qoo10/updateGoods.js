@@ -96,13 +96,13 @@ async function fetchQoo10ItemData(itemCode) {
 
 /**
  * Resolve a required field value with fallback chain
- * Priority: 1) input, 2) row (sheet), 3) existingRowData, 4) fetch from Qoo10
+ * Priority: 1) input, 2) row (sheet), 3) existingRowData, 4) REQUIRED_DEFAULTS, 5) fetch from Qoo10
  * @param {string} apiField - Qoo10 API field name
  * @param {object} input - Current input data
  * @param {object} row - Current sheet row data
  * @param {object} existingRowData - Previously stored row data
  * @param {object|null} qoo10Data - Data fetched from Qoo10 (optional)
- * @returns {string} Resolved value or empty string
+ * @returns {{value: string, source: string}} Resolved value and source
  */
 function resolveFieldValue(apiField, input, row, existingRowData, qoo10Data) {
   const sheetCol = FIELD_TO_SHEET_MAP[apiField] || apiField;
@@ -128,9 +128,13 @@ function resolveFieldValue(apiField, input, row, existingRowData, qoo10Data) {
     return { value: normalize(existingRowData[apiField]), source: 'existingRowData' };
   }
   
-  // Priority 4: Qoo10 fetched data
+  // Priority 4: REQUIRED_DEFAULTS
+  if (REQUIRED_DEFAULTS[apiField] !== undefined) {
+    return { value: REQUIRED_DEFAULTS[apiField], source: 'default' };
+  }
+  
+  // Priority 5: Qoo10 fetched data
   if (qoo10Data) {
-    // Try common field name variations
     const variations = [apiField, apiField.toLowerCase(), sheetCol];
     for (const key of variations) {
       if (nonEmpty(qoo10Data[key])) {
