@@ -484,20 +484,19 @@ async function main() {
     
     console.log(`Found ${dataRows.length} total rows`);
     
+    // Count row categories
+    const unregisteredRows = dataRows.filter(r => !r.qoo10ItemId);
+    const registeredNeedsUpdate = dataRows.filter(r => r.qoo10ItemId && r.needsUpdate === 'YES');
+    const registeredNoUpdate = dataRows.filter(r => r.qoo10ItemId && r.needsUpdate !== 'YES');
+    
+    console.log(`  Unregistered (CREATE):  ${unregisteredRows.length}`);
+    console.log(`  Registered + needsUpdate=YES (UPDATE): ${registeredNeedsUpdate.length}`);
+    console.log(`  Registered + no update: ${registeredNoUpdate.length} (will skip)`);
+    
     // Filter rows based on mode
-    // Include both unregistered (CREATE) and registered (UPDATE) rows
-    let rowsToProcess = dataRows.filter(row => {
-      // Always include unregistered rows
-      if (!row.qoo10ItemId) return true;
-      // Include registered rows that need update (needsUpdate=YES)
-      if (row.needsUpdate === 'YES') return true;
-      return false;
-    });
+    let rowsToProcess = [...unregisteredRows, ...registeredNeedsUpdate];
     
-    const createCount = rowsToProcess.filter(r => !r.qoo10ItemId).length;
-    const updateCount = rowsToProcess.filter(r => r.qoo10ItemId && r.needsUpdate === 'YES').length;
-    
-    console.log(`Rows to process: ${rowsToProcess.length} (CREATE: ${createCount}, UPDATE: ${updateCount})`);
+    console.log(`\nRows to process: ${rowsToProcess.length}`);
     
     // Apply limit
     if (options.limit && options.limit > 0) {
@@ -506,7 +505,11 @@ async function main() {
     }
     
     if (rowsToProcess.length === 0) {
-      console.log('\nNo rows to process');
+      console.log('\nNo rows to process.');
+      if (registeredNoUpdate.length > 0) {
+        console.log(`Tip: ${registeredNoUpdate.length} registered rows were skipped.`);
+        console.log('     To update them, set needsUpdate="YES" in the sheet.');
+      }
       return;
     }
     
