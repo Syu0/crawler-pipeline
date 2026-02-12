@@ -156,27 +156,38 @@ function columnLetter(index) {
 }
 
 /**
- * Validate row for registration
+ * Validate row for registration or update
+ * @param {object} row - Row data
+ * @param {boolean} isUpdateMode - True if this is an UPDATE operation
  */
-function validateRow(row) {
-  // Skip if already registered
-  if (row.qoo10ItemId) {
+function validateRow(row, isUpdateMode = false) {
+  // For CREATE mode: skip if already registered
+  // For UPDATE mode: qoo10ItemId is required, not a skip condition
+  if (!isUpdateMode && row.qoo10ItemId) {
     return { valid: false, reason: 'Already registered (qoo10ItemId exists)' };
+  }
+  
+  // For UPDATE mode: must have qoo10ItemId
+  if (isUpdateMode && !row.qoo10ItemId) {
+    return { valid: false, reason: 'UPDATE mode requires qoo10ItemId' };
   }
   
   if (!row.vendorItemId && !row.itemId) {
     return { valid: false, reason: 'Missing vendorItemId and itemId' };
   }
   
-  if (!row.ItemPrice || row.ItemPrice <= 0) {
+  // Price validation - required for CREATE, optional for UPDATE
+  if (!isUpdateMode && (!row.ItemPrice || row.ItemPrice <= 0)) {
     return { valid: false, reason: 'Missing or invalid ItemPrice' };
   }
   
-  if (!row.categoryId) {
+  // Category validation - required for CREATE, optional for UPDATE
+  if (!isUpdateMode && !row.categoryId) {
     return { valid: false, reason: 'Missing categoryId' };
   }
   
-  if (!row.ItemTitle) {
+  // Title validation - required for CREATE, optional for UPDATE
+  if (!isUpdateMode && !row.ItemTitle) {
     return { valid: false, reason: 'Missing ItemTitle' };
   }
   
