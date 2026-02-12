@@ -14,7 +14,20 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-const { updateGoods } = require('../../scripts/lib/qoo10Client');
+const { updateGoods, qoo10PostMethod } = require('../../scripts/lib/qoo10Client');
+
+// Fields that MUST be included in UpdateGoods request (API requirement)
+const REQUIRED_FIELDS = ['SecondSubCat', 'ItemTitle'];
+
+// Mapping: Qoo10 API field -> sheet column name
+const FIELD_TO_SHEET_MAP = {
+  'SecondSubCat': 'jpCategoryIdUsed',
+  'ItemTitle': 'ItemTitle',
+  'ItemPrice': 'qoo10SellingPrice',
+  'ItemDescription': 'ItemDescriptionText',
+  'StandardImage': 'StandardImage',
+  'Weight': 'WeightKg',
+};
 
 // Fields that can be updated via UpdateGoods API
 const UPDATABLE_FIELDS = [
@@ -37,6 +50,78 @@ const UPDATABLE_FIELDS = [
   'ContactInfo',
   'TaxRate',
 ];
+
+/**
+ * Fetch current item data from Qoo10 by ItemCode
+ * @param {string} itemCode - Qoo10 item code
+ * @returns {Promise<object|null>} Item data or null
+ */
+async function fetchQoo10ItemData(itemCode) {
+  try {
+    console.log(`[UpdateGoods] Fetching item data from Qoo10 for ItemCode=${itemCode}`);
+    const response = await qoo10PostMethod('ItemsBasic.GetGoodsInfo', {
+      ItemCode: itemCode,
+      returnType: 'application/json'
+    }, '1.0');
+    
+    if (response.ResultCode === 0 && response.ResultObject) {
+      return response.ResultObject;
+    }
+    console.warn(`[UpdateGoods] GetGoodsInfo failed: ${response.ResultMsg || 'Unknown'}`);
+    return null;
+  } catch (err) {
+    console.warn(`[UpdateGoods] GetGoodsInfo error: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Resolve a required field value with fallback chain
+ * Priority: 1) input, 2) row (sheet), 3) existingRowData, 4) fetch from Qoo10
+ * @param {string} apiField - Qoo10 API field name
+ * @param {object} input - Current input data
+ * @param {object} row - Current sheet row data
+ * @param {object} existingRowData - Previously stored row data
+ * @param {object|null} qoo10Data - Data fetched from Qoo10 (optional)
+ * @returns {string} Resolved value or empty string
+ */
+function resolveFieldValue(apiField, input, row, existingRowData, qoo10Data) {
+  const sheetCol = FIELD_TO_SHEET_MAP[apiField] || apiField;
+  
+  // Priority 1: input (explicit new value)
+  if (nonEmpty(input[apiField])) {
+    return { value: normalize(input[apiField]), source: 'input' };
+  }
+  
+  // Priority 2: current sheet row
+  if (nonEmpty(row[sheetCol])) {
+    return { value: normalize(row[sheetCol]), source: 'row' };
+  }
+  if (nonEmpty(row[apiField])) {
+    return { value: normalize(row[apiField]), source: 'row' };
+  }
+  
+  // Priority 3: existingRowData
+  if (nonEmpty(existingRowData[sheetCol])) {
+    return { value: normalize(existingRowData[sheetCol]), source: 'existingRowData' };
+  }
+  if (nonEmpty(existingRowData[apiField])) {
+    return { value: normalize(existingRowData[apiField]), source: 'existingRowData' };
+  }
+  
+  // Priority 4: Qoo10 fetched data
+  if (qoo10Data) {
+    // Try common field name variations
+    const variations = [apiField, apiField.toLowerCase(), sheetCol];
+    for (const key of variations) {
+      if (nonEmpty(qoo10Data[key])) {
+        return { value: normalize(qoo10Data[key]), source: 'qoo10Fetch' };
+      }
+    }
+  }
+  
+  return { value: '', source: 'missing' };
+}
 
 /**
  * Normalize value for comparison
