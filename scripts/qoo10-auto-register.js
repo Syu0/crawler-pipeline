@@ -17,6 +17,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend'
 
 const { getSheetsClient } = require('./lib/sheetsClient');
 const { registerNewGoods } = require('../backend/qoo10/registerNewGoods');
+const { updateExistingGoods } = require('../backend/qoo10/updateGoods');
 const { calculateSellingPrice } = require('./lib/qoo10PayloadGenerator');
 const { resolveJpCategoryId } = require('./lib/categoryResolver');
 
