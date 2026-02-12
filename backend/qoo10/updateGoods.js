@@ -39,6 +39,21 @@ const UPDATABLE_FIELDS = [
 ];
 
 /**
+ * Normalize value for comparison
+ */
+function normalize(v) {
+  if (v === null || v === undefined) return '';
+  return String(v).replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Check if value is non-empty
+ */
+function nonEmpty(v) {
+  return normalize(v).length > 0;
+}
+
+/**
  * Detect which fields have changed between old and new data
  * @param {object} oldData - Previous row data from sheet
  * @param {object} newData - New payload data
@@ -48,23 +63,27 @@ function detectChangedFields(oldData, newData) {
   const changedFields = {};
   
   // Map sheet columns to Qoo10 API fields
-  const fieldMappings = {
+  // Format: { qoo10ApiField: sheetColumnName }
+  const UPDATE_FIELD_MAP = {
     'ItemTitle': 'ItemTitle',
-    'qoo10SellingPrice': 'ItemPrice',
-    'jpCategoryIdUsed': 'SecondSubCat',
+    'ItemPrice': 'qoo10SellingPrice',
+    'SecondSubCat': 'jpCategoryIdUsed',
     'StandardImage': 'StandardImage',
-    'ItemDescriptionText': 'ItemDescription',
-    'WeightKg': 'Weight',
+    'ItemDescription': 'ItemDescriptionText',
+    'Weight': 'WeightKg',
   };
   
-  for (const [sheetCol, apiField] of Object.entries(fieldMappings)) {
-    const oldVal = oldData[sheetCol] || '';
-    const newVal = newData[apiField] || newData[sheetCol] || '';
+  for (const [apiField, sheetCol] of Object.entries(UPDATE_FIELD_MAP)) {
+    // Get old value from sheet column
+    const oldVal = normalize(oldData[sheetCol]);
     
-    // Only include if new value is non-empty and different from old
-    if (newVal && String(newVal).trim() !== '' && String(oldVal).trim() !== String(newVal).trim()) {
-      changedFields[apiField] = newVal;
-      console.log(`[UpdateGoods]   ${apiField}: "${String(oldVal).substring(0, 30)}" → "${String(newVal).substring(0, 30)}"`);
+    // Get new value: check apiField first (from input), then sheetCol
+    const newVal = normalize(newData[apiField] || newData[sheetCol]);
+    
+    // Only include if new value is non-empty AND different from old
+    if (nonEmpty(newVal) && oldVal !== newVal) {
+      changedFields[apiField] = newData[apiField] || newData[sheetCol];
+      console.log(`[UpdateGoods]   ${apiField}: "${oldVal.substring(0, 30)}" → "${newVal.substring(0, 30)}"`);
     }
   }
   
