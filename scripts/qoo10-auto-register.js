@@ -484,9 +484,20 @@ async function main() {
     
     console.log(`Found ${dataRows.length} total rows`);
     
-    // Filter unregistered rows
-    let rowsToProcess = dataRows.filter(row => !row.qoo10ItemId);
-    console.log(`Unregistered rows: ${rowsToProcess.length}`);
+    // Filter rows based on mode
+    // Include both unregistered (CREATE) and registered (UPDATE) rows
+    let rowsToProcess = dataRows.filter(row => {
+      // Always include unregistered rows
+      if (!row.qoo10ItemId) return true;
+      // Include registered rows that need update (needsUpdate=YES)
+      if (row.needsUpdate === 'YES') return true;
+      return false;
+    });
+    
+    const createCount = rowsToProcess.filter(r => !r.qoo10ItemId).length;
+    const updateCount = rowsToProcess.filter(r => r.qoo10ItemId && r.needsUpdate === 'YES').length;
+    
+    console.log(`Rows to process: ${rowsToProcess.length} (CREATE: ${createCount}, UPDATE: ${updateCount})`);
     
     // Apply limit
     if (options.limit && options.limit > 0) {
@@ -506,13 +517,15 @@ async function main() {
       success: [],
       skipped: [],
       failed: [],
-      dryRun: []
+      dryRun: [],
+      noChanges: []
     };
     
     // Process each row
     for (const row of rowsToProcess) {
       const vendorItemId = row.vendorItemId || row.itemId;
-      console.log(`Processing: ${vendorItemId}...`);
+      const isUpdate = row.qoo10ItemId && row.qoo10ItemId.trim() !== '';
+      console.log(`Processing: ${vendorItemId} [${isUpdate ? 'UPDATE' : 'CREATE'}]...`);
       
       const result = await registerProduct(row, options.dryRun);
       
@@ -528,16 +541,45 @@ async function main() {
       
       switch (result.status) {
         case 'SUCCESS':
-          console.log(`  ✓ SUCCESS: qoo10ItemId=${result.qoo10ItemId}, price=${result.qoo10SellingPrice}`);
+          console.log(`  ✓ SUCCESS [${result.mode || 'CREATE'}]: qoo10ItemId=${result.qoo10ItemId}, price=${result.qoo10SellingPrice}`);
+          if (result.fieldsUpdated && result.fieldsUpdated.length > 0) {
+            console.log(`    Fields updated: [${result.fieldsUpdated.join(', ')}]`);
+          }
           results.success.push(result);
           
-          // Update Google Sheet
+          // Update Google Sheet - preserve existing values, don't overwrite with empty
           try {
-            await updateSheetRow(row._rowIndex, {
-              qoo10ItemId: result.qoo10ItemId,
-              qoo10SellingPrice: result.qoo10SellingPrice,
-              qoo10SellerCode: result.sellerCode || '',
+            const sheetUpdate = {
               ...categoryUpdate,
+              registrationMode: 'REAL',
+              registrationStatus: 'SUCCESS',
+              registrationMessage: result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully',
+              lastRegisteredAt: new Date().toISOString()
+            };
+            
+            // Only set these if we have values (don't overwrite existing with empty)
+            if (result.qoo10ItemId) sheetUpdate.qoo10ItemId = result.qoo10ItemId;
+            if (result.qoo10SellingPrice) sheetUpdate.qoo10SellingPrice = result.qoo10SellingPrice;
+            if (result.sellerCode) sheetUpdate.qoo10SellerCode = result.sellerCode;
+            
+            // Clear needsUpdate flag after successful update
+            if (result.mode === 'UPDATE') {
+              sheetUpdate.needsUpdate = 'NO';
+              sheetUpdate.changeFlags = '';
+            }
+            
+            await updateSheetRow(row._rowIndex, sheetUpdate);
+            console.log(`  ✓ Sheet updated`);
+          } catch (sheetErr) {
+            console.log(`  ✗ Sheet update failed: ${sheetErr.message}`);
+          }
+          break;
+          
+        case 'NO_CHANGES':
+          console.log(`  → NO_CHANGES: ${result.message}`);
+          results.noChanges.push(result);
+          // Don't update sheet - nothing changed
+          break;
               registrationMode: 'REAL',
               registrationStatus: 'SUCCESS',
               registrationMessage: 'Registered successfully',
