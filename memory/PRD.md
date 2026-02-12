@@ -157,4 +157,4 @@ npm run docs:sync                # Sync documentation
 ---
 
 ## Last Updated
-February 9, 2025 - Category Accumulation feature implemented
+February 2025 - Fixed Qoo10 UpdateGoods API change detection logic
