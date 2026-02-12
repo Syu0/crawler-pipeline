@@ -323,7 +323,7 @@ async function updateExistingGoods(input, currentRowData = {}) {
   if (updatePayload.ProductionPlaceType === '2') {
     if (!nonEmpty(updatePayload.ProductionPlace)) {
       // Resolve ProductionPlace with same priority chain
-      const ppRes = resolveFieldValue('ProductionPlace', input, existingRowData, existingRowData, null);
+      const ppRes = resolveFieldValue('ProductionPlace', input, currentRowData, currentRowData, null);
       updatePayload.ProductionPlace = ppRes.value || REQUIRED_DEFAULTS.ProductionPlace;
       console.log(`[UpdateGoods] ProductionPlace resolved: ${updatePayload.ProductionPlace} (source: ${ppRes.source || 'default'})`);
     }
