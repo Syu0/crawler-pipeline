@@ -163,15 +163,16 @@ function nonEmpty(v) {
 }
 
 /**
- * Detect which fields have changed between old and new data
- * @param {object} oldData - Previous row data from sheet
- * @param {object} newData - New payload data
- * @returns {object} Object with only changed fields
+ * Detect which fields have changed between previous row state and current row state
+ * Uses sheet data as the SOURCE OF TRUTH
+ * @param {object} previousRowData - Previous row data from sheet (at last registration)
+ * @param {object} currentRowData - Current row data from sheet (source of truth)
+ * @returns {object} Object with only changed fields (keyed by Qoo10 API field name)
  */
-function detectChangedFields(oldData, newData) {
+function detectChangedFields(previousRowData, currentRowData) {
   const changedFields = {};
   
-  // Map sheet columns to Qoo10 API fields
+  // Map Qoo10 API fields to sheet column names
   // Format: { qoo10ApiField: sheetColumnName }
   const UPDATE_FIELD_MAP = {
     'ItemTitle': 'ItemTitle',
@@ -182,17 +183,22 @@ function detectChangedFields(oldData, newData) {
     'Weight': 'WeightKg',
   };
   
+  console.log(`[UpdateGoods] Change detection - comparing sheet row data:`);
+  
   for (const [apiField, sheetCol] of Object.entries(UPDATE_FIELD_MAP)) {
-    // Get old value from sheet column
-    const oldVal = normalize(oldData[sheetCol]);
+    // Get previous value from sheet column (last known state)
+    const prevVal = normalize(previousRowData[sheetCol]);
     
-    // Get new value: check apiField first (from input), then sheetCol
-    const newVal = normalize(newData[apiField] || newData[sheetCol]);
+    // Get current value FROM THE SHEET ROW (source of truth)
+    const currVal = normalize(currentRowData[sheetCol]);
     
-    // Only include if new value is non-empty AND different from old
-    if (nonEmpty(newVal) && oldVal !== newVal) {
-      changedFields[apiField] = newData[apiField] || newData[sheetCol];
-      console.log(`[UpdateGoods]   ${apiField}: "${oldVal.substring(0, 30)}" → "${newVal.substring(0, 30)}"`);
+    // Log comparison for debugging
+    console.log(`[UpdateGoods]   ${apiField} (${sheetCol}): prev="${prevVal.substring(0, 40)}" | curr="${currVal.substring(0, 40)}"`);
+    
+    // Only include if current value is non-empty AND different from previous
+    if (nonEmpty(currVal) && prevVal !== currVal) {
+      changedFields[apiField] = currentRowData[sheetCol];
+      console.log(`[UpdateGoods]     → CHANGED!`);
     }
   }
   
