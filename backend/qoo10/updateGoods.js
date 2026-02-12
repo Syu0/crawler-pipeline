@@ -305,7 +305,10 @@ async function updateExistingGoods(input, existingRowData = {}) {
   // Log final payload verification
   const payloadKeys = Object.keys(updatePayload).filter(k => k !== 'returnType');
   console.log(`[UpdateGoods] Final payload keys: [${payloadKeys.join(', ')}]`);
-  console.log(`[UpdateGoods] Verification - SecondSubCat=${updatePayload.SecondSubCat ? 'PRESENT' : 'MISSING'}, ItemTitle=${updatePayload.ItemTitle ? 'PRESENT' : 'MISSING'}`);
+  
+  // Confirm all required fields present
+  const reqCheck = REQUIRED_FIELDS.map(f => `${f}=${updatePayload[f] ? 'OK' : 'MISSING'}`).join(', ');
+  console.log(`[UpdateGoods] Required params: ${reqCheck}`);
   
   // Log before API call
   const vendorItemId = existingRowData.vendorItemId || existingRowData.itemId || 'unknown';
