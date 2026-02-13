@@ -77,6 +77,11 @@ Build a pipeline to scrape Coupang product URLs, store data in Google Sheets, an
   - `requiredPrice = baseCostJpy / (1 - commission - minMargin)`
   - `targetPrice = baseCostJpy * (1 + targetMargin)`
   - Currency conversion uses `/ FX_JPY_TO_KRW` (division, not multiplication)
+- [x] **Dynamic Shipping Fee from Txlogis_standard** (Dec 2025)
+  - Japan shipping fee now looked up from `Txlogis_standard` sheet by weight range
+  - `WeightKg` is now REQUIRED - row fails if missing/invalid
+  - Shipping rates cached once per run for efficiency
+  - New module: `/app/backend/pricing/shippingLookup.js`
 
 ### P1 - Future Enhancements
 - [ ] Multi-option support (SIZE + COLOR)
