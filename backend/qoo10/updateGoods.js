@@ -19,6 +19,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 const { updateGoods } = require('./client');
+const { decideItemPriceJpy } = require('../pricing/priceDecision');
 
 // Default ShippingNo (same as registerNewGoods)
 const DEFAULT_SHIPPING_NO = '471554';
