@@ -45,6 +45,20 @@ function buildUpdateGoodsParams(input, rowData, shippingNo) {
     return String(defaultVal);
   };
   
+  // ===== PRICING DECISION =====
+  // Determine fallback using existing logic (current qoo10SellingPrice or input)
+  const existingFallbackJpy = resolve('ItemPrice', 'qoo10SellingPrice', '0');
+  
+  // Decide final price using centralized pricing module
+  const priceDecision = decideItemPriceJpy({
+    row: rowData,
+    existingFallbackJpy: existingFallbackJpy
+  });
+  
+  // Log pricing decision
+  const vendorItemId = rowData.vendorItemId || rowData.itemId || 'unknown';
+  console.log(`[PriceDecision][UPDATE] vendorItemId=${vendorItemId} CostPriceKrw=${rowData.CostPriceKrw || ''} ItemPriceJPY=${priceDecision.priceJpy} source=${priceDecision.source}`);
+  
   // Build ItemDescription - same logic as registerNewGoods
   let finalDescription = resolve('ItemDescription', 'ItemDescriptionText', '<p>Product description</p>');
   
@@ -75,7 +89,7 @@ function buildUpdateGoodsParams(input, rowData, shippingNo) {
     ItemCode: String(input.ItemCode),  // <-- Instead of SellerCode
     SecondSubCat: resolve('SecondSubCat', 'jpCategoryIdUsed', ''),
     ItemTitle: resolve('ItemTitle', 'ItemTitle', ''),
-    ItemPrice: resolve('ItemPrice', 'qoo10SellingPrice', '0'),
+    ItemPrice: priceDecision.priceJpy,  // <-- From pricing module
     RetailPrice: resolve('RetailPrice', 'RetailPrice', '0'),
     ItemQty: resolve('ItemQty', 'ItemQty', '100'),
     AvailableDateType: resolve('AvailableDateType', 'AvailableDateType', '0'),
