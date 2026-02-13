@@ -86,9 +86,13 @@ These fields are written back after successful Qoo10 registration:
 
 | Field | Description |
 |-------|-------------|
-| `qoo10SellingPrice` | CEILING(ItemPrice × 1.12 × 1.03, 10) |
+| `qoo10SellingPrice` | ItemPrice in JPY (computed from CostPriceKrw using fixed FX rate) |
 | `qoo10ItemId` | ItemCode or ItemNo from Qoo10 API response |
 | `updatedAt` | Timestamp of last update (ISO 8601) |
+
+**Pricing Computation:**
+- `ItemPrice (JPY) = floor(CostPriceKrw / 10)` using fixed FX rate: 1 JPY = 10 KRW
+- If `CostPriceKrw` is missing or invalid, falls back to existing price logic
 
 **Rules:**
 - Only written after successful API call
