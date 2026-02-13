@@ -729,14 +729,22 @@ async function main() {
           results.failed.push(result);
           
           // Update sheet with FAILED status
+          // STRICT: Always write back computed JPY price even on failure
           try {
-            await updateSheetRow(row._rowIndex, {
+            const failedUpdate = {
               ...categoryUpdate,
               registrationMode: 'REAL',
               registrationStatus: 'FAILED',
               registrationMessage: result.apiError || 'API error',
               lastRegisteredAt: new Date().toISOString()
-            });
+            };
+            
+            // Always write back computed price (even if empty on price validation failure)
+            if (result.qoo10SellingPrice) {
+              failedUpdate.qoo10SellingPrice = result.qoo10SellingPrice;
+            }
+            
+            await updateSheetRow(row._rowIndex, failedUpdate);
           } catch (sheetErr) {
             // Ignore sheet update error on failed registration
           }
