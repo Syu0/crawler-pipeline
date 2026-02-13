@@ -20,6 +20,7 @@ const { registerNewGoods } = require('../backend/qoo10/registerNewGoods');
 const { updateExistingGoods } = require('../backend/qoo10/updateGoods');
 const { calculateSellingPrice } = require('./lib/qoo10PayloadGenerator');
 const { resolveJpCategoryId } = require('./lib/categoryResolver');
+const { decideItemPriceJpy } = require('../backend/pricing/priceDecision');
 
 // Configuration
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
