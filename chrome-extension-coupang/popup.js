@@ -57,6 +57,24 @@ function hideError() {
 }
 
 /**
+ * Show completion state - hide button, show complete message
+ */
+function showCompletionState() {
+  sendBtn.classList.add('hidden');
+  completeMsgEl.classList.remove('hidden');
+  sendCompleted = true;
+}
+
+/**
+ * Reset to ready state - show button, hide complete message
+ */
+function resetToReadyState() {
+  sendBtn.classList.remove('hidden');
+  sendBtn.disabled = false;
+  completeMsgEl.classList.add('hidden');
+}
+
+/**
  * Update product info display
  */
 function updateProductInfo(data) {
