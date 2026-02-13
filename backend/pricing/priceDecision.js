@@ -109,26 +109,30 @@ function computeJpyFromKrw(costKrw, japanShippingJpy) {
 /**
  * Validate and compute final ItemPrice (JPY) for Qoo10 API
  * 
- * STRICT: ItemPrice (KRW) is REQUIRED.
+ * STRICT: ItemPrice (KRW) and WeightKg are REQUIRED.
  * If missing/invalid, returns error that MUST fail the registration.
  * 
  * @param {object} params
  * @param {object} params.row - Current row data from sheet
  * @param {string} params.vendorItemId - Vendor item ID for logging
  * @param {string} params.mode - 'CREATE' or 'UPDATE' for logging
- * @returns {{ 
+ * @param {object} params.sheetsClient - Google Sheets API client (for shipping lookup)
+ * @param {string} params.sheetId - Google Sheet ID (for shipping lookup)
+ * @returns {Promise<{ 
  *   valid: boolean, 
  *   priceJpy: string, 
  *   rawKrw: string,
+ *   weightKg: number,
+ *   japanShippingJpy: number,
  *   error: string | null 
- * }}
+ * }>}
  */
-function decideItemPriceJpy({ row, vendorItemId, mode }) {
+async function decideItemPriceJpy({ row, vendorItemId, mode, sheetsClient, sheetId }) {
   const rawKrw = row?.ItemPrice;
   const parsed = parsePriceKrw(rawKrw);
   
+  // STRICT: ItemPrice is REQUIRED
   if (!parsed.valid) {
-    // STRICT: ItemPrice is REQUIRED
     const errorMsg = 'ItemPrice missing or invalid';
     console.error(`[PriceDecision][ERROR] vendorItemId=${vendorItemId} ItemPrice="${rawKrw || ''}" - ${errorMsg}`);
     
@@ -136,20 +140,76 @@ function decideItemPriceJpy({ row, vendorItemId, mode }) {
       valid: false,
       priceJpy: '',
       rawKrw: String(rawKrw || ''),
+      weightKg: 0,
+      japanShippingJpy: 0,
       error: errorMsg
     };
   }
   
-  // Compute JPY using full formula
-  const priceJpy = computeJpyFromKrw(parsed.krw);
+  // STRICT: WeightKg is REQUIRED for Txlogis shipping lookup
+  const rawWeight = row?.WeightKg;
+  const weightParsed = parseWeight(rawWeight);
+  
+  if (!weightParsed.valid) {
+    const errorMsg = 'WeightKg missing or invalid (required for Txlogis shipping)';
+    console.error(`[PriceDecision][ERROR] vendorItemId=${vendorItemId} WeightKg="${rawWeight || ''}" - ${errorMsg}`);
+    
+    return {
+      valid: false,
+      priceJpy: '',
+      rawKrw: parsed.sanitized,
+      weightKg: 0,
+      japanShippingJpy: 0,
+      error: errorMsg
+    };
+  }
+  
+  // Lookup Japan shipping fee from Txlogis_standard
+  const shippingResult = await getJapanShippingJpyForWeight({
+    sheetsClient,
+    sheetId,
+    weightKg: weightParsed.kg
+  });
+  
+  if (!shippingResult.valid) {
+    console.error(`[PriceDecision][ERROR] vendorItemId=${vendorItemId} - ${shippingResult.error}`);
+    
+    return {
+      valid: false,
+      priceJpy: '',
+      rawKrw: parsed.sanitized,
+      weightKg: weightParsed.kg,
+      japanShippingJpy: 0,
+      error: shippingResult.error
+    };
+  }
+  
+  // Compute JPY using full formula with dynamic shipping fee
+  const priceJpy = computeJpyFromKrw(parsed.krw, shippingResult.feeJpy);
+  
+  if (!priceJpy) {
+    const errorMsg = 'Price calculation failed';
+    console.error(`[PriceDecision][ERROR] vendorItemId=${vendorItemId} - ${errorMsg}`);
+    
+    return {
+      valid: false,
+      priceJpy: '',
+      rawKrw: parsed.sanitized,
+      weightKg: weightParsed.kg,
+      japanShippingJpy: shippingResult.feeJpy,
+      error: errorMsg
+    };
+  }
   
   // Log success
-  console.log(`[PriceDecision][${mode}] vendorItemId=${vendorItemId} ItemPrice(KRW)=${parsed.sanitized} computedJPY=${priceJpy}`);
+  console.log(`[PriceDecision][${mode}] vendorItemId=${vendorItemId} ItemPrice(KRW)=${parsed.sanitized} WeightKg=${weightParsed.kg} japanShippingJpy=${shippingResult.feeJpy} computedJPY=${priceJpy}`);
   
   return {
     valid: true,
     priceJpy,
     rawKrw: parsed.sanitized,
+    weightKg: weightParsed.kg,
+    japanShippingJpy: shippingResult.feeJpy,
     error: null
   };
 }
