@@ -217,6 +217,8 @@ async function decideItemPriceJpy({ row, vendorItemId, mode, sheetsClient, sheet
 module.exports = {
   FX_JPY_TO_KRW,
   parsePriceKrw,
+  parseWeight,
   computeJpyFromKrw,
-  decideItemPriceJpy
+  decideItemPriceJpy,
+  getJapanShippingJpyForWeight
 };
