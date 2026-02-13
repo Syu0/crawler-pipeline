@@ -7,11 +7,12 @@ const RECEIVER_URL = 'http://127.0.0.1:8787/api/coupang/upsert';
 const COUPANG_URL_PATTERN = /^https:\/\/www\.coupang\.com\/vp\/products\/\d+/;
 
 // UI Elements
-let statusEl, statusTextEl, productInfoEl, sendBtn, errorMsgEl;
+let statusEl, statusTextEl, productInfoEl, sendBtn, errorMsgEl, completeMsgEl;
 let infoProductIdEl, infoTitleEl, infoPriceEl;
 
 // State
 let currentProductData = null;
+let sendCompleted = false;  // Track if send was successful in this session
 
 document.addEventListener('DOMContentLoaded', () => {
   // Get UI elements
@@ -20,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
   productInfoEl = document.getElementById('product-info');
   sendBtn = document.getElementById('send-btn');
   errorMsgEl = document.getElementById('error-msg');
+  completeMsgEl = document.getElementById('complete-msg');
   infoProductIdEl = document.getElementById('info-product-id');
   infoTitleEl = document.getElementById('info-title');
   infoPriceEl = document.getElementById('info-price');
