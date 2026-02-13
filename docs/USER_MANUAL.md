@@ -38,7 +38,7 @@ After scraping, verify these columns are populated:
 | `ItemDescriptionText` | Product description | Yes |
 | `categoryId` | Coupang category ID | Yes |
 | `categoryPath3` | Last 3 breadcrumb segments | For category mapping |
-| `CostPriceKrw` | Coupang selling price in KRW | Source for JPY computation |
+| `CostPriceKrw` | Coupang selling price in KRW | **REQUIRED** for JPY computation |
 
 ### Pricing: CostPriceKrw → ItemPrice (JPY)
 
@@ -56,7 +56,14 @@ ItemPrice (JPY) = floor(CostPriceKrw / 10)
 | 12500 | 1250 |
 | 999 | 99 |
 
-**Fallback:** If `CostPriceKrw` is empty or invalid, the existing price logic is used.
+**STRICT REQUIREMENT:** `CostPriceKrw` is **REQUIRED**.
+- If `CostPriceKrw` is empty, null, invalid, or <= 0:
+  - The row **FAILS** immediately
+  - No Qoo10 API call is made
+  - `registrationStatus` = `FAILED`
+  - `registrationMessage` = `CostPriceKrw missing or invalid`
+
+**Price Write-back:** The computed `ItemPrice (JPY)` is always written back to the sheet's `qoo10SellingPrice` column, regardless of whether the API call succeeds or fails.
 
 This pricing applies to **both** CREATE (SetNewGoods) and UPDATE (UpdateGoods) operations.
 
