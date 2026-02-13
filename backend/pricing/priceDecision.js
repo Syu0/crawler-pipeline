@@ -60,18 +60,25 @@ function parsePriceKrw(priceKrw) {
  * 
  * Formula with commission and margin:
  * 1. totalKrw = costKrw + DOMESTIC_SHIPPING_KRW
- * 2. baseCostJpy = totalKrw / FX_JPY_TO_KRW + JAPAN_SHIPPING_JPY
+ * 2. baseCostJpy = totalKrw / FX_JPY_TO_KRW + japanShippingJpy
  * 3. requiredPrice = baseCostJpy / (1 - MARKET_COMMISSION_RATE - MIN_MARGIN_RATE)
  * 4. targetPrice = baseCostJpy * (1 + TARGET_MARGIN_RATE)
  * 5. finalJpy = round(max(requiredPrice, targetPrice))
  * 
  * @param {string|number} costKrw - Cost price in KRW
+ * @param {number} japanShippingJpy - Japan shipping fee in JPY (from Txlogis_standard)
  * @returns {string} JPY price as string, or "" if invalid
  */
-function computeJpyFromKrw(costKrw) {
+function computeJpyFromKrw(costKrw, japanShippingJpy) {
   const parsed = parsePriceKrw(costKrw);
   
   if (!parsed.valid) {
+    return '';
+  }
+  
+  // Validate japanShippingJpy
+  if (typeof japanShippingJpy !== 'number' || isNaN(japanShippingJpy) || japanShippingJpy < 0) {
+    console.error(`[PriceCalc] Invalid japanShippingJpy: ${japanShippingJpy}`);
     return '';
   }
   
@@ -80,7 +87,7 @@ function computeJpyFromKrw(costKrw) {
   
   // Step 2: Convert to JPY and add Japan shipping
   const convertedJpy = totalKrw / FX_JPY_TO_KRW;
-  const baseCostJpy = convertedJpy + JAPAN_SHIPPING_JPY;
+  const baseCostJpy = convertedJpy + japanShippingJpy;
   
   // Step 3: Calculate requiredPrice (ensures min margin after commission)
   // requiredPrice = baseCostJpy / (1 - commission - minMargin)
@@ -94,7 +101,7 @@ function computeJpyFromKrw(costKrw) {
   const finalJpy = Math.round(Math.max(requiredPrice, targetPrice));
   
   // Structured debug log with all calculation variables
-  console.log(`[PriceCalc] costKrw=${parsed.krw} DOMESTIC_SHIPPING_KRW=${DOMESTIC_SHIPPING_KRW} totalKrw=${totalKrw} FX_JPY_TO_KRW=${FX_JPY_TO_KRW} convertedJpy=${convertedJpy.toFixed(2)} JAPAN_SHIPPING_JPY=${JAPAN_SHIPPING_JPY} baseCostJpy=${baseCostJpy.toFixed(2)} MARKET_COMMISSION_RATE=${MARKET_COMMISSION_RATE} TARGET_MARGIN_RATE=${TARGET_MARGIN_RATE} MIN_MARGIN_RATE=${MIN_MARGIN_RATE} requiredPrice=${requiredPrice.toFixed(2)} targetPrice=${targetPrice.toFixed(2)} finalJpy=${finalJpy}`);
+  console.log(`[PriceCalc] costKrw=${parsed.krw} DOMESTIC_SHIPPING_KRW=${DOMESTIC_SHIPPING_KRW} totalKrw=${totalKrw} FX_JPY_TO_KRW=${FX_JPY_TO_KRW} convertedJpy=${convertedJpy.toFixed(2)} japanShippingJpy=${japanShippingJpy} baseCostJpy=${baseCostJpy.toFixed(2)} MARKET_COMMISSION_RATE=${MARKET_COMMISSION_RATE} TARGET_MARGIN_RATE=${TARGET_MARGIN_RATE} MIN_MARGIN_RATE=${MIN_MARGIN_RATE} requiredPrice=${requiredPrice.toFixed(2)} targetPrice=${targetPrice.toFixed(2)} finalJpy=${finalJpy}`);
   
   return String(finalJpy);
 }
