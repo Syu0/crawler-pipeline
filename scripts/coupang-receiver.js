@@ -49,8 +49,7 @@ const SHEET_HEADERS = [
   'categoryId',           // Tier-1: From URL only
   'ProductURL',           // Tier-2: Full URL
   'ItemTitle',
-  'ItemPrice',            // Tier-1: Number, no symbols (legacy, kept for compatibility)
-  'CostPriceKrw',         // Coupang selling price in KRW (source for JPY computation)
+  'ItemPrice',            // Tier-1: Number, no symbols (legacy)
   'StandardImage',
   'ExtraImages',
   'WeightKg',             // Tier-1: Fixed to 1
@@ -69,7 +68,7 @@ const SHEET_HEADERS = [
   // Qoo10/JP registration columns (preserved on re-scrape)
   'qoo10ItemId',
   'qoo10SellerCode',
-  'qoo10SellingPrice',
+  'qoo10SellingPrice',    // KRW input → computed JPY written back here
   'jpCategoryIdUsed',
   'categoryMatchType',
   'categoryMatchConfidence',
