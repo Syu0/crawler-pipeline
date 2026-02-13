@@ -300,7 +300,8 @@ function buildRegistrationPayload(row, categoryResolution) {
  * Register or update a single product on Qoo10
  * Mode: CREATE if qoo10ItemId is empty, UPDATE if qoo10ItemId exists
  * 
- * STRICT: CostPriceKrw is REQUIRED. If invalid, fails with FAILED status.
+ * STRICT: qoo10SellingPrice (KRW) is REQUIRED. If invalid, fails with FAILED status.
+ * Computed JPY is written back to qoo10SellingPrice pre-API.
  */
 async function registerProduct(row, dryRun = false) {
   const vendorItemId = row.vendorItemId || row.itemId;
@@ -319,7 +320,7 @@ async function registerProduct(row, dryRun = false) {
   }
   
   // ===== STRICT PRICE VALIDATION =====
-  // Validate CostPriceKrw BEFORE category resolution or any other work
+  // Validate qoo10SellingPrice (KRW) BEFORE category resolution or any other work
   const priceDecision = decideItemPriceJpy({
     row: row,
     vendorItemId: vendorItemId,
@@ -330,7 +331,7 @@ async function registerProduct(row, dryRun = false) {
   const computedPriceJpy = priceDecision.valid ? priceDecision.priceJpy : '';
   
   if (!priceDecision.valid) {
-    // STRICT: CostPriceKrw is REQUIRED - fail immediately
+    // STRICT: qoo10SellingPrice is REQUIRED - fail immediately
     return {
       status: 'FAILED',
       vendorItemId,
