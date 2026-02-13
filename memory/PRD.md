@@ -168,4 +168,4 @@ npm run docs:sync                # Sync documentation
 ---
 
 ## Last Updated
-December 2025 - Implemented advanced pricing formula with commission and margin constraints
+December 2025 - Implemented dynamic shipping fee lookup from Txlogis_standard sheet
