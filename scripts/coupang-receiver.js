@@ -313,7 +313,8 @@ async function handleUpsert(req, res) {
       categoryId: data.categoryId || '',                    // From URL only
       ProductURL: data.ProductURL || '',                    // Full URL
       ItemTitle: data.ItemTitle || '',
-      ItemPrice: data.ItemPrice || '',                      // Number
+      ItemPrice: data.ItemPrice || '',                      // Number (legacy)
+      CostPriceKrw: data.ItemPrice || '',                   // Coupang price in KRW (for JPY computation)
       StandardImage: data.StandardImage || '',
       ExtraImages: Array.isArray(data.ExtraImages) ? JSON.stringify(data.ExtraImages) : '[]',
       WeightKg: '1',                                        // FIXED to 1
