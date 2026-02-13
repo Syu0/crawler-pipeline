@@ -85,7 +85,7 @@ function buildUpdateGoodsParams(input, rowData, shippingNo) {
     ItemCode: String(input.ItemCode),  // <-- Instead of SellerCode
     SecondSubCat: resolve('SecondSubCat', 'jpCategoryIdUsed', ''),
     ItemTitle: resolve('ItemTitle', 'ItemTitle', ''),
-    ItemPrice: priceDecision.priceJpy,  // <-- From pricing module
+    ItemPrice: itemPriceJpy,  // <-- From caller (already validated)
     RetailPrice: resolve('RetailPrice', 'RetailPrice', '0'),
     ItemQty: resolve('ItemQty', 'ItemQty', '100'),
     AvailableDateType: resolve('AvailableDateType', 'AvailableDateType', '0'),
