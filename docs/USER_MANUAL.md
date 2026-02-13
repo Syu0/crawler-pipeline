@@ -38,6 +38,27 @@ After scraping, verify these columns are populated:
 | `ItemDescriptionText` | Product description | Yes |
 | `categoryId` | Coupang category ID | Yes |
 | `categoryPath3` | Last 3 breadcrumb segments | For category mapping |
+| `CostPriceKrw` | Coupang selling price in KRW | Source for JPY computation |
+
+### Pricing: CostPriceKrw → ItemPrice (JPY)
+
+The system computes the Qoo10 selling price (JPY) from the Coupang cost price (KRW) using a fixed exchange rate:
+
+```
+ItemPrice (JPY) = floor(CostPriceKrw / 10)
+```
+
+**Fixed FX Rate:** 1 JPY = 10 KRW
+
+| CostPriceKrw | ItemPrice (JPY) |
+|--------------|-----------------|
+| 5800 | 580 |
+| 12500 | 1250 |
+| 999 | 99 |
+
+**Fallback:** If `CostPriceKrw` is empty or invalid, the existing price logic is used.
+
+This pricing applies to **both** CREATE (SetNewGoods) and UPDATE (UpdateGoods) operations.
 
 ### 3. Trigger CREATE vs UPDATE
 
