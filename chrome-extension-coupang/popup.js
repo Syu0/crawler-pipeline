@@ -120,20 +120,21 @@ async function checkCurrentTab() {
 }
 
 /**
- * Handle Send button click
+ * Handle Send button click - One-click collect and send flow
  */
 async function handleSendClick() {
+  console.log('[C2S][POPUP] === One-click flow started ===');
+  
   hideError();
   sendBtn.disabled = true;
   
   try {
     // Step 1: Collect data from page
-    setStatus('collecting', 'Collecting data...');
+    console.log('[C2S][POPUP] Step 1: Collect start');
+    setStatus('collecting', '수집 중...');
     
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     
-    // [C2S][POPUP] Log A1: handleSendClick start
-    console.log('[C2S][POPUP] handleSendClick started');
     console.log('[C2S][POPUP] tab.url:', tab?.url);
     console.log('[C2S][POPUP] tab.id:', tab?.id);
     
@@ -141,7 +142,6 @@ async function handleSendClick() {
       throw new Error('Cannot access current tab');
     }
     
-    // [C2S][POPUP] Log A2: Before executeScript
     console.log('[C2S][POPUP] Calling chrome.scripting.executeScript...');
     
     // Inject and execute content script to extract data
@@ -150,7 +150,6 @@ async function handleSendClick() {
       func: extractProductData,
     });
     
-    // [C2S][POPUP] Log A3: After executeScript
     console.log('[C2S][POPUP] executeScript returned');
     console.log('[C2S][POPUP] results exists:', !!results);
     console.log('[C2S][POPUP] results[0]?.result exists:', !!results?.[0]?.result);
@@ -161,45 +160,48 @@ async function handleSendClick() {
     
     currentProductData = results[0].result;
     
-    // [C2S][POPUP] Log A3 continued: Key fields from currentProductData
+    console.log('[C2S][POPUP] Step 1: Collect end - success');
     console.log('[C2S][POPUP] currentProductData.coupang_product_id:', currentProductData.coupang_product_id);
-    console.log('[C2S][POPUP] currentProductData.itemId:', currentProductData.itemId);
     console.log('[C2S][POPUP] currentProductData.vendorItemId:', currentProductData.vendorItemId);
-    console.log('[C2S][POPUP] currentProductData.categoryId:', currentProductData.categoryId);
-    console.log('[C2S][POPUP] currentProductData.breadcrumbSegments:', currentProductData.breadcrumbSegments);
-    console.log('[C2S][POPUP] currentProductData.breadcrumbSegments.length:', currentProductData.breadcrumbSegments?.length);
     
     // Validate required fields - coupang_product_id or vendorItemId required
     if (!currentProductData.coupang_product_id && !currentProductData.vendorItemId) {
       throw new Error('Missing required field: coupang_product_id or vendorItemId');
     }
     
+    // Show collected data immediately
     updateProductInfo(currentProductData);
     
     // Step 2: Send to receiver
-    setStatus('sending', 'Sending to Sheet...');
+    console.log('[C2S][POPUP] Step 2: Send start');
+    setStatus('sending', '전송 중...');
     
-    // [C2S][POPUP] Log A4: Before sending to receiver
     console.log('[C2S][POPUP] Sending to receiver, payload breadcrumbSegments.length:', currentProductData.breadcrumbSegments?.length);
     
     const response = await sendToReceiver(currentProductData);
     
-    // [C2S][POPUP] Log A5: After sendToReceiver
+    console.log('[C2S][POPUP] Step 2: Send end');
     console.log('[C2S][POPUP] Receiver response:', { ok: response?.ok, mode: response?.mode });
     
     if (!response.ok) {
       throw new Error(response.error || 'Failed to save to sheet');
     }
     
-    setStatus('done', `Saved! (${response.mode})`);
+    // Success - show completion state
+    console.log('[C2S][POPUP] === One-click flow completed successfully ===');
+    setStatus('done', `저장 완료! (${response.mode})`);
+    showCompletionState();
     
   } catch (err) {
-    // [C2S][POPUP] Log A6: Error details
-    console.error('[C2S][POPUP] Error caught:', err);
+    // Error handling
+    console.error('[C2S][POPUP] === One-click flow failed ===');
+    console.error('[C2S][POPUP] Error:', err.message);
     console.error('[C2S][POPUP] Error stack:', err?.stack);
-    setStatus('error', 'Failed');
+    
+    setStatus('error', '실패');
     showError(err.message);
-  } finally {
+    
+    // Re-enable button for retry (keep collected data visible if any)
     sendBtn.disabled = false;
   }
 }
