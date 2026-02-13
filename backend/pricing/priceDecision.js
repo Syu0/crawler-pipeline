@@ -12,8 +12,7 @@
  * - Computed JPY is written back to qoo10SellingPrice column
  */
 
-// Fixed exchange rate: 1 JPY = 10 KRW
-const FX_JPY_TO_KRW = 10;
+const { FX_JPY_TO_KRW, DOMESTIC_SHIPPING_KRW } = require('./pricingConstants');
 
 /**
  * Sanitize and parse KRW price from ItemPrice
@@ -40,21 +39,39 @@ function parsePriceKrw(priceKrw) {
 }
 
 /**
- * Compute JPY price from KRW
- * @param {string|number} priceKrw - Price in KRW
+ * Compute JPY price from KRW cost price
+ * 
+ * Formula:
+ * 1. totalKrw = costKrw + DOMESTIC_SHIPPING_KRW
+ * 2. convertedJpy = totalKrw / FX_JPY_TO_KRW
+ * 3. finalJpy = ceil(convertedJpy + JAPAN_SHIPPING_JPY)
+ * 
+ * @param {string|number} costKrw - Cost price in KRW
  * @returns {string} JPY price as string, or "" if invalid
  */
-function computeJpyFromKrw(priceKrw) {
-  const parsed = parsePriceKrw(priceKrw);
+function computeJpyFromKrw(costKrw) {
+  const parsed = parsePriceKrw(costKrw);
   
   if (!parsed.valid) {
     return '';
   }
   
-  // Convert: JPY = floor(KRW / 10)
-  const jpy = Math.floor(parsed.krw / FX_JPY_TO_KRW);
+  // Japan shipping cost (local constant, not in pricingConstants.js)
+  const JAPAN_SHIPPING_JPY = 100;
   
-  return String(jpy);
+  // Step 1: Add domestic shipping
+  const totalKrw = parsed.krw + DOMESTIC_SHIPPING_KRW;
+  
+  // Step 2: Convert to JPY
+  const convertedJpy = totalKrw / FX_JPY_TO_KRW;
+  
+  // Step 3: Add Japan shipping and ceil
+  const finalJpy = Math.ceil(convertedJpy + JAPAN_SHIPPING_JPY);
+  
+  // Debug log
+  console.log(`[PriceCalc] costKrw=${parsed.krw} DOMESTIC_SHIPPING_KRW=${DOMESTIC_SHIPPING_KRW} totalKrw=${totalKrw} FX_JPY_TO_KRW=${FX_JPY_TO_KRW} convertedJpy=${convertedJpy} JAPAN_SHIPPING_JPY=${JAPAN_SHIPPING_JPY} finalJpy=${finalJpy}`);
+  
+  return String(finalJpy);
 }
 
 /**
@@ -91,8 +108,8 @@ function decideItemPriceJpy({ row, vendorItemId, mode }) {
     };
   }
   
-  // Compute JPY
-  const priceJpy = String(Math.floor(parsed.krw / FX_JPY_TO_KRW));
+  // Compute JPY using full formula
+  const priceJpy = computeJpyFromKrw(parsed.krw);
   
   // Log success
   console.log(`[PriceDecision][${mode}] vendorItemId=${vendorItemId} ItemPrice(KRW)=${parsed.sanitized} computedJPY=${priceJpy}`);
