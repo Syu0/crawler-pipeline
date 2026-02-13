@@ -283,10 +283,15 @@ function buildRegistrationPayload(row, categoryResolution, computedPriceJpy) {
  * Register or update a single product on Qoo10
  * Mode: CREATE if qoo10ItemId is empty, UPDATE if qoo10ItemId exists
  * 
- * STRICT: qoo10SellingPrice (KRW) is REQUIRED. If invalid, fails with FAILED status.
+ * STRICT: ItemPrice (KRW) and WeightKg are REQUIRED.
+ * If invalid, fails with FAILED status.
  * Computed JPY is written back to qoo10SellingPrice pre-API.
+ * 
+ * @param {object} row - Row data from sheet
+ * @param {boolean} dryRun - If true, skip API call
+ * @param {object} sheetsClient - Google Sheets API client (for shipping lookup)
  */
-async function registerProduct(row, dryRun = false) {
+async function registerProduct(row, dryRun = false, sheetsClient = null) {
   const vendorItemId = row.vendorItemId || row.itemId;
   const existingQoo10ItemId = row.qoo10ItemId || '';
   const isUpdateMode = existingQoo10ItemId && existingQoo10ItemId.trim() !== '';
@@ -303,18 +308,21 @@ async function registerProduct(row, dryRun = false) {
   }
   
   // ===== STRICT PRICE VALIDATION =====
-  // Validate qoo10SellingPrice (KRW) BEFORE category resolution or any other work
-  const priceDecision = decideItemPriceJpy({
+  // Validate ItemPrice (KRW) and WeightKg BEFORE category resolution or any other work
+  // Uses Txlogis_standard for dynamic Japan shipping fee lookup
+  const priceDecision = await decideItemPriceJpy({
     row: row,
     vendorItemId: vendorItemId,
-    mode: isUpdateMode ? 'UPDATE' : 'CREATE'
+    mode: isUpdateMode ? 'UPDATE' : 'CREATE',
+    sheetsClient: sheetsClient,
+    sheetId: SHEET_ID
   });
   
   // Return computed price even if validation failed (for sheet write-back)
   const computedPriceJpy = priceDecision.valid ? priceDecision.priceJpy : '';
   
   if (!priceDecision.valid) {
-    // STRICT: qoo10SellingPrice is REQUIRED - fail immediately
+    // STRICT: Required inputs missing - fail immediately
     return {
       status: 'FAILED',
       vendorItemId,
