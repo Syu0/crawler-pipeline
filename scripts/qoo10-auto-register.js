@@ -226,24 +226,29 @@ function parseExtraImages(extraImages) {
 
 /**
  * Build Qoo10 registration payload from sheet row
+ * Returns null if CostPriceKrw is invalid (STRICT requirement)
+ * 
  * @param {object} row - Sheet row data
  * @param {object} categoryResolution - Resolved JP category from categoryResolver
+ * @returns {{ payload, sellerCode, sellingPrice, priceDecision } | null}
  */
 function buildRegistrationPayload(row, categoryResolution) {
-  // Compute fallback using existing logic
-  const existingFallbackJpy = calculateSellingPrice(row.ItemPrice);
+  const vendorItemId = row.vendorItemId || row.itemId;
   
-  // Decide final price using centralized pricing module
+  // STRICT: Validate CostPriceKrw using centralized pricing module
   const priceDecision = decideItemPriceJpy({
     row: row,
-    existingFallbackJpy: String(existingFallbackJpy)
+    vendorItemId: vendorItemId,
+    mode: 'CREATE'
   });
   
-  const sellingPrice = priceDecision.priceJpy;
-  const sellerCode = `auto_${row.vendorItemId || row.itemId}`;
+  // If price validation failed, return null - caller must handle FAILED status
+  if (!priceDecision.valid) {
+    return null;
+  }
   
-  // Log pricing decision
-  console.log(`[PriceDecision][CREATE] vendorItemId=${row.vendorItemId || row.itemId} CostPriceKrw=${row.CostPriceKrw || ''} ItemPriceJPY=${sellingPrice} source=${priceDecision.source}`);
+  const sellingPrice = priceDecision.priceJpy;
+  const sellerCode = `auto_${vendorItemId}`;
   
   // Parse extra images
   const extraImages = parseExtraImages(row.ExtraImages);
@@ -286,7 +291,8 @@ function buildRegistrationPayload(row, categoryResolution) {
   return {
     payload,
     sellerCode,
-    sellingPrice
+    sellingPrice,
+    priceDecision
   };
 }
 
