@@ -2,31 +2,31 @@
  * Price Decision Module
  * 
  * Centralized pricing logic for Coupang-to-Qoo10 pipeline.
- * Computes JPY selling price from KRW cost price.
+ * Reads qoo10SellingPrice (KRW) and computes JPY selling price.
  * 
  * Used by both CREATE (SetNewGoods) and UPDATE (UpdateGoods).
  * 
  * STRICT RULES:
- * - CostPriceKrw is REQUIRED
+ * - qoo10SellingPrice (KRW) is REQUIRED
  * - If missing/invalid: registration MUST fail
- * - Computed JPY must be written to sheet regardless of API result
+ * - Computed JPY is written back to qoo10SellingPrice column
  */
 
 // Fixed exchange rate: 1 JPY = 10 KRW
 const FX_JPY_TO_KRW = 10;
 
 /**
- * Sanitize and parse KRW cost price
- * @param {string|number} costPriceKrw - Cost price in KRW
+ * Sanitize and parse KRW price from qoo10SellingPrice
+ * @param {string|number} priceKrw - Price in KRW
  * @returns {{ valid: boolean, krw: number, sanitized: string }}
  */
-function parseCostPriceKrw(costPriceKrw) {
-  if (costPriceKrw === undefined || costPriceKrw === null || costPriceKrw === '') {
+function parsePriceKrw(priceKrw) {
+  if (priceKrw === undefined || priceKrw === null || priceKrw === '') {
     return { valid: false, krw: 0, sanitized: '' };
   }
   
   // Sanitize: trim, remove commas
-  const sanitized = String(costPriceKrw).trim().replace(/,/g, '');
+  const sanitized = String(priceKrw).trim().replace(/,/g, '');
   
   // Parse number
   const krw = parseFloat(sanitized);
@@ -40,12 +40,12 @@ function parseCostPriceKrw(costPriceKrw) {
 }
 
 /**
- * Compute JPY price from KRW cost price
- * @param {string|number} costPriceKrw - Cost price in KRW
+ * Compute JPY price from KRW
+ * @param {string|number} priceKrw - Price in KRW
  * @returns {string} JPY price as string, or "" if invalid
  */
-function computeJpyFromKrw(costPriceKrw) {
-  const parsed = parseCostPriceKrw(costPriceKrw);
+function computeJpyFromKrw(priceKrw) {
+  const parsed = parsePriceKrw(priceKrw);
   
   if (!parsed.valid) {
     return '';
@@ -58,9 +58,9 @@ function computeJpyFromKrw(costPriceKrw) {
 }
 
 /**
- * Validate and decide final ItemPrice (JPY) for Qoo10 API
+ * Validate and compute final ItemPrice (JPY) for Qoo10 API
  * 
- * STRICT: CostPriceKrw is REQUIRED.
+ * STRICT: qoo10SellingPrice (KRW) is REQUIRED.
  * If missing/invalid, returns error that MUST fail the registration.
  * 
  * @param {object} params
@@ -70,23 +70,23 @@ function computeJpyFromKrw(costPriceKrw) {
  * @returns {{ 
  *   valid: boolean, 
  *   priceJpy: string, 
- *   costPriceKrw: string,
+ *   rawKrw: string,
  *   error: string | null 
  * }}
  */
 function decideItemPriceJpy({ row, vendorItemId, mode }) {
-  const costPriceKrw = row?.CostPriceKrw;
-  const parsed = parseCostPriceKrw(costPriceKrw);
+  const rawKrw = row?.qoo10SellingPrice;
+  const parsed = parsePriceKrw(rawKrw);
   
   if (!parsed.valid) {
-    // STRICT: CostPriceKrw is REQUIRED
-    const errorMsg = 'CostPriceKrw missing or invalid';
-    console.error(`[PriceDecision][ERROR] vendorItemId=${vendorItemId} CostPriceKrw="${costPriceKrw || ''}" - ${errorMsg}`);
+    // STRICT: qoo10SellingPrice is REQUIRED
+    const errorMsg = 'qoo10SellingPrice missing or invalid';
+    console.error(`[PriceDecision][ERROR] vendorItemId=${vendorItemId} qoo10SellingPrice="${rawKrw || ''}" - ${errorMsg}`);
     
     return {
       valid: false,
       priceJpy: '',
-      costPriceKrw: String(costPriceKrw || ''),
+      rawKrw: String(rawKrw || ''),
       error: errorMsg
     };
   }
@@ -95,19 +95,19 @@ function decideItemPriceJpy({ row, vendorItemId, mode }) {
   const priceJpy = String(Math.floor(parsed.krw / FX_JPY_TO_KRW));
   
   // Log success
-  console.log(`[PriceDecision][${mode}] vendorItemId=${vendorItemId} CostPriceKrw=${parsed.sanitized} ItemPriceJPY=${priceJpy} source=computed_from_cost`);
+  console.log(`[PriceDecision][${mode}] vendorItemId=${vendorItemId} rawKRW=${parsed.sanitized} computedJPY=${priceJpy}`);
   
   return {
     valid: true,
     priceJpy,
-    costPriceKrw: parsed.sanitized,
+    rawKrw: parsed.sanitized,
     error: null
   };
 }
 
 module.exports = {
   FX_JPY_TO_KRW,
-  parseCostPriceKrw,
+  parsePriceKrw,
   computeJpyFromKrw,
   decideItemPriceJpy
 };
