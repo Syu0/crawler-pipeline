@@ -5,19 +5,24 @@
  * Computes JPY selling price from KRW cost price.
  * 
  * Used by both CREATE (SetNewGoods) and UPDATE (UpdateGoods).
+ * 
+ * STRICT RULES:
+ * - CostPriceKrw is REQUIRED
+ * - If missing/invalid: registration MUST fail
+ * - Computed JPY must be written to sheet regardless of API result
  */
 
 // Fixed exchange rate: 1 JPY = 10 KRW
 const FX_JPY_TO_KRW = 10;
 
 /**
- * Compute JPY price from KRW cost price
+ * Sanitize and parse KRW cost price
  * @param {string|number} costPriceKrw - Cost price in KRW
- * @returns {string} JPY price as string, or "" if invalid
+ * @returns {{ valid: boolean, krw: number, sanitized: string }}
  */
-function computeJpyFromKrw(costPriceKrw) {
-  if (costPriceKrw === undefined || costPriceKrw === null) {
-    return '';
+function parseCostPriceKrw(costPriceKrw) {
+  if (costPriceKrw === undefined || costPriceKrw === null || costPriceKrw === '') {
+    return { valid: false, krw: 0, sanitized: '' };
   }
   
   // Sanitize: trim, remove commas
@@ -26,51 +31,83 @@ function computeJpyFromKrw(costPriceKrw) {
   // Parse number
   const krw = parseFloat(sanitized);
   
-  // Validate
+  // Validate: must be positive number
   if (isNaN(krw) || krw <= 0) {
+    return { valid: false, krw: 0, sanitized };
+  }
+  
+  return { valid: true, krw, sanitized };
+}
+
+/**
+ * Compute JPY price from KRW cost price
+ * @param {string|number} costPriceKrw - Cost price in KRW
+ * @returns {string} JPY price as string, or "" if invalid
+ */
+function computeJpyFromKrw(costPriceKrw) {
+  const parsed = parseCostPriceKrw(costPriceKrw);
+  
+  if (!parsed.valid) {
     return '';
   }
   
   // Convert: JPY = floor(KRW / 10)
-  const jpy = Math.floor(krw / FX_JPY_TO_KRW);
+  const jpy = Math.floor(parsed.krw / FX_JPY_TO_KRW);
   
   return String(jpy);
 }
 
 /**
- * Decide final ItemPrice (JPY) for Qoo10 API
+ * Validate and decide final ItemPrice (JPY) for Qoo10 API
  * 
- * Priority:
- * 1) Computed from row.CostPriceKrw (if valid)
- * 2) Fallback to existingFallbackJpy (current behavior)
+ * STRICT: CostPriceKrw is REQUIRED.
+ * If missing/invalid, returns error that MUST fail the registration.
  * 
  * @param {object} params
  * @param {object} params.row - Current row data from sheet
- * @param {string} params.existingFallbackJpy - Fallback JPY price (current logic)
- * @returns {{ priceJpy: string, source: string }}
+ * @param {string} params.vendorItemId - Vendor item ID for logging
+ * @param {string} params.mode - 'CREATE' or 'UPDATE' for logging
+ * @returns {{ 
+ *   valid: boolean, 
+ *   priceJpy: string, 
+ *   costPriceKrw: string,
+ *   error: string | null 
+ * }}
  */
-function decideItemPriceJpy({ row, existingFallbackJpy }) {
-  // Try computed from CostPriceKrw
+function decideItemPriceJpy({ row, vendorItemId, mode }) {
   const costPriceKrw = row?.CostPriceKrw;
-  const computedJpy = computeJpyFromKrw(costPriceKrw);
+  const parsed = parseCostPriceKrw(costPriceKrw);
   
-  if (computedJpy !== '') {
+  if (!parsed.valid) {
+    // STRICT: CostPriceKrw is REQUIRED
+    const errorMsg = 'CostPriceKrw missing or invalid';
+    console.error(`[PriceDecision][ERROR] vendorItemId=${vendorItemId} CostPriceKrw="${costPriceKrw || ''}" - ${errorMsg}`);
+    
     return {
-      priceJpy: computedJpy,
-      source: 'computed_from_cost'
+      valid: false,
+      priceJpy: '',
+      costPriceKrw: String(costPriceKrw || ''),
+      error: errorMsg
     };
   }
   
-  // Fallback to existing logic
-  const fallback = String(existingFallbackJpy || '0').trim();
+  // Compute JPY
+  const priceJpy = String(Math.floor(parsed.krw / FX_JPY_TO_KRW));
+  
+  // Log success
+  console.log(`[PriceDecision][${mode}] vendorItemId=${vendorItemId} CostPriceKrw=${parsed.sanitized} ItemPriceJPY=${priceJpy} source=computed_from_cost`);
+  
   return {
-    priceJpy: fallback,
-    source: 'fallback_existing'
+    valid: true,
+    priceJpy,
+    costPriceKrw: parsed.sanitized,
+    error: null
   };
 }
 
 module.exports = {
   FX_JPY_TO_KRW,
+  parseCostPriceKrw,
   computeJpyFromKrw,
   decideItemPriceJpy
 };
