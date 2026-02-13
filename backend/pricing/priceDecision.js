@@ -2,12 +2,12 @@
  * Price Decision Module
  * 
  * Centralized pricing logic for Coupang-to-Qoo10 pipeline.
- * Reads qoo10SellingPrice (KRW) and computes JPY selling price.
+ * Reads ItemPrice (KRW) and computes JPY selling price.
  * 
  * Used by both CREATE (SetNewGoods) and UPDATE (UpdateGoods).
  * 
  * STRICT RULES:
- * - qoo10SellingPrice (KRW) is REQUIRED
+ * - ItemPrice (KRW) is REQUIRED
  * - If missing/invalid: registration MUST fail
  * - Computed JPY is written back to qoo10SellingPrice column
  */
@@ -16,7 +16,7 @@
 const FX_JPY_TO_KRW = 10;
 
 /**
- * Sanitize and parse KRW price from qoo10SellingPrice
+ * Sanitize and parse KRW price from ItemPrice
  * @param {string|number} priceKrw - Price in KRW
  * @returns {{ valid: boolean, krw: number, sanitized: string }}
  */
@@ -60,7 +60,7 @@ function computeJpyFromKrw(priceKrw) {
 /**
  * Validate and compute final ItemPrice (JPY) for Qoo10 API
  * 
- * STRICT: qoo10SellingPrice (KRW) is REQUIRED.
+ * STRICT: ItemPrice (KRW) is REQUIRED.
  * If missing/invalid, returns error that MUST fail the registration.
  * 
  * @param {object} params
@@ -75,13 +75,13 @@ function computeJpyFromKrw(priceKrw) {
  * }}
  */
 function decideItemPriceJpy({ row, vendorItemId, mode }) {
-  const rawKrw = row?.qoo10SellingPrice;
+  const rawKrw = row?.ItemPrice;
   const parsed = parsePriceKrw(rawKrw);
   
   if (!parsed.valid) {
-    // STRICT: qoo10SellingPrice is REQUIRED
-    const errorMsg = 'qoo10SellingPrice missing or invalid';
-    console.error(`[PriceDecision][ERROR] vendorItemId=${vendorItemId} qoo10SellingPrice="${rawKrw || ''}" - ${errorMsg}`);
+    // STRICT: ItemPrice is REQUIRED
+    const errorMsg = 'ItemPrice missing or invalid';
+    console.error(`[PriceDecision][ERROR] vendorItemId=${vendorItemId} ItemPrice="${rawKrw || ''}" - ${errorMsg}`);
     
     return {
       valid: false,
@@ -95,7 +95,7 @@ function decideItemPriceJpy({ row, vendorItemId, mode }) {
   const priceJpy = String(Math.floor(parsed.krw / FX_JPY_TO_KRW));
   
   // Log success
-  console.log(`[PriceDecision][${mode}] vendorItemId=${vendorItemId} rawKRW=${parsed.sanitized} computedJPY=${priceJpy}`);
+  console.log(`[PriceDecision][${mode}] vendorItemId=${vendorItemId} ItemPrice(KRW)=${parsed.sanitized} computedJPY=${priceJpy}`);
   
   return {
     valid: true,
