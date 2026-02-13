@@ -68,7 +68,7 @@ Category dictionary accumulated from scraped products. Used for future Qoo10 cat
 | E | `ProductURL` | string | System | Full Coupang product URL as-is |
 | F | `ItemTitle` | string | DOM | Product title |
 | G | `ItemPrice` | number | DOM | Coupang price (integer, no commas/symbols) - legacy |
-| H | `CostPriceKrw` | number | DOM | **Coupang selling price in KRW** (source for JPY computation) |
+| H | `CostPriceKrw` | number | DOM | **REQUIRED** Coupang selling price in KRW (source for JPY computation) |
 | I | `StandardImage` | string | DOM | **Normalized** path: `thumbnails/...` |
 | J | `ExtraImages` | JSON string | DOM | Array of image URLs |
 | K | `WeightKg` | string | Fixed | **ALWAYS "1"** (no scraping) |
