@@ -22,6 +22,38 @@ The Google Sheet serves as the central data store between:
 | `coupang_categorys` | Category dictionary for future mapping |
 | `japan_categories` | Full JP category list from Qoo10 API |
 | `category_mapping` | KR→JP category mapping (manual + auto) |
+| `Txlogis_standard` | Japan shipping fee by weight range |
+
+---
+
+## Tab: `Txlogis_standard`
+
+Defines Japan shipping fees (JPY) by weight range. Used for dynamic pricing calculation.
+
+| Column | Header Name | Type | Description |
+|--------|-------------|------|-------------|
+| A | `startWeightKg` | number | Start of weight range (inclusive) |
+| B | `endWeightKg` | number | End of weight range (inclusive) |
+| C | `feeJpy` | number | Shipping fee in JPY |
+
+**Header Detection:**
+- Column names are detected dynamically by header patterns
+- Recognized patterns: `start/min`, `end/max`, `fee/jpy/price/cost`
+
+**Lookup Logic:**
+1. Load all rows into cache (once per run)
+2. For each product, find range where `start <= WeightKg <= end`
+3. Return corresponding `feeJpy`
+4. If no match: FAIL the row
+
+**Example Data:**
+
+| startWeightKg | endWeightKg | feeJpy |
+|---------------|-------------|--------|
+| 0 | 0.5 | 500 |
+| 0.5 | 1 | 800 |
+| 1 | 2 | 1200 |
+| 2 | 5 | 2000 |
 
 ---
 
