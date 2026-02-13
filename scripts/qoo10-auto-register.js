@@ -542,6 +542,7 @@ async function registerProduct(row, dryRun = false) {
   return {
     status: 'FAILED',
     vendorItemId,
+    qoo10SellingPrice: sellingPrice, // Include computed price for write-back
     apiError: lastError,
     categoryResolution,
     mode: 'CREATE'
