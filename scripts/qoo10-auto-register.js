@@ -570,6 +570,9 @@ async function main() {
   }
   
   try {
+    // Get sheets client for shipping lookup
+    const sheets = await getSheetsClient();
+    
     // Read sheet data
     console.log('Reading data from Google Sheets...');
     const { headers, dataRows } = await readSheetRowsWithIndices();
