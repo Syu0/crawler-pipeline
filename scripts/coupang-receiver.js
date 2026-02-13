@@ -49,7 +49,8 @@ const SHEET_HEADERS = [
   'categoryId',           // Tier-1: From URL only
   'ProductURL',           // Tier-2: Full URL
   'ItemTitle',
-  'ItemPrice',            // Tier-1: Number, no symbols
+  'ItemPrice',            // Tier-1: Number, no symbols (legacy, kept for compatibility)
+  'CostPriceKrw',         // Coupang selling price in KRW (source for JPY computation)
   'StandardImage',
   'ExtraImages',
   'WeightKg',             // Tier-1: Fixed to 1
