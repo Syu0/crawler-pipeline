@@ -10,9 +10,22 @@
  * - ItemPrice (KRW) is REQUIRED
  * - If missing/invalid: registration MUST fail
  * - Computed JPY is written back to qoo10SellingPrice column
+ * 
+ * PRICING FORMULA:
+ * - baseCostJpy = (costKrw + DOMESTIC_SHIPPING_KRW) / FX_JPY_TO_KRW + JAPAN_SHIPPING_JPY
+ * - requiredPrice = baseCostJpy / (1 - MARKET_COMMISSION_RATE - MIN_MARGIN_RATE)
+ * - targetPrice = baseCostJpy * (1 + TARGET_MARGIN_RATE)
+ * - finalPrice = Math.round(Math.max(requiredPrice, targetPrice))
  */
 
-const { FX_JPY_TO_KRW, DOMESTIC_SHIPPING_KRW } = require('./pricingConstants');
+const { 
+  FX_JPY_TO_KRW, 
+  DOMESTIC_SHIPPING_KRW, 
+  JAPAN_SHIPPING_JPY,
+  MARKET_COMMISSION_RATE,
+  TARGET_MARGIN_RATE,
+  MIN_MARGIN_RATE
+} = require('./pricingConstants');
 
 /**
  * Sanitize and parse KRW price from ItemPrice
@@ -41,10 +54,12 @@ function parsePriceKrw(priceKrw) {
 /**
  * Compute JPY price from KRW cost price
  * 
- * Formula:
+ * Formula with commission and margin:
  * 1. totalKrw = costKrw + DOMESTIC_SHIPPING_KRW
- * 2. convertedJpy = totalKrw / FX_JPY_TO_KRW
- * 3. finalJpy = ceil(convertedJpy + JAPAN_SHIPPING_JPY)
+ * 2. baseCostJpy = totalKrw / FX_JPY_TO_KRW + JAPAN_SHIPPING_JPY
+ * 3. requiredPrice = baseCostJpy / (1 - MARKET_COMMISSION_RATE - MIN_MARGIN_RATE)
+ * 4. targetPrice = baseCostJpy * (1 + TARGET_MARGIN_RATE)
+ * 5. finalJpy = round(max(requiredPrice, targetPrice))
  * 
  * @param {string|number} costKrw - Cost price in KRW
  * @returns {string} JPY price as string, or "" if invalid
@@ -56,20 +71,26 @@ function computeJpyFromKrw(costKrw) {
     return '';
   }
   
-  // Japan shipping cost (local constant, not in pricingConstants.js)
-  const JAPAN_SHIPPING_JPY = 100;
-  
-  // Step 1: Add domestic shipping
+  // Step 1: Add domestic shipping (KRW)
   const totalKrw = parsed.krw + DOMESTIC_SHIPPING_KRW;
   
-  // Step 2: Convert to JPY
+  // Step 2: Convert to JPY and add Japan shipping
   const convertedJpy = totalKrw / FX_JPY_TO_KRW;
+  const baseCostJpy = convertedJpy + JAPAN_SHIPPING_JPY;
   
-  // Step 3: Add Japan shipping and ceil
-  const finalJpy = Math.ceil(convertedJpy + JAPAN_SHIPPING_JPY);
+  // Step 3: Calculate requiredPrice (ensures min margin after commission)
+  // requiredPrice = baseCostJpy / (1 - commission - minMargin)
+  const requiredPrice = baseCostJpy / (1 - MARKET_COMMISSION_RATE - MIN_MARGIN_RATE);
   
-  // Debug log
-  console.log(`[PriceCalc] costKrw=${parsed.krw} DOMESTIC_SHIPPING_KRW=${DOMESTIC_SHIPPING_KRW} totalKrw=${totalKrw} FX_JPY_TO_KRW=${FX_JPY_TO_KRW} convertedJpy=${convertedJpy} JAPAN_SHIPPING_JPY=${JAPAN_SHIPPING_JPY} finalJpy=${finalJpy}`);
+  // Step 4: Calculate targetPrice (applies target margin)
+  // targetPrice = baseCostJpy * (1 + targetMargin)
+  const targetPrice = baseCostJpy * (1 + TARGET_MARGIN_RATE);
+  
+  // Step 5: Final price is max of required and target, rounded to nearest integer
+  const finalJpy = Math.round(Math.max(requiredPrice, targetPrice));
+  
+  // Structured debug log with all calculation variables
+  console.log(`[PriceCalc] costKrw=${parsed.krw} DOMESTIC_SHIPPING_KRW=${DOMESTIC_SHIPPING_KRW} totalKrw=${totalKrw} FX_JPY_TO_KRW=${FX_JPY_TO_KRW} convertedJpy=${convertedJpy.toFixed(2)} JAPAN_SHIPPING_JPY=${JAPAN_SHIPPING_JPY} baseCostJpy=${baseCostJpy.toFixed(2)} MARKET_COMMISSION_RATE=${MARKET_COMMISSION_RATE} TARGET_MARGIN_RATE=${TARGET_MARGIN_RATE} MIN_MARGIN_RATE=${MIN_MARGIN_RATE} requiredPrice=${requiredPrice.toFixed(2)} targetPrice=${targetPrice.toFixed(2)} finalJpy=${finalJpy}`);
   
   return String(finalJpy);
 }
