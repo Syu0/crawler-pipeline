@@ -5,6 +5,12 @@ All notable changes to this project.
 ## 2025-12-XX
 
 ### Changed
+- **Dynamic Japan Shipping Fee from Txlogis_standard Sheet**
+  - Replaced hardcoded `JAPAN_SHIPPING_JPY=100` with real lookup from `Txlogis_standard` sheet
+  - Shipping fee is determined by product weight range (startWeightKg ~ endWeightKg)
+  - `WeightKg` is now REQUIRED - row fails if missing/invalid
+  - Shipping rates are cached once per run for efficiency
+
 - **Enhanced Pricing Formula with Commission and Margin Constraints**
   - Added market commission rate (10%), target margin rate (20%), minimum margin rate (25%)
   - New formula calculates both `requiredPrice` and `targetPrice`, uses the maximum
@@ -14,11 +20,18 @@ All notable changes to this project.
   - Currency conversion uses division: `costKrw / FX_JPY_TO_KRW` (not multiplication)
 
 ### Added
+- `/app/backend/pricing/shippingLookup.js` - Txlogis shipping fee lookup module
+  - `getJapanShippingJpyForWeight()` - Async lookup with caching
+  - `parseWeight()` - Weight validation
+  - `loadShippingRates()` - Loads and caches rates from sheet
 - New pricing constants in `/app/backend/pricing/pricingConstants.js`:
-  - `JAPAN_SHIPPING_JPY` (100) - moved from local variable
   - `MARKET_COMMISSION_RATE` (0.10)
   - `TARGET_MARGIN_RATE` (0.20)
   - `MIN_MARGIN_RATE` (0.25)
+- New required field: `WeightKg` - must be valid positive number
+
+### Removed
+- `JAPAN_SHIPPING_JPY` constant (now dynamic from sheet)
 
 ---
 
