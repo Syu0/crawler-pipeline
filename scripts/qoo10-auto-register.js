@@ -630,7 +630,7 @@ async function main() {
         console.log(`Processing: ${vendorItemId} [CREATE]`);
       }
       
-      const result = await registerProduct(row, options.dryRun);
+      const result = await registerProduct(row, options.dryRun, sheets);
       
       // Prepare sheet update with category tracking (including coupangCategoryKeyUsed)
       const categoryUpdate = result.categoryResolution ? {
