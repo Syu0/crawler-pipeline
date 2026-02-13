@@ -1,7 +1,7 @@
 /**
- * Coupang Category Parser & Accumulator
+ * Coupang Category Parser
  * 
- * Parses breadcrumb HTML and manages category dictionary in Google Sheets.
+ * Parses breadcrumb HTML to extract category path information.
  */
 
 /**

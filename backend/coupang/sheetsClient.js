@@ -3,7 +3,7 @@
  * Uses Service Account authentication to read/write Google Sheets
  */
 
-require('dotenv').config({ path: require('path').join(__dirname, '..', '..', 'backend', '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 const { google } = require('googleapis');
 const fs = require('fs');
