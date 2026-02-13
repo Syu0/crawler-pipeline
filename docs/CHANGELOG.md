@@ -5,12 +5,11 @@ All notable changes to this project.
 ## 2025-02-10
 
 ### Changed
-- **STRICT Pricing Enforcement**: `CostPriceKrw` is now REQUIRED
-  - If `CostPriceKrw` is empty, null, invalid, or <= 0: row FAILS immediately
-  - No Qoo10 API call is made for invalid pricing
-  - `registrationStatus` = `FAILED`, `registrationMessage` = `CostPriceKrw missing or invalid`
+- **Pricing source changed**: Now uses `qoo10SellingPrice` as KRW input (removed `CostPriceKrw`)
+  - `qoo10SellingPrice` is read as KRW, validated, converted to JPY, and written back
+  - If `qoo10SellingPrice` is empty/invalid: row FAILS, no API call
+  - Computed JPY written to `qoo10SellingPrice` **before** API call
   - Applies to BOTH CREATE and UPDATE operations
-- **Price Write-back**: Computed `ItemPrice (JPY)` is always written to `qoo10SellingPrice` column, even if API call fails
 - **UpdateGoods payload structure**: Now uses full product structure identical to SetNewGoods
   - Includes all fields: `ShippingNo`, `TaxRate`, `ExpireDate`, `RetailPrice`, `ItemQty`, `Weight`
   - Removed diff-based change detection
