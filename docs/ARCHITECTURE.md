@@ -1,206 +1,131 @@
-# Architecture Overview
+# Architecture
 
-## System Context
+## Module Boundaries
 
-This project implements **Step 2 and Step 3** of a Coupang-to-Qoo10 product pipeline:
+### A) Coupang Collection (`/app/backend/coupang/`)
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              Full Pipeline                                       │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│  Step 1: URL Input      Step 2: Scrape + Sheet      Step 3: Qoo10 Registration │
-│  ┌───────────────┐     ┌─────────────────────┐     ┌─────────────────────────┐ │
-│  │ Coupang URL   │ ──▶ │ THIS REPO           │ ──▶ │ THIS REPO               │ │
-│  │ (User input)  │     │ coupang-scrape-to-  │     │ qoo10-register-cli.js   │ │
-│  └───────────────┘     │ sheet.js            │     │ ★ IMPLEMENTED           │ │
-│                        │ ★ IMPLEMENTED       │     └─────────────────────────┘ │
-│                        └─────────────────────┘                 │               │
-│                                    │                           ▼               │
-│                                    ▼                    ┌─────────────┐        │
-│                        ┌─────────────────────┐         │  Qoo10 JP   │        │
-│                        │ Google Sheets       │         │  QAPI       │        │
-│                        │ (coupang_datas tab) │         └─────────────┘        │
-│                        └─────────────────────┘                 │               │
-│                                                                ▼               │
-│                                                     Write GdNo back (TODO)     │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+Collects product data from Coupang and writes to Google Sheets.
 
----
+| File | Purpose |
+|------|---------|
+| `sheetsClient.js` | Google Sheets API wrapper (read/write/upsert) |
+| `scraper.js` | HTTP-based Coupang page scraper |
 
-## Step 2: Coupang Scraper → Google Sheets
+Entry points:
+- `scripts/coupang-receiver.js` - HTTP server for Chrome extension
+- `scripts/coupang-scrape-to-sheet.js` - CLI scraper
 
-### Purpose
-Scrape product data from Coupang URLs and store in Google Sheets for later registration.
+### B) Qoo10 Registration (`/app/backend/qoo10/`)
 
-### High-Level Flow
+Registers and updates products on Qoo10 via QAPI.
 
-```
-┌─────────────────┐     ┌──────────────────┐     ┌────────────────────┐
-│  Coupang URL    │ ──▶ │  HTML Parsing    │ ──▶ │  Google Sheets     │
-│  (CLI input)    │     │  (coupangScraper)│     │  (sheetsClient)    │
-└─────────────────┘     └──────────────────┘     └────────────────────┘
-```
+| File | Purpose |
+|------|---------|
+| `client.js` | Qoo10 QAPI HTTP client |
+| `registerNewGoods.js` | SetNewGoods API (CREATE) |
+| `updateGoods.js` | UpdateGoods API (UPDATE) |
+| `payloadGenerator.js` | Payload building utilities |
 
-### Key Fields Extracted
+Entry points:
+- `scripts/qoo10-auto-register.js` - Main executor
+- `scripts/qoo10-register-cli.js` - Single product CLI
 
-| Field | Source | Normalization |
-|-------|--------|---------------|
-| `ItemTitle` | og:title, title tag | HTML decode |
-| `ItemPrice` | sale-price, data-price | Remove commas |
-| `StandardImage` | og:image | Strip to `thumbnails/...` path |
-| `ExtraImages` | Image URLs in page | Array, deduplicated |
-| `WeightKg` | Weight text patterns | Convert g→Kg, default 1 |
-| `SecondSubCat` | - | Placeholder (resolver TODO) |
+### C) Category Resolution (`/app/backend/category/`)
 
----
+Maps Coupang categories to Qoo10 Japan categories.
 
-## Step 3: Qoo10 Registration
+| File | Purpose |
+|------|---------|
+| `parser.js` | Breadcrumb text parsing |
+| `sheetClient.js` | Category dictionary sheet operations |
+| `resolver.js` | KR→JP category mapping logic |
+| `japanCategoriesSync.js` | Qoo10 category list sync |
 
-### Purpose
-Register products on Qoo10 Japan marketplace via QAPI (`ItemsBasic.SetNewGoods`).
+Entry point:
+- `scripts/qoo10-sync-japan-categories.js` - Sync JP categories
 
-### High-Level Flow
+### D) CLI Executor (`/app/scripts/`)
+
+Orchestrates the pipeline.
+
+| File | Purpose |
+|------|---------|
+| `qoo10-auto-register.js` | Main executor (reads sheet, calls B/C) |
+| `coupang-receiver.js` | HTTP server for extension (calls A) |
+
+## Key Data Structures
+
+### Product Row (coupang_datas sheet)
 
 ```
-┌────────────────────┐     ┌─────────────────────┐     ┌──────────────────────┐
-│  JSON Input File   │ ──▶ │  registerNewGoods() │ ──▶ │  Qoo10 QAPI Response │
-│  (product data)    │     │  (core module)      │     │  (GdNo, AIContentsNo)│
-└────────────────────┘     └─────────────────────┘     └──────────────────────┘
+vendorItemId        # Primary key
+coupang_product_id  # Coupang product ID
+categoryId          # Coupang category ID
+categoryPath3       # Normalized category path (last 3 segments)
+ItemTitle           # Product title
+ItemPrice           # Coupang price (KRW)
+StandardImage       # Main image URL
+ItemDescriptionText # Description
+qoo10ItemId         # Qoo10 item ID (after CREATE)
+qoo10SellingPrice   # Calculated selling price (JPY)
+jpCategoryIdUsed    # Resolved Qoo10 category ID
+categoryMatchType   # MANUAL | AUTO | FALLBACK
+needsUpdate         # YES | NO
+changeFlags         # PRICE_UP | PRICE_DOWN | OPTIONS_CHANGED
+registrationStatus  # SUCCESS | WARNING | FAILED | DRY_RUN
 ```
 
----
-
-## Module Structure
+### Category Mapping Row (category_mapping sheet)
 
 ```
-/app
-├── backend/
-│   ├── .env                              # Environment variables (gitignored)
-│   ├── .env.example                      # Template for env vars
-│   ├── keys/                             # Service account keys (gitignored)
-│   │   └── google-service-account.json   # Google API key (NOT committed)
-│   └── qoo10/
-│       ├── registerNewGoods.js           # ★ Step 3: Core registration module
-│       ├── sample-newgoods.json          # Sample: basic product
-│       └── sample-with-*.json            # Various test samples
-│
-├── scripts/
-│   ├── lib/
-│   │   ├── qoo10Client.js                # ★ Step 3: QAPI HTTP client
-│   │   ├── coupangScraper.js             # ★ Step 2: HTML scraping logic
-│   │   └── sheetsClient.js               # ★ Step 2: Google Sheets API
-│   ├── coupang-scrape-to-sheet.js        # ★ Step 2: CLI entry point
-│   ├── qoo10-register-cli.js             # ★ Step 3: CLI entry point
-│   └── update-context-packet.js          # Docs sync helper
-│
-├── docs/                                 # Documentation
-└── package.json                          # NPM scripts
+coupangCategoryKey  # Normalized categoryPath3 (primary key)
+jpCategoryId        # Mapped Qoo10 category ID
+matchType           # MANUAL | AUTO | FALLBACK
+confidence          # Match confidence (0-1)
 ```
 
-### Entry Points
+## API Methods
 
-| Step | Entry Point | Path | Description |
-|------|-------------|------|-------------|
-| 2 | Coupang Scraper | `scripts/coupang-scrape-to-sheet.js` | Scrape URL → Sheet |
-| 2 | Scraper Lib | `scripts/lib/coupangScraper.js` | HTML parsing logic |
-| 2 | Sheets Client | `scripts/lib/sheetsClient.js` | Google Sheets API |
-| 3 | Qoo10 CLI | `scripts/qoo10-register-cli.js` | Register to Qoo10 |
-| 3 | Core Module | `backend/qoo10/registerNewGoods.js` | Registration logic |
-| 3 | QAPI Client | `scripts/lib/qoo10Client.js` | HTTP wrapper |
+### Qoo10 QAPI
 
-### Data Flow (Step 2)
+| Method | Version | Purpose |
+|--------|---------|---------|
+| `ItemsBasic.SetNewGoods` | 1.1 | Create new product |
+| `ItemsBasic.UpdateGoods` | 1.0 | Update existing product |
+| `ShippingBasic.GetSellerDeliveryGroupInfo` | 1.0 | Get shipping templates |
+| `CommonInfoLookup.GetCatagoryListAll` | 1.0 | Get JP category list |
 
-```
-1. CLI receives Coupang URL
-   └── scripts/coupang-scrape-to-sheet.js --url "<URL>"
+### SetNewGoods / UpdateGoods Payload
 
-2. Scraper fetches and parses HTML
-   └── scripts/lib/coupangScraper.js
-       ├── Extracts URL params (productId, itemId, vendorItemId, categoryId)
-       ├── Parses title, price, images from HTML
-       ├── Normalizes StandardImage to "thumbnails/..." path
-       ├── Converts weight to Kg (default: 1)
-       └── Returns structured product data
-
-3. Sheets client upserts to Google Sheets
-   └── scripts/lib/sheetsClient.js
-       ├── Authenticates via Service Account
-       ├── Ensures header row exists
-       └── Upserts by vendorItemId (or itemId fallback)
-```
-
-### Data Flow (Step 3)
+Both use identical structure:
 
 ```
-1. CLI reads JSON file
-   └── scripts/qoo10-register-cli.js
-
-2. Passes to core module
-   └── backend/qoo10/registerNewGoods.js
-       ├── Validates input fields
-       ├── Generates unique SellerCode (auto + timestamp)
-       ├── Applies default ShippingNo (471554)
-       ├── Builds AdditionalOption string (if Options provided)
-       ├── Appends ExtraImages to ItemDescription HTML
-       └── Calls qoo10Client
-
-3. QAPI Client makes HTTP request
-   └── scripts/lib/qoo10Client.js
-       └── POST to Qoo10 ItemsBasic.SetNewGoods
-
-4. Response parsed and returned
-   └── { success, createdItemId (GdNo), aiContentsNo, ... }
+returnType          # application/json
+ItemCode            # (UpdateGoods only) Existing item ID
+SellerCode          # (SetNewGoods only) Generated seller code
+SecondSubCat        # Qoo10 category ID
+ItemTitle           # Product title
+ItemPrice           # Selling price (JPY)
+RetailPrice         # Retail price (default: 0)
+ItemQty             # Quantity (default: 100)
+AvailableDateType   # Availability type (default: 0)
+AvailableDateValue  # Availability value (default: 2)
+ShippingNo          # Shipping template ID (default: 471554)
+AdultYN             # Adult content flag (default: N)
+TaxRate             # Tax rate code (default: S)
+ExpireDate          # Expiration date (default: 2030-12-31)
+StandardImage       # Main image URL
+ItemDescription     # HTML description
+Weight              # Weight in grams (default: 500)
+ProductionPlaceType # 1=Japan, 2=Overseas, 3=Other (default: 2)
+ProductionPlace     # Country name (default: Overseas)
 ```
 
----
+## Sheet Tabs
 
-## Current Status
-
-<!-- STATUS_START -->
-- **Phase**: Step 2 + Step 3 implemented
-- **Last updated**: 2026-02-08
-- **Features complete**:
-  - Step 2: Coupang HTML scraping (no-login)
-  - Step 2: Google Sheets upsert (Service Account auth)
-  - Step 2: StandardImage normalization, WeightKg conversion
-  - Step 3: Qoo10 registration via SetNewGoods
-  - Step 3: Single option group, ExtraImages support
-  - Dry-run and tracer modes for both steps
-- **Features pending**:
-  - TODO: SecondSubCat resolver module (Qoo10 category mapping)
-  - TODO: Write GdNo back to Google Sheet after registration
-  - TODO: Multi-option support (SIZE + COLOR)
-  - TODO: UpdateGoods endpoint
-<!-- STATUS_END -->
-
----
-
-## Key Technical Decisions
-
-1. **Dry-run by default**: Both steps require explicit opt-in for real operations
-2. **Service Account auth**: Google Sheets uses JSON key file (gitignored)
-3. **StandardImage normalization**: Strip CDN prefix to `thumbnails/...` path
-4. **Fixed SellerCode prefix**: Always `auto` + timestamp + random
-5. **Fixed ShippingNo default**: `471554` (no auto-resolve)
-6. **Weight in Kg**: Default 1, convert from grams if detected
-7. **Single option group**: Only one option type per product
-
----
-
-## Dependencies
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| dotenv | ^17.2.4 | Load environment variables |
-| googleapis | ^171.4.0 | Google Sheets API client |
-
----
-
-## Related Documents
-
-- [SHEET_SCHEMA.md](./SHEET_SCHEMA.md) - Google Sheet column definitions
-- [RUNBOOK.md](./RUNBOOK.md) - Operational procedures
-- [CONTEXT_PACKET.md](./CONTEXT_PACKET.md) - Quick reference for LLM/handoff
-- [ADR-0001](./adr/0001-foundation-decisions.md) - Foundation architecture decisions
+| Tab | Primary Key | Purpose |
+|-----|-------------|---------|
+| `coupang_datas` | `vendorItemId` | Product data |
+| `coupang_categorys` | `coupangCategoryId` | Category dictionary |
+| `category_mapping` | `coupangCategoryKey` | KR→JP mappings |
+| `japan_categories` | `jpCategoryId` | JP category cache |
