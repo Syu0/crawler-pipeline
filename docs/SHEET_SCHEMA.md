@@ -92,7 +92,8 @@ These fields are written back after successful Qoo10 registration:
 
 **Pricing Computation:**
 - `ItemPrice (JPY) = floor(CostPriceKrw / 10)` using fixed FX rate: 1 JPY = 10 KRW
-- If `CostPriceKrw` is missing or invalid, falls back to existing price logic
+- **STRICT:** `CostPriceKrw` is REQUIRED. If missing/invalid, registration FAILS.
+- Computed JPY is always written to `qoo10SellingPrice` even if API fails.
 
 **Rules:**
 - Only written after successful API call
