@@ -352,25 +352,39 @@ async function registerProduct(row, dryRun = false) {
   if (isUpdateMode) {
     console.log(`[Registration] Updating existing Qoo10 item: ${existingQoo10ItemId}`);
     
+    // Pass ALL fields like SetNewGoods - updateExistingGoods will build full payload
     const updateResult = await updateExistingGoods({
       ItemCode: existingQoo10ItemId,
+      // All fields from payload (like SetNewGoods)
+      SecondSubCat: payload.SecondSubCat,
       ItemTitle: payload.ItemTitle,
       ItemPrice: payload.ItemPrice,
-      SecondSubCat: payload.SecondSubCat,
+      ItemQty: payload.ItemQty || '100',
       StandardImage: payload.StandardImage,
       ItemDescription: payload.ItemDescription,
       Weight: payload.Weight,
+      ProductionPlaceType: payload.ProductionPlaceType,
+      ProductionPlace: payload.ProductionPlace,
+      ShippingNo: FIXED_SHIPPING_NO,
+      // Additional fields for structural parity with SetNewGoods
+      RetailPrice: '0',
+      TaxRate: 'S',
+      ExpireDate: '2030-12-31',
+      AdultYN: 'N',
+      AvailableDateType: '0',
+      AvailableDateValue: '2',
     }, row);
     
-    if (updateResult.skipped) {
+    if (updateResult.dryRun) {
       return {
-        status: 'NO_CHANGES',
+        status: 'DRY_RUN',
         vendorItemId,
         qoo10ItemId: existingQoo10ItemId,
         qoo10SellingPrice: sellingPrice,
         sellerCode: row.qoo10SellerCode || sellerCode,
         categoryResolution,
-        message: 'No changes detected. Update skipped.'
+        mode: 'UPDATE',
+        payload: updateResult.payload
       };
     }
     
@@ -385,9 +399,7 @@ async function registerProduct(row, dryRun = false) {
         qoo10SellingPrice: sellingPrice,
         sellerCode: row.qoo10SellerCode || sellerCode,
         categoryResolution,
-        mode: 'UPDATE',
-        fieldsUpdated: updateResult.fieldsUpdated || [],
-        categoryManuallyChanged: updateResult.categoryManuallyChanged
+        mode: 'UPDATE'
       };
     } else {
       return {
