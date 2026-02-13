@@ -70,12 +70,17 @@ async function loadShippingRates(sheetsClient, sheetId) {
     // Parse headers - detect column names dynamically
     const headers = rows[0].map(h => String(h || '').trim().toLowerCase());
     
-    // Find column indices by header name patterns
+    // Debug log normalized headers
+    console.log(`[ShippingLookup] Normalized headers: [${headers.map(h => `"${h}"`).join(', ')}]`);
+    
+    // Find column indices by header name patterns (supports Korean and English)
     const startColIdx = headers.findIndex(h => 
-      h.includes('start') || h.includes('min') || h === 'startweightkg' || h === 'from'
+      h.includes('시작') || h.includes('최소') ||  // Korean: start, min
+      h.includes('start') || h.includes('min') || h.includes('from') || h === 'startweightkg'
     );
     const endColIdx = headers.findIndex(h => 
-      h.includes('end') || h.includes('max') || h === 'endweightkg' || h === 'to'
+      h.includes('종료') || h.includes('끝') || h.includes('최대') ||  // Korean: end, finish, max
+      h.includes('end') || h.includes('max') || h.includes('to') || h === 'endweightkg'
     );
     const feeColIdx = headers.findIndex(h => 
       h.includes('fee') || h.includes('jpy') || h.includes('price') || h.includes('cost')
