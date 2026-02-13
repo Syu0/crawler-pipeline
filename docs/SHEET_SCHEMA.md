@@ -81,23 +81,24 @@ Category dictionary accumulated from scraped products. Used for future Qoo10 cat
 
 ## Qoo10 Registration Output Fields
 
-These fields are written back after successful Qoo10 registration:
+These fields are written back during Qoo10 registration:
 
 | Field | Description |
 |-------|-------------|
-| `qoo10SellingPrice` | ItemPrice in JPY (computed from CostPriceKrw using fixed FX rate) |
+| `qoo10SellingPrice` | Computed JPY (written back pre-API, regardless of API success) |
 | `qoo10ItemId` | ItemCode or ItemNo from Qoo10 API response |
 | `updatedAt` | Timestamp of last update (ISO 8601) |
 
 **Pricing Computation:**
-- `ItemPrice (JPY) = floor(CostPriceKrw / 10)` using fixed FX rate: 1 JPY = 10 KRW
-- **STRICT:** `CostPriceKrw` is REQUIRED. If missing/invalid, registration FAILS.
-- Computed JPY is always written to `qoo10SellingPrice` even if API fails.
+- `qoo10SellingPrice` is read as KRW input
+- `ItemPrice (JPY) = floor(qoo10SellingPrice / 10)` using fixed FX rate: 1 JPY = 10 KRW
+- **STRICT:** `qoo10SellingPrice` is REQUIRED. If missing/invalid, registration FAILS.
+- Computed JPY is written back to `qoo10SellingPrice` **before** API call.
 
 **Rules:**
-- Only written after successful API call
+- `qoo10SellingPrice` is overwritten with computed JPY on each registration attempt
 - `qoo10ItemId` is never overwritten if already exists
-- Rows with existing `qoo10ItemId` are skipped
+- Rows with existing `qoo10ItemId` are skipped for CREATE (but processed for UPDATE)
 
 ---
 
