@@ -230,8 +230,20 @@ function parseExtraImages(extraImages) {
  * @param {object} categoryResolution - Resolved JP category from categoryResolver
  */
 function buildRegistrationPayload(row, categoryResolution) {
-  const sellingPrice = calculateSellingPrice(row.ItemPrice);
+  // Compute fallback using existing logic
+  const existingFallbackJpy = calculateSellingPrice(row.ItemPrice);
+  
+  // Decide final price using centralized pricing module
+  const priceDecision = decideItemPriceJpy({
+    row: row,
+    existingFallbackJpy: String(existingFallbackJpy)
+  });
+  
+  const sellingPrice = priceDecision.priceJpy;
   const sellerCode = `auto_${row.vendorItemId || row.itemId}`;
+  
+  // Log pricing decision
+  console.log(`[PriceDecision][CREATE] vendorItemId=${row.vendorItemId || row.itemId} CostPriceKrw=${row.CostPriceKrw || ''} ItemPriceJPY=${sellingPrice} source=${priceDecision.source}`);
   
   // Parse extra images
   const extraImages = parseExtraImages(row.ExtraImages);
