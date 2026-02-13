@@ -163,4 +163,4 @@ npm run docs:sync                # Sync documentation
 ---
 
 ## Last Updated
-February 2025 - Fixed Qoo10 UpdateGoods API change detection logic
+December 2025 - Implemented advanced pricing formula with commission and margin constraints
