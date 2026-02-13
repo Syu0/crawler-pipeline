@@ -5,7 +5,7 @@
  */
 
 // Auto-load backend/.env
-require('dotenv').config({ path: require('path').join(__dirname, '..', '..', 'backend', '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 const https = require('https');
 const { URLSearchParams } = require('url');
