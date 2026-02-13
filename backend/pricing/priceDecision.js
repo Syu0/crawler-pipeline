@@ -8,24 +8,28 @@
  * 
  * STRICT RULES:
  * - ItemPrice (KRW) is REQUIRED
+ * - WeightKg is REQUIRED (for Txlogis shipping fee lookup)
  * - If missing/invalid: registration MUST fail
  * - Computed JPY is written back to qoo10SellingPrice column
  * 
  * PRICING FORMULA:
- * - baseCostJpy = (costKrw + DOMESTIC_SHIPPING_KRW) / FX_JPY_TO_KRW + JAPAN_SHIPPING_JPY
+ * - baseCostJpy = (costKrw + DOMESTIC_SHIPPING_KRW) / FX_JPY_TO_KRW + japanShippingJpy
  * - requiredPrice = baseCostJpy / (1 - MARKET_COMMISSION_RATE - MIN_MARGIN_RATE)
  * - targetPrice = baseCostJpy * (1 + TARGET_MARGIN_RATE)
  * - finalPrice = Math.round(Math.max(requiredPrice, targetPrice))
+ * 
+ * Note: japanShippingJpy is now dynamically looked up from Txlogis_standard sheet by weight.
  */
 
 const { 
   FX_JPY_TO_KRW, 
   DOMESTIC_SHIPPING_KRW, 
-  JAPAN_SHIPPING_JPY,
   MARKET_COMMISSION_RATE,
   TARGET_MARGIN_RATE,
   MIN_MARGIN_RATE
 } = require('./pricingConstants');
+
+const { parseWeight, getJapanShippingJpyForWeight } = require('./shippingLookup');
 
 /**
  * Sanitize and parse KRW price from ItemPrice
