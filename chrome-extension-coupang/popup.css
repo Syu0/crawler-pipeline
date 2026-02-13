@@ -144,6 +144,26 @@ h1 {
   cursor: not-allowed;
 }
 
+.send-btn.hidden {
+  display: none;
+}
+
+.complete-msg {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #155724;
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.complete-msg.hidden {
+  display: none;
+}
+
 .error-msg {
   margin-top: 12px;
   padding: 10px;
