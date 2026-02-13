@@ -71,6 +71,12 @@ Build a pipeline to scrape Coupang product URLs, store data in Google Sheets, an
   - Refactored `detectChangedFields` to compare `prevItemPrice` with `qoo10SellingPrice`
   - Added comprehensive payload logging for debugging API calls
   - All required fields (`SecondSubCat`, `ItemTitle`, `ProductionPlaceType`, `AdultYN`, `AvailableDateType`, `AvailableDateValue`) now properly resolved
+- [x] **Advanced Pricing Formula** (Dec 2025)
+  - Implemented commission (10%) and margin constraints (target 20%, min 25%)
+  - Formula: `finalPrice = round(max(requiredPrice, targetPrice))`
+  - `requiredPrice = baseCostJpy / (1 - commission - minMargin)`
+  - `targetPrice = baseCostJpy * (1 + targetMargin)`
+  - Currency conversion uses `/ FX_JPY_TO_KRW` (division, not multiplication)
 
 ### P1 - Future Enhancements
 - [ ] Multi-option support (SIZE + COLOR)
