@@ -5,11 +5,22 @@ All notable changes to this project.
 ## 2025-02-10
 
 ### Changed
+- **STRICT Pricing Enforcement**: `CostPriceKrw` is now REQUIRED
+  - If `CostPriceKrw` is empty, null, invalid, or <= 0: row FAILS immediately
+  - No Qoo10 API call is made for invalid pricing
+  - `registrationStatus` = `FAILED`, `registrationMessage` = `CostPriceKrw missing or invalid`
+  - Applies to BOTH CREATE and UPDATE operations
+- **Price Write-back**: Computed `ItemPrice (JPY)` is always written to `qoo10SellingPrice` column, even if API call fails
 - **UpdateGoods payload structure**: Now uses full product structure identical to SetNewGoods
   - Includes all fields: `ShippingNo`, `TaxRate`, `ExpireDate`, `RetailPrice`, `ItemQty`, `Weight`
   - Removed diff-based change detection
   - Payload builds from: input values → sheet row values → defaults
   - Resolves Qoo10 API -999 errors caused by missing required fields
+
+### Added
+- `/app/backend/pricing/priceDecision.js` - Centralized pricing module
+  - `decideItemPriceJpy()` - Strict validation with error reporting
+  - `computeJpyFromKrw()` - KRW to JPY conversion (FX rate: 1 JPY = 10 KRW)
 
 ### Refactored
 - Reorganized code into module boundaries:
