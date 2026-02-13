@@ -67,15 +67,16 @@ Category dictionary accumulated from scraped products. Used for future Qoo10 cat
 | D | `categoryId` | string | URL param | Coupang category ID (from URL ONLY) |
 | E | `ProductURL` | string | System | Full Coupang product URL as-is |
 | F | `ItemTitle` | string | DOM | Product title |
-| G | `ItemPrice` | number | DOM | Coupang price (integer, no commas/symbols) |
-| H | `StandardImage` | string | DOM | **Normalized** path: `thumbnails/...` |
-| I | `ExtraImages` | JSON string | DOM | Array of image URLs |
-| J | `WeightKg` | string | Fixed | **ALWAYS "1"** (no scraping) |
-| K | `Options` | JSON string | DOM | Single option: `{"type":"SIZE","values":["S","M"]}` |
-| L | `ItemDescriptionText` | string | DOM | Plain text description (no HTML/images) |
-| M | `updatedAt` | ISO datetime | System | Last update timestamp |
-| N | `qoo10SellingPrice` | number | Step 5-2 | **OUTPUT**: Calculated Qoo10 price |
-| O | `qoo10ItemId` | string | Step 5-2 | **OUTPUT**: Qoo10 ItemCode/ItemNo |
+| G | `ItemPrice` | number | DOM | Coupang price (integer, no commas/symbols) - legacy |
+| H | `CostPriceKrw` | number | DOM | **Coupang selling price in KRW** (source for JPY computation) |
+| I | `StandardImage` | string | DOM | **Normalized** path: `thumbnails/...` |
+| J | `ExtraImages` | JSON string | DOM | Array of image URLs |
+| K | `WeightKg` | string | Fixed | **ALWAYS "1"** (no scraping) |
+| L | `Options` | JSON string | DOM | Single option: `{"type":"SIZE","values":["S","M"]}` |
+| M | `ItemDescriptionText` | string | DOM | Plain text description (no HTML/images) |
+| N | `updatedAt` | ISO datetime | System | Last update timestamp |
+| O | `qoo10SellingPrice` | number | Step 5-2 | **OUTPUT**: Calculated Qoo10 price (JPY) |
+| P | `qoo10ItemId` | string | Step 5-2 | **OUTPUT**: Qoo10 ItemCode/ItemNo |
 
 ---
 
