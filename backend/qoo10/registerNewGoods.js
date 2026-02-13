@@ -18,7 +18,7 @@
 // Auto-load backend/.env
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-const { qoo10PostMethod, testQoo10Connection } = require('../../scripts/lib/qoo10Client');
+const { qoo10PostMethod, testQoo10Connection } = require('./client');
 
 /**
  * Validation helpers

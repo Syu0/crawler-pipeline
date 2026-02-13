@@ -18,7 +18,7 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-const { updateGoods } = require('../../scripts/lib/qoo10Client');
+const { updateGoods } = require('./client');
 
 // Default ShippingNo (same as registerNewGoods)
 const DEFAULT_SHIPPING_NO = '471554';
