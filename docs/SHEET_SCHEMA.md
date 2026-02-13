@@ -122,9 +122,13 @@ These fields are written back during Qoo10 registration:
 | `updatedAt` | Timestamp of last update (ISO 8601) |
 
 **Pricing Computation:**
-- `qoo10SellingPrice` is read as KRW input
-- `ItemPrice (JPY) = floor(qoo10SellingPrice / 10)` using fixed FX rate: 1 JPY = 10 KRW
-- **STRICT:** `qoo10SellingPrice` is REQUIRED. If missing/invalid, registration FAILS.
+- `ItemPrice` (KRW) is required as cost input
+- `WeightKg` is required for Japan shipping fee lookup from `Txlogis_standard`
+- Formula: `baseCostJpy = (ItemPrice + DOMESTIC_SHIPPING_KRW) / FX_JPY_TO_KRW + japanShippingJpy`
+- Then: `requiredPrice = baseCostJpy / (1 - commission - minMargin)`
+- And: `targetPrice = baseCostJpy * (1 + targetMargin)`
+- Final: `Math.round(Math.max(requiredPrice, targetPrice))`
+- **STRICT:** Both `ItemPrice` and `WeightKg` are REQUIRED. If missing/invalid, registration FAILS.
 - Computed JPY is written back to `qoo10SellingPrice` **before** API call.
 
 **Rules:**
