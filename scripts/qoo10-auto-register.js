@@ -299,6 +299,8 @@ function buildRegistrationPayload(row, categoryResolution) {
 /**
  * Register or update a single product on Qoo10
  * Mode: CREATE if qoo10ItemId is empty, UPDATE if qoo10ItemId exists
+ * 
+ * STRICT: CostPriceKrw is REQUIRED. If invalid, fails with FAILED status.
  */
 async function registerProduct(row, dryRun = false) {
   const vendorItemId = row.vendorItemId || row.itemId;
@@ -313,6 +315,30 @@ async function registerProduct(row, dryRun = false) {
       vendorItemId,
       reason: validation.reason,
       mode: isUpdateMode ? 'UPDATE' : 'CREATE'
+    };
+  }
+  
+  // ===== STRICT PRICE VALIDATION =====
+  // Validate CostPriceKrw BEFORE category resolution or any other work
+  const priceDecision = decideItemPriceJpy({
+    row: row,
+    vendorItemId: vendorItemId,
+    mode: isUpdateMode ? 'UPDATE' : 'CREATE'
+  });
+  
+  // Return computed price even if validation failed (for sheet write-back)
+  const computedPriceJpy = priceDecision.valid ? priceDecision.priceJpy : '';
+  
+  if (!priceDecision.valid) {
+    // STRICT: CostPriceKrw is REQUIRED - fail immediately
+    return {
+      status: 'FAILED',
+      vendorItemId,
+      apiError: priceDecision.error,
+      mode: isUpdateMode ? 'UPDATE' : 'CREATE',
+      qoo10SellingPrice: computedPriceJpy, // Empty, but include for consistency
+      qoo10ItemId: existingQoo10ItemId || null,
+      priceValidationFailed: true
     };
   }
   
@@ -351,8 +377,37 @@ async function registerProduct(row, dryRun = false) {
     console.log(`  Category: ${row.categoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
   }
   
-  // Build payload with resolved category
-  const { payload, sellerCode, sellingPrice } = buildRegistrationPayload(row, categoryResolution);
+  // Build payload with validated price and resolved category
+  const sellerCode = `auto_${vendorItemId}`;
+  const sellingPrice = priceDecision.priceJpy;
+  const extraImages = parseExtraImages(row.ExtraImages);
+  const jpCategoryId = categoryResolution?.jpCategoryId || row.categoryId;
+  
+  const payload = {
+    SecondSubCat: jpCategoryId,
+    ItemTitle: row.ItemTitle,
+    ItemPrice: String(sellingPrice),
+    ItemQty: '100',
+    ShippingNo: FIXED_SHIPPING_NO,
+    StandardImage: normalizeImageUrl(row.StandardImage),
+    ItemDescription: row.ItemDescriptionText || row.ItemTitle || '<p>Product description</p>',
+    ProductionPlaceType: FIXED_PRODUCTION_PLACE_TYPE,
+    ProductionPlace: FIXED_PRODUCTION_PLACE,
+    Weight: FIXED_WEIGHT,
+    ExtraImages: extraImages.map(url => normalizeImageUrl(url)),
+  };
+  
+  // Parse and add options if present
+  if (row.Options) {
+    try {
+      const options = typeof row.Options === 'string' ? JSON.parse(row.Options) : row.Options;
+      if (options && options.type && Array.isArray(options.values) && options.values.length > 0) {
+        payload.Options = options;
+      }
+    } catch (e) {
+      // No options
+    }
+  }
   
   if (dryRun) {
     return {
@@ -425,6 +480,7 @@ async function registerProduct(row, dryRun = false) {
         status: 'FAILED',
         vendorItemId,
         qoo10ItemId: existingQoo10ItemId,
+        qoo10SellingPrice: sellingPrice, // Still include computed price for write-back
         apiError: updateResult.resultMsg,
         categoryResolution,
         mode: 'UPDATE'
