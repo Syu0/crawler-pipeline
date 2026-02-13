@@ -226,28 +226,15 @@ function parseExtraImages(extraImages) {
 
 /**
  * Build Qoo10 registration payload from sheet row
- * Returns null if CostPriceKrw is invalid (STRICT requirement)
+ * NOTE: Price validation is done by caller (registerProduct)
  * 
  * @param {object} row - Sheet row data
  * @param {object} categoryResolution - Resolved JP category from categoryResolver
- * @returns {{ payload, sellerCode, sellingPrice, priceDecision } | null}
+ * @param {string} computedPriceJpy - Pre-validated JPY price
+ * @returns {{ payload, sellerCode, sellingPrice }}
  */
-function buildRegistrationPayload(row, categoryResolution) {
+function buildRegistrationPayload(row, categoryResolution, computedPriceJpy) {
   const vendorItemId = row.vendorItemId || row.itemId;
-  
-  // STRICT: Validate CostPriceKrw using centralized pricing module
-  const priceDecision = decideItemPriceJpy({
-    row: row,
-    vendorItemId: vendorItemId,
-    mode: 'CREATE'
-  });
-  
-  // If price validation failed, return null - caller must handle FAILED status
-  if (!priceDecision.valid) {
-    return null;
-  }
-  
-  const sellingPrice = priceDecision.priceJpy;
   const sellerCode = `auto_${vendorItemId}`;
   
   // Parse extra images
@@ -260,7 +247,7 @@ function buildRegistrationPayload(row, categoryResolution) {
   const payload = {
     SecondSubCat: jpCategoryId,
     ItemTitle: row.ItemTitle,
-    ItemPrice: String(sellingPrice),
+    ItemPrice: String(computedPriceJpy),
     ItemQty: '100',
     ShippingNo: FIXED_SHIPPING_NO,
     StandardImage: normalizeImageUrl(row.StandardImage),
@@ -271,9 +258,6 @@ function buildRegistrationPayload(row, categoryResolution) {
     
     // Extra images if available
     ExtraImages: extraImages.map(url => normalizeImageUrl(url)),
-    
-    // Options handling - simplified for single option
-    // registerNewGoods.js handles Options internally
   };
   
   // Parse and add options if present
@@ -291,8 +275,7 @@ function buildRegistrationPayload(row, categoryResolution) {
   return {
     payload,
     sellerCode,
-    sellingPrice,
-    priceDecision
+    sellingPrice: computedPriceJpy
   };
 }
 
