@@ -27,7 +27,7 @@ const DEFAULT_SHIPPING_NO = '471554';
  * Build UpdateGoods params - IDENTICAL structure to SetNewGoods
  * but with ItemCode instead of SellerCode
  * 
- * NOTE: Price validation (CostPriceKrw) should be done by caller BEFORE 
+ * NOTE: Price validation (qoo10SellingPrice) should be done by caller BEFORE 
  * calling this function. This function uses input.ItemPrice directly.
  * 
  * @param {Object} input - Input data (from caller, must include ItemPrice)
@@ -47,7 +47,7 @@ function buildUpdateGoodsParams(input, rowData, shippingNo) {
     return String(defaultVal);
   };
   
-  // ItemPrice is passed from caller (already validated from CostPriceKrw)
+  // ItemPrice is passed from caller (already validated from qoo10SellingPrice)
   const itemPriceJpy = resolve('ItemPrice', 'qoo10SellingPrice', '0');
   
   // Log for traceability
