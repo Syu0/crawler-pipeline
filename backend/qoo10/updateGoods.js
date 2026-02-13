@@ -28,7 +28,10 @@ const DEFAULT_SHIPPING_NO = '471554';
  * Build UpdateGoods params - IDENTICAL structure to SetNewGoods
  * but with ItemCode instead of SellerCode
  * 
- * @param {Object} input - Input data (from caller)
+ * NOTE: Price validation (CostPriceKrw) should be done by caller BEFORE 
+ * calling this function. This function uses input.ItemPrice directly.
+ * 
+ * @param {Object} input - Input data (from caller, must include ItemPrice)
  * @param {Object} rowData - Current row data from sheet
  * @param {string} shippingNo - Resolved ShippingNo
  * @returns {Object} params for UpdateGoods API call
@@ -45,19 +48,12 @@ function buildUpdateGoodsParams(input, rowData, shippingNo) {
     return String(defaultVal);
   };
   
-  // ===== PRICING DECISION =====
-  // Determine fallback using existing logic (current qoo10SellingPrice or input)
-  const existingFallbackJpy = resolve('ItemPrice', 'qoo10SellingPrice', '0');
+  // ItemPrice is passed from caller (already validated from CostPriceKrw)
+  const itemPriceJpy = resolve('ItemPrice', 'qoo10SellingPrice', '0');
   
-  // Decide final price using centralized pricing module
-  const priceDecision = decideItemPriceJpy({
-    row: rowData,
-    existingFallbackJpy: existingFallbackJpy
-  });
-  
-  // Log pricing decision
+  // Log for traceability
   const vendorItemId = rowData.vendorItemId || rowData.itemId || 'unknown';
-  console.log(`[PriceDecision][UPDATE] vendorItemId=${vendorItemId} CostPriceKrw=${rowData.CostPriceKrw || ''} ItemPriceJPY=${priceDecision.priceJpy} source=${priceDecision.source}`);
+  console.log(`[UpdateGoods] Using ItemPrice=${itemPriceJpy} for vendorItemId=${vendorItemId}`);
   
   // Build ItemDescription - same logic as registerNewGoods
   let finalDescription = resolve('ItemDescription', 'ItemDescriptionText', '<p>Product description</p>');
