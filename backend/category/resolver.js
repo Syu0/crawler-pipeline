@@ -10,9 +10,9 @@
  * This ensures products with different categoryIds but same path share one mapping.
  */
 
-require('dotenv').config({ path: require('path').join(__dirname, '..', '..', 'backend', '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-const { getSheetsClient } = require('./sheetsClient');
+const { getSheetsClient } = require('../coupang/sheetsClient');
 
 // Sheet configuration
 const MAPPING_TAB = 'category_mapping';
