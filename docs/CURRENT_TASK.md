@@ -11,12 +11,14 @@
 1. `QOO10_SAK` 미설정으로 Qoo10 연동 테스트 실패
 2. macOS 기본 `timeout` 명령 미존재 (대체 방식 적용)
 
-## 진행 업데이트 (2026-02-22 14:27 KST)
+## 진행 업데이트 (2026-02-22 14:30 KST)
 - Step 1(복제) 완료: `src/`에 진입점/모듈 복제
 - Step 2(호환 진입점) 완료: `src/*`는 래퍼로 추가, `backend/*` 기존 실행 경로 유지
+- Step 3(스크립트 전환 준비) 반영:
+  - `backend/package.json`에 `start`(기존), `start:src`(신규 경로 검증) 추가
+  - `docs/RUNBOOK.md` 실행 명령을 스크립트 기준으로 정리
 - 부팅 스모크체크: `node backend/index.js`, `node src/index.js` 모두 기동 확인
 
 ## 다음 액션
-1. Step 3 스크립트 전환 계획 수립(기존 명령 유지 조건)
-2. 구조 변경 PR 생성(무기능변경, before/after 기록 포함)
-3. 시크릿 제공 후 Qoo10 연동 회귀 재검증
+1. 구조 변경 PR 생성(무기능변경, before/after 기록 포함)
+2. 시크릿 제공 후 Qoo10 연동 회귀 재검증
