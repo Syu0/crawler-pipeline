@@ -20,5 +20,5 @@
 - 부팅 스모크체크: `node backend/index.js`, `node src/index.js` 모두 기동 확인
 
 ## 다음 액션
-1. 구조 변경 PR 생성(무기능변경, before/after 기록 포함)
+1. 구조 변경 PR 생성(무기능변경, before/after 기록 포함) — 초안 작성 완료: `docs/PR_IMPLEMENTATION_backend_to_src_step1_3.md`
 2. 시크릿 제공 후 Qoo10 연동 회귀 재검증
