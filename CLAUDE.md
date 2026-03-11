@@ -191,7 +191,7 @@ OPENCLAW_SESSION_ID
 
 ### 9-A. crawler-pipeline 우선 작업
 
-- [ ] **1순위** 재고/가격 업데이트 — `SetGoodsPriceQty` 기능 완성 및 검증
+- [x] **1순위** 재고/가격 업데이트 — `SetGoodsPriceQty` 기능 완성 및 실제 API 검증 완료
 - [ ] **2순위** 쿠팡 서버사이드 수집 — 텍스트 수집 가능 여부 검증 (브라우저 확장 → 서버사이드 전환)
 - [ ] **3순위** 재고 모니터링 + Qoo10 qty=0 업데이트
 - [ ] **4순위** 룰 기반 자동 검수 시스템
@@ -209,6 +209,7 @@ OPENCLAW_SESSION_ID
 - [x] 자동 필드 탐색 시스템 v2a 구축
 - [x] 대시보드 초기 배포 (Vercel)
 - [x] gracejudy 브랜치 통합 (dashboard + v2a docs)
+- [x] `SetGoodsPriceQty` 재고/가격 업데이트 API 래퍼 구현 및 실제 검증 완료
 
 ---
 
