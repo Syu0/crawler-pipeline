@@ -2,28 +2,24 @@
 
 ## Step-by-Step Operator Instructions
 
-### 1. Collect Product Data from Coupang
+### 1. 쿠팡 데이터 수집
 
-#### Option A: Using Chrome Extension (Recommended)
+#### Step 1-a: 쿠키 갱신 (필요 시)
 
-1. Start the receiver server:
-   ```bash
-   npm run coupang:receiver:start
-   ```
+1. Chrome에서 쿠팡 로그인
+2. yamyam 익스텐션 아이콘 클릭 → "Copy Cookie"
+3. `.env`의 `COUPANG_COOKIE`에 붙여넣기
+4. 쿠키 만료 알림 이메일(D-3/D-0) 수신 시 반드시 갱신
 
-2. Open a Coupang product page in Chrome
-
-3. Click the extension icon and press "Send to Sheet"
-
-4. Data is written to the `coupang_datas` sheet
-
-#### Option B: Using CLI Scraper
+#### Step 1-b: Playwright 수집 실행
 
 ```bash
-npm run coupang:scrape:run
-```
+# dry-run (수집만, Sheets 미저장)
+npm run coupang:pw:dry:trace
 
-Requires `COUPANG_COOKIE` env var for authenticated requests.
+# 실제 수집 + Sheets 저장
+npm run coupang:pw:run
+```
 
 ### 2. Check coupang_datas Sheet Fields
 
@@ -140,8 +136,8 @@ To add a manual mapping:
 ### 6. Common Commands
 
 ```bash
-# Start Coupang receiver
-npm run coupang:receiver:start
+# Step 1: Playwright 수집 (dry-run)
+npm run coupang:pw:dry:trace
 
 # Dry-run registration (preview only)
 npm run qoo10:auto-register:dry

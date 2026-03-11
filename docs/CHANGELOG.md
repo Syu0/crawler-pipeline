@@ -2,6 +2,26 @@
 
 All notable changes to this project.
 
+## 2026-03
+
+### Added
+- Playwright 기반 서버사이드 쿠팡 수집기 도입
+  - stealth 플러그인 + 쿠키 주입으로 Akamai 우회
+  - 가격 셀렉터 타이밍 이슈 수정 (`.final-price-amount` + `waitForSelector`)
+  - 수집 검증: `npm run coupang:pw:dry:trace`
+- yamyam 크롬 익스텐션 (`chrome-extension/yamyam/`)
+  - 쿠팡 인증 쿠키 원클릭 갱신
+  - 쿠키 만료 이메일 알림 (D-3/D-0, meaningful.jy@gmail.com)
+- SetGoodsPriceQty 래퍼 구현 및 실제 API 검증 완료
+  - 안전장치 (dry-run guard) 포함
+  - read-back 검증 포함
+
+### Removed
+- chrome-extension-coupang (브라우저 파싱 방식 수집기) 제거
+- scripts/coupang-receiver.js (HTTP receiver 서버) 제거
+
+---
+
 ## 2025-12-XX
 
 ### Changed

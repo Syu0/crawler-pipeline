@@ -36,7 +36,7 @@ Location: `/app/backend/.env`
 | `QOO10_SAK` | Yes* | - | Qoo10 Seller Auth Key (*required for REAL mode) |
 | `QOO10_ALLOW_REAL_REG` | No | `0` | Set to `1` to enable real API calls |
 | `QOO10_TRACER` | No | `0` | Set to `1` for verbose API logging |
-| `COUPANG_RECEIVER_PORT` | No | `8787` | HTTP server port for extension |
+| `COUPANG_COOKIE` | Yes | - | Playwright 수집기용 쿠팡 인증 쿠키 (yamyam으로 갱신) |
 
 ## Common Failure Modes
 
@@ -76,14 +76,14 @@ Location: `/app/backend/.env`
 2. Verify tab name exists in sheet
 3. Check service account has edit permissions
 
-### Chrome Extension Not Sending Data
+### 쿠키 만료로 Playwright 수집 실패
 
-**Cause:** Receiver server not running or CORS issue.
+**Cause:** 쿠팡 인증 쿠키 만료 (Akamai 차단)
 
 **Resolution:**
-1. Start receiver: `npm run coupang:receiver:start`
-2. Check receiver is listening on port 8787
-3. Verify extension permissions in manifest.json
+1. yamyam 크롬 익스텐션으로 쿠키 갱신
+2. `.env`의 `COUPANG_COOKIE` 업데이트
+3. 만료 D-3/D-0 이메일 알림 확인 (meaningful.jy@gmail.com)
 
 ## Log Locations
 

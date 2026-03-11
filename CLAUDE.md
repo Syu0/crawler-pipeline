@@ -44,7 +44,7 @@
 |------|------|
 | 언어 | Node.js |
 | 데이터 저장소 | Google Sheets (SSOT — DB 없음) |
-| 쿠팡 수집 | 크롤링 (Playwright 또는 유사 도구) |
+| 쿠팡 수집 | Playwright + stealth + yamyam 크롬 익스텐션 (쿠키 갱신) → 서버사이드 수집 |
 | Qoo10 연동 | QAPI (REST, form-encoded) |
 | 대시보드 | Next.js + Vercel 배포 (glassmorphism UI, mobile-first) |
 | 에이전트 | OpenClaw (메인 Dev Agent + Sub Agent 2개, 각 다른 LLM) |

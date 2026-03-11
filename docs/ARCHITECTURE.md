@@ -11,9 +11,11 @@ Collects product data from Coupang and writes to Google Sheets.
 | `sheetsClient.js` | Google Sheets API wrapper (read/write/upsert) |
 | `scraper.js` | HTTP-based Coupang page scraper |
 
+수집 방식: Playwright + stealth + Akamai 우회, yamyam 크롬 익스텐션으로 쿠키 갱신
+
 Entry points:
-- `scripts/coupang-receiver.js` - HTTP server for Chrome extension
-- `scripts/coupang-scrape-to-sheet.js` - CLI scraper
+- `scripts/coupang-playwright-scrape.js` - Playwright 서버사이드 수집기
+- `scripts/coupang-scrape-to-sheet.js` - HTTP 기반 스크래퍼 (레거시)
 
 ### B) Qoo10 Registration (`/app/backend/qoo10/`)
 

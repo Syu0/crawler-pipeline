@@ -23,12 +23,12 @@ D) CATEGORY: Resolve Coupang categories to Qoo10 Japan categories
 │  [Coupang URL]                                                   │
 │       │                                                          │
 │       ▼                                                          │
-│  ┌──────────────┐     ┌─────────────────┐                       │
-│  │ Chrome Ext   │────▶│ coupang-receiver│                       │
-│  │ (popup.js)   │     │ (HTTP server)   │                       │
-│  └──────────────┘     └────────┬────────┘                       │
-│                                │                                 │
-│                                ▼                                 │
+│  ┌─────────────────────┐     ┌───────────────────────────┐      │
+│  │ yamyam Chrome Ext   │────▶│ Playwright 서버사이드 수집기│      │
+│  │ (쿠키 갱신)         │     │ (stealth + 쿠키 주입)      │      │
+│  └─────────────────────┘     └────────────┬──────────────┘      │
+│                                            │                     │
+│                                            ▼                     │
 │                    ┌─────────────────────┐                      │
 │                    │  Google Sheets      │                      │
 │                    │  (coupang_datas)    │                      │
@@ -75,16 +75,16 @@ D) CATEGORY: Resolve Coupang categories to Qoo10 Japan categories
 └── .env                     # Environment configuration
 
 /app/scripts/
-├── coupang-receiver.js      # HTTP server for Chrome extension
-├── coupang-scrape-to-sheet.js  # CLI scraper alternative
-├── qoo10-auto-register.js   # Main executor (CREATE/UPDATE)
-├── qoo10-register-cli.js    # Single product registration CLI
+├── coupang-playwright-scrape.js  # Playwright 서버사이드 수집기
+├── coupang-scrape-to-sheet.js    # HTTP 기반 스크래퍼 (레거시)
+├── qoo10-auto-register.js        # Main executor (CREATE/UPDATE)
+├── qoo10-register-cli.js         # Single product registration CLI
 └── qoo10-sync-japan-categories.js  # JP category sync CLI
 
-/app/chrome-extension-coupang/
-├── manifest.json            # Extension manifest (MV3)
-├── popup.html/js/css        # Extension UI
-└── contentScript.js         # DOM scraping script
+/chrome-extension/yamyam/    # 쿠키 원클릭 갱신 전용 확장
+├── manifest.json
+├── popup.html
+└── popup.js
 ```
 
 ## Google Sheet Tabs

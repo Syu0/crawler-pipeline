@@ -23,16 +23,16 @@ Quick reference document for LLM handoffs and onboarding.
 
 **Pipeline**:
 ```
-┌──────────────────┐     ┌─────────────────┐     ┌──────────────────┐
-│ Chrome Extension │ ──▶ │ Local Receiver  │ ──▶ │  Google Sheets   │
-│ (on Coupang page)│     │ (port 8787)     │     │  (coupang_datas) │
-└──────────────────┘     └─────────────────┘     └──────────────────┘
-                                                         │
-                                                         ▼
-                                                 ┌──────────────────┐
-                                                 │  Qoo10 CLI       │
-                                                 │  (Step 3)        │
-                                                 └──────────────────┘
+┌──────────────────────┐     ┌─────────────────────────────┐     ┌──────────────────┐
+│  yamyam Chrome Ext   │ ──▶ │ Playwright 서버사이드 수집기  │ ──▶ │  Google Sheets   │
+│  (쿠키 갱신)         │     │ (stealth + 쿠키 주입)        │     │  (coupang_datas) │
+└──────────────────────┘     └─────────────────────────────┘     └──────────────────┘
+                                                                          │
+                                                                          ▼
+                                                                  ┌──────────────────┐
+                                                                  │  Qoo10 CLI       │
+                                                                  │  (Step 3)        │
+                                                                  └──────────────────┘
 ```
 
 ---
@@ -41,10 +41,9 @@ Quick reference document for LLM handoffs and onboarding.
 
 | Step | File | Purpose |
 |------|------|---------|
-| Step 2 | `chrome-extension-coupang/` | Chrome extension (popup + content script) |
-| Step 2 | `scripts/coupang-receiver.js` | Local HTTP server for extension |
+| Step 1 | `chrome-extension/yamyam/` | 쿠키 원클릭 갱신 확장 |
+| Step 1 | `scripts/coupang-playwright-scrape.js` | Playwright 서버사이드 수집기 |
 | Step 2 | `scripts/lib/sheetsClient.js` | Google Sheets API client |
-| Step 2 | `scripts/coupang-scrape-to-sheet.js` | CLI scraper (alternative) |
 | Step 3 | `scripts/qoo10-register-cli.js` | Register product to Qoo10 |
 | Step 3 | `backend/qoo10/registerNewGoods.js` | Core registration logic |
 
@@ -59,8 +58,7 @@ Quick reference document for LLM handoffs and onboarding.
 | `GOOGLE_SHEET_ID` | Yes | - | Target Google Sheet ID |
 | `GOOGLE_SHEET_TAB_NAME` | No | `coupang_datas` | Tab name |
 | `GOOGLE_SERVICE_ACCOUNT_JSON_PATH` | Yes | - | Path to service account key |
-| `COUPANG_RECEIVER_PORT` | No | `8787` | Receiver server port |
-| `COUPANG_COOKIE` | No | - | For CLI mode only |
+| `COUPANG_COOKIE` | Yes | - | Playwright 수집기에서 사용하는 쿠팡 인증 쿠키 (yamyam으로 갱신) |
 
 ### Step 3 (Qoo10 Registration)
 
@@ -86,18 +84,21 @@ Quick reference document for LLM handoffs and onboarding.
 ## Current Status
 
 <!-- SYNC_STATUS_START -->
-- **Phase**: Step 2 + Step 3 implemented
-- **Last updated**: 2026-02-08
+- **Phase**: Step 1 + Step 3 implemented
+- **Last updated**: 2026-03-11
 - **Features complete**:
-  - Step 2: Chrome Extension for browser-based scraping
-  - Step 2: Local receiver server (port 8787)
+  - Step 1: yamyam Chrome Extension (쿠키 갱신)
+  - Step 1: Playwright + stealth 서버사이드 수집 (Akamai 우회)
+  - Step 1: 쿠키 만료 이메일 알림 (D-3/D-0, meaningful.jy@gmail.com)
   - Step 2: Google Sheets upsert (Service Account auth)
   - Step 2: StandardImage normalization (`thumbnails/...`)
   - Step 3: Qoo10 registration via SetNewGoods
   - Step 3: Single option group, ExtraImages support
+  - Step 3: SetGoodsPriceQty (재고/가격 업데이트) API 검증 완료
   - Cross-platform npm scripts (Windows compatible)
 - **Features pending**:
-  - TODO: SecondSubCat resolver module (Qoo10 category mapping)
+  - TODO: 재고 모니터링 + Qoo10 qty=0 업데이트
+  - TODO: 룰 기반 자동 검수 시스템
   - TODO: Write GdNo back to Google Sheet after registration
   - TODO: Multi-option support (SIZE + COLOR)
 <!-- SYNC_STATUS_END -->
@@ -109,11 +110,11 @@ Quick reference document for LLM handoffs and onboarding.
 All npm scripts are **cross-platform** (Windows/macOS/Linux) via `cross-env`.
 
 ```bash
-# Step 2: Start receiver server (keep running)
-npm run coupang:receiver:start
+# Step 1: Playwright 수집 (dry-run)
+npm run coupang:pw:dry:trace
 
-# Step 2: CLI scraper (alternative, needs COUPANG_COOKIE)
-npm run coupang:scrape:dry
+# Step 1: Playwright 수집 (실제 수집 + Sheets 저장)
+npm run coupang:pw:run
 
 # Step 3: Qoo10 registration (dry-run)
 npm run qoo10:register:sample
@@ -121,15 +122,6 @@ npm run qoo10:register:sample
 # Step 3: Qoo10 registration (real, needs QOO10_ALLOW_REAL_REG=1)
 npm run qoo10:register:with-extraimages-options
 ```
-
----
-
-## Next Step: SecondSubCat Resolver
-
-The `SecondSubCat` field is a placeholder. Implement a resolver module:
-1. Download Qoo10 category catalog via API
-2. Store as versioned JSON
-3. Map Coupang categories to Qoo10 categories
 
 ---
 
