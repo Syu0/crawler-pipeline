@@ -41,6 +41,9 @@ dist
 backend/keys/*.json
 !backend/keys/.gitkeep
 
+# yam yam cookie store (쿠팡 세션 쿠키 — 절대 커밋 금지)
+backend/.cookies/
+
 # Logs and debug files
 npm-debug.log*
 yarn-debug.log*

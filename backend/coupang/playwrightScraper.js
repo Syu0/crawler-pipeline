@@ -20,6 +20,7 @@
 
 const { chromium: playwrightChromium } = require('playwright-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const cookieStore = require('../services/cookieStore');
 
 playwrightChromium.use(StealthPlugin());
 
@@ -107,9 +108,31 @@ async function launchBrowser() {
 
 // ---------------------------------------------------------------------------
 // 인증 전략 1: 쿠키 직접 주입
+// 우선순위: process.env.COUPANG_COOKIE > cookieStore 파일
 // ---------------------------------------------------------------------------
 async function injectCookiesIfSet(context) {
-  const cookieStr = process.env.COUPANG_COOKIE;
+  // 1순위: .env의 COUPANG_COOKIE
+  let cookieStr = process.env.COUPANG_COOKIE;
+
+  // 2순위: cookieStore 파일 (yam yam 확장이 저장한 쿠키)
+  if (!cookieStr || !cookieStr.trim()) {
+    if (cookieStore.isExpired()) {
+      const data = cookieStore.loadCookieData();
+      if (data) {
+        // 파일은 있지만 만료됨
+        throw new Error(
+          '쿠팡 쿠키가 만료되었습니다. yam yam 버튼을 눌러 갱신해주세요.\n' +
+            `만료일: ${data.expiresAt}`
+        );
+      }
+      return false; // 파일 자체가 없음 — ID/PW 로그인으로 폴백
+    }
+    cookieStr = cookieStore.loadCookies();
+    if (cookieStr) {
+      trace(`cookieStore에서 쿠키 로드 (${cookieStore.daysUntilExpiry()}일 남음)`);
+    }
+  }
+
   if (!cookieStr || !cookieStr.trim()) return false;
 
   const cookies = parseCookieString(cookieStr);

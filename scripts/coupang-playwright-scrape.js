@@ -18,6 +18,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend'
 
 const { scrapeCoupangProductPlaywright } = require('../backend/coupang/playwrightScraper');
 const { ensureHeaders, upsertRow } = require('./lib/sheetsClient');
+const { checkAndNotify } = require('../backend/services/cookieExpiry');
 
 const SHEET_HEADERS = [
   'vendorItemId',
@@ -69,6 +70,9 @@ async function main() {
   console.log(`Sheet ID: ${sheetId || '(not set)'}`);
   console.log(`Tab:      ${tabName}`);
   console.log('');
+
+  // 쿠키 만료 알림 (만료 3일 전 / 당일 이메일 발송)
+  await checkAndNotify().catch((e) => console.warn('[notify]', e.message));
 
   try {
     const productData = await scrapeCoupangProductPlaywright(url);
