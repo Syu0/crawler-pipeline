@@ -192,7 +192,13 @@ OPENCLAW_SESSION_ID
 ### 9-A. crawler-pipeline 우선 작업
 
 - [x] **1순위** 재고/가격 업데이트 — `SetGoodsPriceQty` 기능 완성 및 실제 API 검증 완료
-- [ ] **2순위** 쿠팡 서버사이드 수집 — 텍스트 수집 가능 여부 검증 (브라우저 확장 → 서버사이드 전환)
+- [x] **2순위** 쿠팡 서버사이드 수집 완료
+  - Playwright + stealth + cookieStore 쿠키 주입으로 Akamai 우회 성공
+  - 가격 셀렉터 타이밍 이슈 수정 완료 (`.final-price-amount` + `waitForSelector`)
+  - yam yam 크롬 확장으로 쿠키 원클릭 갱신 (`chrome-extension/yamyam/`)
+  - 쿠키 만료 이메일 알림 구현 (meaningful.jy@gmail.com, D-3/D-0)
+  - 수집 필드: ItemTitle / ItemPrice / StandardImage / ItemDescriptionText
+  - 검증 완료: `npm run coupang:pw:dry:trace`
 - [ ] **3순위** 재고 모니터링 + Qoo10 qty=0 업데이트
 - [ ] **4순위** 룰 기반 자동 검수 시스템
 - [ ] **보류** UpdateGoods / EditGoodsContents / GetItemDetailInfo 테스트 스크립트
