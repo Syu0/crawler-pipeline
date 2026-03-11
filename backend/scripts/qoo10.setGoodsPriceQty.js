@@ -3,8 +3,7 @@
  *
  * 안전장치:
  *   1. QOO10_ALLOW_REAL_REG=1 없으면 dry-run
- *   2. KST 08:00–11:00 외 시간대 → dry-run
- *   3. 세션 write call 쿼터 10회 초과 → 중단
+ *   2. 세션 write call 쿼터 10회 초과 → 중단
  *
  * CLI 사용:
  *   node backend/scripts/qoo10.setGoodsPriceQty.js
@@ -50,10 +49,6 @@ function incrementWriteCallCount() {
   return count;
 }
 
-function getKSTHour() {
-  return (new Date().getUTCHours() + 9) % 24;
-}
-
 // ── API calls ─────────────────────────────────────────────────────────────────
 
 function callSetGoodsPriceQty(itemCode, price, qty) {
@@ -78,8 +73,6 @@ function getItemDetail(itemCode) {
 async function setGoodsPriceQty({ itemCode, price = null, qty = null }) {
   const timestamp  = new Date().toISOString();
   const allowReal  = process.env.QOO10_ALLOW_REAL_REG === '1';
-  const kstHour    = getKSTHour();
-  const withinHours = kstHour >= 8 && kstHour < 11;
   const writeCount = getWriteCallCount();
 
   const logBase = { timestamp, itemCode, price, qty };
@@ -92,15 +85,7 @@ async function setGoodsPriceQty({ itemCode, price = null, qty = null }) {
     return { success: false, dryRun: true, reason };
   }
 
-  // ② 실행 허용 시간
-  if (!withinHours) {
-    const reason = `Out of allowed hours (KST ${kstHour}:xx, allowed 08-11)`;
-    console.log(`[SetGoodsPriceQty] DRY-RUN: ${reason}`);
-    appendLog({ ...logBase, dryRun: true, reason, resultCode: null, readBack: null });
-    return { success: false, dryRun: true, reason };
-  }
-
-  // ③ 쿼터 초과
+  // ② 쿼터 초과
   if (writeCount >= QUOTA_LIMIT) {
     const reason = `Write quota exceeded (${writeCount}/${QUOTA_LIMIT})`;
     console.error(`[SetGoodsPriceQty] ABORT: ${reason}`);
@@ -112,7 +97,7 @@ async function setGoodsPriceQty({ itemCode, price = null, qty = null }) {
   let before = null;
   try {
     before = await getItemDetail(itemCode);
-    const obj = before?.ResultObject;
+    const obj = before?.ResultObject?.[0];
     console.log(`[SetGoodsPriceQty] Before → price=${obj?.ItemPrice}, qty=${obj?.ItemQty}`);
   } catch (e) {
     console.warn(`[SetGoodsPriceQty] read-back (before) failed: ${e.message}`);
@@ -136,7 +121,7 @@ async function setGoodsPriceQty({ itemCode, price = null, qty = null }) {
   let readBack = null;
   try {
     const after = await getItemDetail(itemCode);
-    const obj   = after?.ResultObject;
+    const obj   = after?.ResultObject?.[0];
     readBack = {
       afterPrice: obj?.ItemPrice,
       afterQty:   obj?.ItemQty,
@@ -167,7 +152,7 @@ if (require.main === module) {
   const qty      = process.env.TEST_QTY   ? Number(process.env.TEST_QTY)   : 50;
 
   console.log(`[SetGoodsPriceQty] itemCode=${itemCode}  price=${price}  qty=${qty}`);
-  console.log(`[SetGoodsPriceQty] allowReal=${process.env.QOO10_ALLOW_REAL_REG === '1'}  kstHour=${getKSTHour()}`);
+  console.log(`[SetGoodsPriceQty] allowReal=${process.env.QOO10_ALLOW_REAL_REG === '1'}`);
 
   setGoodsPriceQty({ itemCode, price, qty })
     .then(result => {

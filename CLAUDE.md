@@ -125,7 +125,6 @@ ItemDescription  → ItemsContents.EditGoodsContents
 ```
 QOO10_TEST_ITEMCODE=1194045329   # 테스트 전용 상품
 QOO10_ALLOW_REAL_REG=1           # 실행 승인 플래그 (없으면 dry-run)
-실행 허용 시간: 08:00–11:00 KST
 write calls 쿼터: 10회/세션
 ```
 
