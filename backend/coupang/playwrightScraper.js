@@ -314,8 +314,23 @@ async function scrapePage(context, productUrl) {
       );
     }
 
-    // ── 가격 ──────────────────────────────────────────────────────────────
+    // ── 가격 — 크롬 확장과 동일한 셀렉터 우선 적용 ──────────────────────────
+    // 가격 요소가 렌더링될 때까지 최대 10초 대기
+    await page.waitForSelector(
+      '.final-price-amount, .total-price strong, .prod-sale-price .value',
+      { timeout: 10000 }
+    ).catch(() => trace('Price selector timeout — extracting anyway'));
+
     const itemPrice = await page.evaluate(() => {
+      // 크롬 확장 1순위 셀렉터
+      const priceEl = document.querySelector('.final-price-amount');
+      if (priceEl) {
+        const text = priceEl.textContent || '';
+        const parsed = parseInt(text.replace(/,/g, '').replace(/원/g, '').trim(), 10);
+        if (!isNaN(parsed) && parsed > 0) return String(parsed);
+      }
+
+      // 기존 셀렉터 폴백
       const selectors = [
         '.total-price strong',
         '.prod-sale-price .value',
@@ -325,9 +340,12 @@ async function scrapePage(context, productUrl) {
       for (const s of selectors) {
         const el = document.querySelector(s);
         if (el && el.innerText.trim()) {
-          return el.innerText.replace(/[^0-9]/g, '');
+          const val = el.innerText.replace(/[^0-9]/g, '');
+          if (val && val !== '0') return val;
         }
       }
+
+      // JSON-LD 폴백
       const scripts = document.querySelectorAll('script[type="application/ld+json"]');
       for (const s of scripts) {
         try {
