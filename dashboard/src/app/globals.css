@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+:root { color-scheme: dark; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at 20% 0%, #243b55 0%, #0f172a 45%, #020617 100%);
+  color: #e2e8f0;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.safe-wrap { width: min(1100px, 100% - 1rem); margin: 0 auto; }
