@@ -190,15 +190,26 @@ OPENCLAW_SESSION_ID
 
 ## 9. 현재 진행 상태 (2026-03 기준)
 
-- [x] Qoo10 `SetNewGoods` 기본 통합 완료
-- [x] `UpdateGoods` overwrite-safe 검증 완료
+### 9-A. crawler-pipeline 우선 작업
+
+- [ ] **1순위** 재고/가격 업데이트 — `SetGoodsPriceQty` 기능 완성 및 검증
+- [ ] **2순위** 쿠팡 서버사이드 수집 — 텍스트 수집 가능 여부 검증 (브라우저 확장 → 서버사이드 전환)
+- [ ] **3순위** 재고 모니터링 + Qoo10 qty=0 업데이트
+- [ ] **4순위** 룰 기반 자동 검수 시스템
+- [ ] **보류** UpdateGoods / EditGoodsContents / GetItemDetailInfo 테스트 스크립트
+
+### 9-B. dashboard 작업
+
+- [ ] Chat 탭 OpenClaw 세션 연동 — `/api/openclaw/*` Vercel API Route 프록시
+
+### 완료
+
+- [x] Qoo10 `SetNewGoods` 기본 통합
+- [x] `UpdateGoods` overwrite-safe 검증
 - [x] 필드별 API 매핑 확인 (Title / Qty / Description)
-- [x] 자동 필드 탐색 시스템 v2a (`backend/scripts/qoo10.v2a.discovery.auto.js`) 구축
-- [x] 대시보드 초기 배포 (Vercel, 외부 URL 확보)
-- [ ] Chat 탭 OpenClaw 세션 연동 (API Route 프록시 구현 중)
-- [ ] 쿠팡 키워드 검색 → 자동 수집 파이프라인 (Sub Agent A)
-- [ ] 재고 모니터링 + Qoo10 qty=0 업데이트 (Sub Agent B)
-- [ ] 룰 기반 자동 검수 시스템
+- [x] 자동 필드 탐색 시스템 v2a 구축
+- [x] 대시보드 초기 배포 (Vercel)
+- [x] gracejudy 브랜치 통합 (dashboard + v2a docs)
 
 ---
 
