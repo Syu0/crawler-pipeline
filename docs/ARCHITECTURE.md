@@ -11,6 +11,9 @@ Collects product data from Coupang and writes to Google Sheets.
 | `sheetsClient.js` | Google Sheets API wrapper (read/write/upsert) |
 | `scraper.js` | HTTP-based Coupang page scraper |
 
+> `scripts/lib/sheetsClient.js`는 이 파일로 위임하는 shim이다 (하위 호환 유지용).
+> 실제 구현은 `backend/coupang/sheetsClient.js`에 있다.
+
 수집 방식: Playwright + stealth + Akamai 우회, yamyam 크롬 익스텐션으로 쿠키 갱신
 
 Entry points:
@@ -53,28 +56,42 @@ Orchestrates the pipeline.
 | File | Purpose |
 |------|---------|
 | `qoo10-auto-register.js` | Main executor (reads sheet, calls B/C) |
-| `coupang-receiver.js` | HTTP server for extension (calls A) |
 
 ## Key Data Structures
 
 ### Product Row (coupang_datas sheet)
 
 ```
-vendorItemId        # Primary key
-coupang_product_id  # Coupang product ID
-categoryId          # Coupang category ID
-categoryPath3       # Normalized category path (last 3 segments)
-ItemTitle           # Product title
-ItemPrice           # Coupang price (KRW)
-StandardImage       # Main image URL
-ItemDescriptionText # Description
-qoo10ItemId         # Qoo10 item ID (after CREATE)
-qoo10SellingPrice   # Calculated selling price (JPY)
-jpCategoryIdUsed    # Resolved Qoo10 category ID
-categoryMatchType   # MANUAL | AUTO | FALLBACK
-needsUpdate         # YES | NO
-changeFlags         # PRICE_UP | PRICE_DOWN | OPTIONS_CHANGED
-registrationStatus  # SUCCESS | WARNING | FAILED | DRY_RUN
+# ── Playwright 수집기 write 필드 ─────────────────────────────────────
+vendorItemId        # Primary key (URL 파라미터)
+itemId              # Fallback key (URL 파라미터)
+coupang_product_id  # Coupang 상품 ID (URL path)
+categoryId          # Coupang 카테고리 ID (URL 파라미터)
+ProductURL          # 원본 쿠팡 상품 URL
+ItemTitle           # 상품명
+ItemPrice           # 쿠팡 판매가 (KRW, 숫자 문자열)
+StandardImage       # 대표 이미지 (thumbnails/... 정규화 경로)
+ExtraImages         # 추가 이미지 배열 (JSON 문자열)
+WeightKg            # 무게 (하드코딩 '1')
+Options             # 옵션 (현재 null)
+ItemDescriptionText # 상세 설명 (없으면 ItemTitle로 fallback)
+updatedAt           # 수집 시각 (ISO 8601)
+status              # 파이프라인 상태 ENUM (수집 후 COLLECTED로 설정)
+
+# ── Qoo10 등록 write-back 필드 ────────────────────────────────────────
+qoo10SellingPrice       # 계산된 판매가 (JPY)
+qoo10ItemId             # Qoo10 ItemCode (등록 성공 시)
+qoo10SellerCode         # 사용된 SellerCode
+jpCategoryIdUsed        # 사용된 Qoo10 카테고리 ID
+categoryMatchType       # MANUAL | AUTO | FALLBACK
+categoryMatchConfidence # 매핑 신뢰도 (AUTO only)
+coupangCategoryKeyUsed  # 카테고리 매핑에 사용된 key
+registrationMode        # DRY_RUN | REAL
+registrationStatus      # SUCCESS | WARNING | DRY_RUN | FAILED (API 결과 상세)
+registrationMessage     # 상태 메시지
+lastRegisteredAt        # 마지막 등록 시도 시각 (ISO 8601)
+needsUpdate             # YES | NO (UPDATE 트리거)
+changeFlags             # PRICE_UP | PRICE_DOWN | OPTIONS_CHANGED (UPDATE 완료 후 초기화)
 ```
 
 ### Category Mapping Row (category_mapping sheet)

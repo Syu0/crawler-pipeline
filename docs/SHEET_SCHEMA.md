@@ -106,8 +106,8 @@ Category dictionary accumulated from scraped products. Used for future Qoo10 cat
 | K | `Options` | JSON string | DOM | Single option: `{"type":"SIZE","values":["S","M"]}` |
 | L | `ItemDescriptionText` | string | DOM | Plain text description (no HTML/images) |
 | M | `updatedAt` | ISO datetime | System | Last update timestamp |
-| N | `qoo10SellingPrice` | number | System | **REQUIRED** KRW input → computed JPY written back |
-| O | `qoo10ItemId` | string | Step 5-2 | **OUTPUT**: Qoo10 ItemCode/ItemNo |
+| N | `status` | string | System | 파이프라인 상태 ENUM. COLLECTED / REGISTERING / REGISTERED / ERROR 등 (CLAUDE.md 참고) |
+| O+ | `qoo10SellingPrice` 外 | — | System | Qoo10 등록 write-back 필드 (동적 추가, 아래 섹션 참고) |
 
 ---
 
@@ -294,6 +294,27 @@ Products with different `categoryId` but same `categoryPath3` share one mapping 
 If old `category_mapping` exists with `coupangCategoryId` as primary key:
 - Rows with `categoryPath3` are migrated to new schema
 - Rows without path are backed up to `category_mapping_legacy`
+
+---
+
+## status 전이 규칙
+
+`status` 컬럼은 파이프라인 전체 단계를 관리하는 단일 ENUM이다. CLAUDE.md의 전체 ENUM 정의 참고.
+
+| 시점 | write 위치 | 전이 |
+|------|-----------|------|
+| Playwright 수집 완료 | `coupang-playwright-scrape.js` | → `COLLECTED` (기존이 PROTECTED_STATUSES면 skip) |
+| Qoo10 등록 시작 | `qoo10-auto-register.js` | → `REGISTERING` (락) |
+| Qoo10 등록 성공 (SUCCESS / WARNING) | `qoo10-auto-register.js` | → `REGISTERED` |
+| Qoo10 등록 실패 | `qoo10-auto-register.js` | → `ERROR` |
+| DRY_RUN | — | 변경 없음 |
+
+```
+PROTECTED_STATUSES = REGISTERING, REGISTERED, VALIDATING, LIVE, OUT_OF_STOCK, DEACTIVATED
+```
+
+- `REGISTERING` 상태인 row는 qoo10-auto-register.js가 처리를 건너뜀 (중복 실행 방지)
+- `registrationStatus` (SUCCESS/WARNING/FAILED/DRY_RUN)는 Qoo10 API 결과 상세 기록용 — `status`와 별개 공존
 
 ---
 

@@ -17,7 +17,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend', '.env') });
 
 const { scrapeCoupangProductPlaywright } = require('../backend/coupang/playwrightScraper');
-const { ensureHeaders, upsertRow } = require('./lib/sheetsClient');
+const { ensureHeaders, upsertRow, findRowByKey, getRowData } = require('./lib/sheetsClient');
 const { checkAndNotify } = require('../backend/services/cookieExpiry');
 
 const SHEET_HEADERS = [
@@ -34,6 +34,12 @@ const SHEET_HEADERS = [
   'Options',
   'ItemDescriptionText',
   'updatedAt',
+  'status',
+];
+
+// 이미 파이프라인 진행 중인 상태 — Playwright 수집기가 덮어쓰지 않는다
+const PROTECTED_STATUSES = [
+  'REGISTERING', 'REGISTERED', 'VALIDATING', 'LIVE', 'OUT_OF_STOCK', 'DEACTIVATED',
 ];
 
 function parseArgs() {
@@ -88,6 +94,20 @@ async function main() {
 
     console.log('\n=== Writing to Google Sheet ===\n');
     await ensureHeaders(sheetId, tabName, SHEET_HEADERS);
+
+    // 기존 row의 status 확인 — PROTECTED 상태면 COLLECTED로 덮어쓰지 않음
+    const keyCol = productData.vendorItemId ? 'vendorItemId' : 'itemId';
+    const keyValue = productData.vendorItemId || productData.itemId;
+    const keyColIndex = SHEET_HEADERS.indexOf(keyCol);
+    const existingRowNum = await findRowByKey(sheetId, tabName, keyColIndex, keyValue);
+    if (existingRowNum && existingRowNum > 1) {
+      const existingData = await getRowData(sheetId, tabName, existingRowNum, SHEET_HEADERS);
+      if (!PROTECTED_STATUSES.includes(existingData?.status)) {
+        productData.status = 'COLLECTED';
+      }
+    } else {
+      productData.status = 'COLLECTED';
+    }
 
     const result = await upsertRow(
       sheetId,

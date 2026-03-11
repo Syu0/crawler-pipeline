@@ -623,13 +623,28 @@ async function main() {
     for (const row of rowsToProcess) {
       const vendorItemId = row.vendorItemId || row.itemId;
       const isUpdate = row.qoo10ItemId && row.qoo10ItemId.trim() !== '';
-      
+
+      // REGISTERING 락 — 이미 등록 시도 중인 row 건너뜀 (중복 실행 방지)
+      if (row.status === 'REGISTERING') {
+        console.log(`  → SKIP: ${vendorItemId} is locked (status=REGISTERING)`);
+        results.skipped.push({ vendorItemId, reason: 'Already REGISTERING (lock)' });
+        console.log('');
+        continue;
+      }
+
       if (isUpdate) {
         console.log(`Processing: ${vendorItemId} [UPDATE requested via needsUpdate=YES]`);
       } else {
         console.log(`Processing: ${vendorItemId} [CREATE]`);
       }
-      
+
+      // 등록 시작 전 REGISTERING 락 설정
+      try {
+        await updateSheetRow(row._rowIndex, { status: 'REGISTERING' });
+      } catch (e) {
+        console.warn(`  ⚠ Could not set REGISTERING lock: ${e.message}`);
+      }
+
       const result = await registerProduct(row, options.dryRun, sheets);
       
       // Prepare sheet update with category tracking (including coupangCategoryKeyUsed)
@@ -654,6 +669,7 @@ async function main() {
           try {
             const sheetUpdate = {
               ...categoryUpdate,
+              status: 'REGISTERED',
               registrationMode: 'REAL',
               registrationStatus: 'SUCCESS',
               registrationMessage: result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully',
@@ -692,6 +708,7 @@ async function main() {
           try {
             const warningUpdate = {
               ...categoryUpdate,
+              status: 'REGISTERED',
               registrationMode: 'REAL',
               registrationStatus: 'WARNING',
               registrationMessage: 'FALLBACK category used (review required)',
@@ -728,6 +745,7 @@ async function main() {
           try {
             const failedUpdate = {
               ...categoryUpdate,
+              status: 'ERROR',
               registrationMode: 'REAL',
               registrationStatus: 'FAILED',
               registrationMessage: result.apiError || 'API error',
