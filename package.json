@@ -24,7 +24,10 @@
     "coupang:pw:dry:headed": "cross-env COUPANG_SCRAPE_DRY_RUN=1 PLAYWRIGHT_HEADLESS=0 node scripts/coupang-playwright-scrape.js --url \"https://www.coupang.com/vp/products/7107426071?itemId=17757771253&vendorItemId=84922122516&categoryId=317679\"",
     "coupang:pw:run": "node scripts/coupang-playwright-scrape.js --url \"https://www.coupang.com/vp/products/7107426071?itemId=17757771253&vendorItemId=84922122516&categoryId=317679\"",
     "backend:start": "node backend/server.js",
-    "docs:sync": "node scripts/update-context-packet.js"
+    "docs:sync": "node scripts/update-context-packet.js",
+    "sheets:setup": "node backend/scripts/setup-sheets.js",
+    "coupang:discover": "node backend/scripts/coupang-keyword-discover.js",
+    "coupang:discover:dry": "node backend/scripts/coupang-keyword-discover.js --dry-run"
   },
   "dependencies": {
     "cross-env": "^7.0.3",

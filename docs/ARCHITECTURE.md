@@ -148,3 +148,5 @@ ProductionPlace     # Country name (default: Overseas)
 | `coupang_categorys` | `coupangCategoryId` | Category dictionary |
 | `category_mapping` | `coupangCategoryKey` | KR→JP mappings |
 | `japan_categories` | `jpCategoryId` | JP category cache |
+| `keywords` | `keyword` | 수집 대상 키워드 관리 (ACTIVE/PAUSED/PENDING) |
+| `config` | `key` | 필터 조건값 등 운영 설정 (코드 외부 관리) |

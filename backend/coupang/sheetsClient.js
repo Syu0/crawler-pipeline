@@ -276,3 +276,221 @@ module.exports = {
   getRowData,
   upsertRow,
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 키워드 탐색 파이프라인 전용 함수
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
+
+/**
+ * 시트가 없으면 생성 + 헤더 write. 이미 존재하면 아무것도 하지 않음 (idempotent).
+ *
+ * @param {object} sheets         - googleapis sheets 클라이언트
+ * @param {string} spreadsheetId
+ * @param {string} title          - 시트(탭) 이름
+ * @param {string[]} headers      - 헤더 컬럼 배열
+ * @returns {Promise<'created'|'exists'>}
+ */
+async function ensureSheet(sheets, spreadsheetId, title, headers) {
+  // 현재 시트 목록 조회
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const exists = meta.data.sheets.some(
+    (s) => s.properties.title === title
+  );
+
+  if (exists) return 'exists';
+
+  // 시트 생성
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [{ addSheet: { properties: { title } } }],
+    },
+  });
+
+  // 헤더 write
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${title}!A1`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [headers] },
+  });
+
+  return 'created';
+}
+
+/**
+ * `config` 시트 전체를 key-value 객체로 반환.
+ * 컬럼 구조: key | value | memo  (1행 = 헤더)
+ *
+ * 특수 파싱:
+ *   FILTER_PRICE_KRW_MAX          → Number
+ *   EXCLUDED_CATEGORY_KEYWORDS    → 콤마 split 후 trim 배열
+ *
+ * @param {object} sheets
+ * @param {string} spreadsheetId
+ * @returns {Promise<Object>}
+ */
+async function getConfig(sheets, spreadsheetId) {
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: 'config!A:C',
+  });
+
+  const rows = res.data.values || [];
+  const config = {};
+
+  // 1행은 헤더 skip
+  for (let i = 1; i < rows.length; i++) {
+    const [key, value] = rows[i];
+    if (!key) continue;
+
+    if (key === 'FILTER_PRICE_KRW_MAX') {
+      config[key] = Number(value) || 150000;
+    } else if (key === 'EXCLUDED_CATEGORY_KEYWORDS') {
+      config[key] = (value || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    } else {
+      config[key] = value || '';
+    }
+  }
+
+  return config;
+}
+
+/**
+ * `keywords` 시트에서 status='ACTIVE'인 행만 반환.
+ * 컬럼 구조: keyword | status | lastRunAt | memo  (1행 = 헤더)
+ *
+ * @param {object} sheets
+ * @param {string} spreadsheetId
+ * @returns {Promise<Array<{row: number, keyword: string, status: string, lastRunAt: string, memo: string}>>}
+ */
+async function getActiveKeywords(sheets, spreadsheetId) {
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: 'keywords!A:D',
+  });
+
+  const rows = res.data.values || [];
+  const result = [];
+
+  // 1행은 헤더 skip
+  for (let i = 1; i < rows.length; i++) {
+    const [keyword, status, lastRunAt, memo] = rows[i];
+    if (status === 'ACTIVE' && keyword) {
+      result.push({
+        row: i + 1, // 1-based 시트 행 번호
+        keyword,
+        status,
+        lastRunAt: lastRunAt || '',
+        memo: memo || '',
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * `keywords` 시트 해당 행의 lastRunAt 컬럼(C열)을 현재 시각으로 업데이트.
+ *
+ * @param {object} sheets
+ * @param {string} spreadsheetId
+ * @param {number} rowIndex - 1-based 시트 행 번호
+ */
+async function updateKeywordLastRun(sheets, spreadsheetId, rowIndex) {
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `keywords!C${rowIndex}`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [[new Date().toISOString()]] },
+  });
+}
+
+/**
+ * `coupang_datas` 시트에 DISCOVERED 상태로 items를 upsert.
+ * vendorItemId가 이미 존재하는 행은 skip (상태 변경 금지).
+ *
+ * @param {object} sheets
+ * @param {string} spreadsheetId
+ * @param {Object[]} items - keywordSearch.js 파싱 결과 배열
+ * @returns {Promise<{upserted: number, skipped: number}>}
+ */
+async function upsertDiscoveredProducts(sheets, spreadsheetId, items) {
+  const TAB = 'coupang_datas';
+  const HEADERS = [
+    'vendorItemId', 'itemId', 'coupang_product_id', 'categoryId',
+    'ProductURL', 'ItemTitle', 'ItemPrice', 'StandardImage',
+    'ExtraImages', 'WeightKg', 'Options', 'ItemDescriptionText',
+    'updatedAt', 'status',
+  ];
+
+  // 헤더 보장
+  await ensureHeaders(spreadsheetId, TAB, HEADERS);
+
+  // 현재 vendorItemId 컬럼(A열) 전체 로드 → 중복 체크용 Set
+  const colRes = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${TAB}!A:A`,
+  });
+  const existingIds = new Set(
+    (colRes.data.values || []).flat().filter(Boolean)
+  );
+
+  let upserted = 0;
+  let skipped = 0;
+  const now = new Date().toISOString();
+
+  for (const item of items) {
+    const key = item.vendorItemId || item.itemId;
+    if (!key || existingIds.has(key)) {
+      skipped++;
+      continue;
+    }
+
+    const row = HEADERS.map((h) => {
+      switch (h) {
+        case 'vendorItemId':       return item.vendorItemId || '';
+        case 'itemId':             return item.itemId || '';
+        case 'coupang_product_id': return item.productId || '';
+        case 'categoryId':         return item.categoryId || '';
+        case 'ProductURL':         return item.productUrl || '';
+        case 'ItemTitle':          return item.itemTitle || '';
+        case 'ItemPrice':          return item.itemPrice != null ? String(item.itemPrice) : '';
+        case 'StandardImage':      return item.thumbnailImage || '';
+        case 'ExtraImages':        return '';
+        case 'WeightKg':           return '';
+        case 'Options':            return '';
+        case 'ItemDescriptionText': return '';
+        case 'updatedAt':          return now;
+        case 'status':             return 'DISCOVERED';
+        default:                   return '';
+      }
+    });
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: `${TAB}!A:A`,
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: [row] },
+    });
+
+    existingIds.add(key); // 같은 실행 내 중복 방지
+    upserted++;
+  }
+
+  return { upserted, skipped };
+}
+
+Object.assign(module.exports, {
+  ensureSheet,
+  getConfig,
+  getActiveKeywords,
+  updateKeywordLastRun,
+  upsertDiscoveredProducts,
+});
