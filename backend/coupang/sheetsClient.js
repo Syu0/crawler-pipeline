@@ -422,17 +422,18 @@ async function updateKeywordLastRun(sheets, spreadsheetId, rowIndex) {
  */
 async function upsertDiscoveredProducts(sheets, spreadsheetId, items) {
   const TAB = 'coupang_datas';
-  const HEADERS = [
+  const DESIRED_HEADERS = [
     'vendorItemId', 'itemId', 'coupang_product_id', 'categoryId',
     'ProductURL', 'ItemTitle', 'ItemPrice', 'StandardImage',
     'ExtraImages', 'WeightKg', 'Options', 'ItemDescriptionText',
     'updatedAt', 'status',
   ];
 
-  // 헤더 보장
-  await ensureHeaders(spreadsheetId, TAB, HEADERS);
+  // 헤더 보장 + 실제 시트 헤더 순서 가져오기
+  // ensureHeaders 반환값이 실제 열 순서 — 이것을 기준으로 row 배열 빌드
+  const actualHeaders = await ensureHeaders(spreadsheetId, TAB, DESIRED_HEADERS);
 
-  // 현재 vendorItemId 컬럼(A열) 전체 로드 → 중복 체크용 Set
+  // 현재 vendorItemId 컬럼 전체 로드 → 중복 체크용 Set
   const colRes = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: `${TAB}!A:A`,
@@ -445,6 +446,26 @@ async function upsertDiscoveredProducts(sheets, spreadsheetId, items) {
   let skipped = 0;
   const now = new Date().toISOString();
 
+  function valueFor(h, item) {
+    switch (h) {
+      case 'vendorItemId':        return item.vendorItemId || '';
+      case 'itemId':              return item.itemId || '';
+      case 'coupang_product_id':  return item.productId || '';
+      case 'categoryId':          return item.categoryId || '';
+      case 'ProductURL':          return item.productUrl || '';
+      case 'ItemTitle':           return item.itemTitle || '';
+      case 'ItemPrice':           return item.itemPrice != null ? String(item.itemPrice) : '';
+      case 'StandardImage':       return item.thumbnailImage || '';
+      case 'ExtraImages':         return '';
+      case 'WeightKg':            return '';
+      case 'Options':             return '';
+      case 'ItemDescriptionText': return '';
+      case 'updatedAt':           return now;
+      case 'status':              return 'DISCOVERED';
+      default:                    return '';
+    }
+  }
+
   for (const item of items) {
     const key = item.vendorItemId || item.itemId;
     if (!key || existingIds.has(key)) {
@@ -452,25 +473,8 @@ async function upsertDiscoveredProducts(sheets, spreadsheetId, items) {
       continue;
     }
 
-    const row = HEADERS.map((h) => {
-      switch (h) {
-        case 'vendorItemId':       return item.vendorItemId || '';
-        case 'itemId':             return item.itemId || '';
-        case 'coupang_product_id': return item.productId || '';
-        case 'categoryId':         return item.categoryId || '';
-        case 'ProductURL':         return item.productUrl || '';
-        case 'ItemTitle':          return item.itemTitle || '';
-        case 'ItemPrice':          return item.itemPrice != null ? String(item.itemPrice) : '';
-        case 'StandardImage':      return item.thumbnailImage || '';
-        case 'ExtraImages':        return '';
-        case 'WeightKg':           return '';
-        case 'Options':            return '';
-        case 'ItemDescriptionText': return '';
-        case 'updatedAt':          return now;
-        case 'status':             return 'DISCOVERED';
-        default:                   return '';
-      }
-    });
+    // 실제 시트 헤더 순서대로 row 빌드 → 컬럼 위치 불일치 방지
+    const row = actualHeaders.map((h) => valueFor(h, item));
 
     await sheets.spreadsheets.values.append({
       spreadsheetId,
@@ -487,10 +491,58 @@ async function upsertDiscoveredProducts(sheets, spreadsheetId, items) {
   return { upserted, skipped };
 }
 
+/**
+ * `coupang_datas` 시트에서 status='DISCOVERED' 인 행만 반환.
+ * ProductURL 없는 행은 skip.
+ *
+ * @param {object} sheets
+ * @param {string} spreadsheetId
+ * @returns {Promise<Array<{row: number, vendorItemId: string, itemId: string, productUrl: string}>>}
+ */
+async function getDiscoveredProducts(sheets, spreadsheetId) {
+  const TAB = 'coupang_datas';
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${TAB}!A:ZZ`,
+  });
+
+  const rows = res.data.values || [];
+  if (rows.length < 2) return [];
+
+  const headers = rows[0];
+  const statusIdx = headers.indexOf('status');
+  const vendorItemIdIdx = headers.indexOf('vendorItemId');
+  const itemIdIdx = headers.indexOf('itemId');
+  const productUrlIdx = headers.indexOf('ProductURL');
+
+  const result = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const status = row[statusIdx] || '';
+    if (status !== 'DISCOVERED') continue;
+
+    const productUrl = row[productUrlIdx] || '';
+    if (!productUrl) {
+      console.log(`  [skip] 행 ${i + 1}: ProductURL 없음`);
+      continue;
+    }
+
+    result.push({
+      row: i + 1,
+      vendorItemId: row[vendorItemIdIdx] || '',
+      itemId: row[itemIdIdx] || '',
+      productUrl,
+    });
+  }
+
+  return result;
+}
+
 Object.assign(module.exports, {
   ensureSheet,
   getConfig,
   getActiveKeywords,
   updateKeywordLastRun,
   upsertDiscoveredProducts,
+  getDiscoveredProducts,
 });

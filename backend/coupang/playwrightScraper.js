@@ -414,9 +414,10 @@ async function scrapePage(context, productUrl) {
  * Playwright + Stealth로 쿠팡 상품 페이지를 수집한다.
  *
  * @param {string} productUrl
+ * @param {import('playwright').BrowserContext} [externalContext] - 외부 컨텍스트 (배치 수집용). 없으면 브라우저 자체 생성.
  * @returns {Promise<Object>} 수집된 상품 데이터 (기존 scraper.js 와 동일한 shape)
  */
-async function scrapeCoupangProductPlaywright(productUrl) {
+async function scrapeCoupangProductPlaywright(productUrl, externalContext = null) {
   console.log('\n=== Coupang Playwright Scraper ===');
   console.log(`URL: ${productUrl}\n`);
 
@@ -428,15 +429,21 @@ async function scrapeCoupangProductPlaywright(productUrl) {
   console.log(`Product ID:     ${urlInfo.coupangProductId}`);
   console.log(`Vendor Item ID: ${urlInfo.vendorItemId || '(none)'}`);
 
-  const { browser, context } = await launchBrowser();
+  let browser = null;
+  let context = externalContext;
 
-  try {
+  if (!context) {
+    const launched = await launchBrowser();
+    browser = launched.browser;
+    context = launched.context;
     // 인증 전략 선택
     const hasCookie = await injectCookiesIfSet(context);
     if (!hasCookie) {
       await loginWithCredentials(context);
     }
+  }
 
+  try {
     const { itemTitle, itemPrice, standardImage, extraImages, itemDescriptionText } =
       await scrapePage(context, productUrl);
 
@@ -465,7 +472,7 @@ async function scrapeCoupangProductPlaywright(productUrl) {
     return result;
 
   } finally {
-    await browser.close();
+    if (browser) await browser.close(); // 외부 context면 닫지 않음
   }
 }
 

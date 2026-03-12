@@ -43,6 +43,12 @@ const {
 const { searchCoupangByKeyword } = require('../coupang/keywordSearch');
 const { applyFilters } = require('../coupang/productFilters');
 const cookieStore = require('../services/cookieStore');
+const {
+  wait,
+  sendBlockAlertEmail,
+  RETRY_WAIT_MS,
+  RETRY_COUNT,
+} = require('../coupang/blockDetector');
 
 playwrightChromium.use(StealthPlugin());
 
@@ -126,9 +132,14 @@ async function warmupContext(context) {
       waitUntil: 'domcontentloaded',
       timeout: 30000,
     });
-    await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
+    // Akamai JS 챌린지 → redirect → 실제 페이지 로드까지 대기
+    // title이 비어있으면 챌린지 페이지 — 실제 페이지 title이 나타날 때까지 기다림
+    await page
+      .waitForFunction(() => document.title.length > 0, { timeout: 45000 })
+      .catch(() => {});
     const title = await page.title();
     console.log(`[Playwright] warming 완료 (title: ${title})`);
+
   } finally {
     await page.close();
   }
@@ -219,8 +230,38 @@ async function main() {
       console.log(`\n${'─'.repeat(40)}`);
       console.log(`키워드: "${kw.keyword}"`);
 
-      // a. 검색 + 파싱
-      const items = await searchCoupangByKeyword(kw.keyword, context, { maxPages: 2 });
+      // a. 검색 + 파싱 (블록 감지 시 재시도)
+      let items;
+      try {
+        items = await searchCoupangByKeyword(kw.keyword, context, { maxPages: 2 });
+      } catch (err) {
+        if (err.name !== 'BlockedError') throw err;
+
+        console.log(`[블록감지] Akamai IP 차단 감지 — "${kw.keyword}"`);
+        let recovered = false;
+
+        for (let attempt = 1; attempt <= RETRY_COUNT; attempt++) {
+          console.log(
+            `[블록감지] ${RETRY_WAIT_MS / 60000}분 대기 후 재시도 (${attempt}/${RETRY_COUNT})...`
+          );
+          await wait(RETRY_WAIT_MS);
+
+          try {
+            items = await searchCoupangByKeyword(kw.keyword, context, { maxPages: 2 });
+            recovered = true;
+            break;
+          } catch (retryErr) {
+            if (retryErr.name !== 'BlockedError') throw retryErr;
+            if (attempt === RETRY_COUNT) {
+              await sendBlockAlertEmail();
+              process.exit(1);
+            }
+          }
+        }
+
+        if (!recovered) continue;
+      }
+
       totalFound += items.length;
       console.log(`  발견: ${items.length}개`);
 

@@ -1,5 +1,7 @@
 'use strict';
 
+const { isBlocked, BlockedError } = require('./blockDetector');
+
 /**
  * keywordSearch.js — 쿠팡 키워드 검색 결과 파싱
  *
@@ -149,7 +151,16 @@ async function searchCoupangByKeyword(keyword, browserContext, options = {}) {
           waitUntil: 'domcontentloaded',
           timeout: 30000,
         });
-        await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+        // Akamai JS 챌린지 해소 대기 — title이 나타날 때까지
+        await page
+          .waitForFunction(() => document.title.length > 0, { timeout: 30000 })
+          .catch(() => {});
+
+        // warming 블록 감지
+        const warmingHtml = await page.content();
+        if (isBlocked(page, warmingHtml)) {
+          throw new BlockedError('warming');
+        }
       }
 
       const response = await page.goto(url, {
@@ -174,6 +185,10 @@ async function searchCoupangByKeyword(keyword, browserContext, options = {}) {
       const rawCards = await parsePage(page);
 
       if (rawCards.length === 0) {
+        const html = await page.content();
+        if (isBlocked(page, html)) {
+          throw new BlockedError('search');
+        }
         console.log(`  [검색] "${keyword}" p${pageNum} — 결과 없음. 종료.`);
         break;
       }
