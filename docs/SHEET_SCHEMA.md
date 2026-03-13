@@ -91,23 +91,53 @@ Category dictionary accumulated from scraped products. Used for future Qoo10 cat
 
 ## Tab: `coupang_datas`
 
-| Column | Header Name | Type | Source | Description |
-|--------|-------------|------|--------|-------------|
-| A | `vendorItemId` | string | URL param | **PRIMARY KEY** for upsert |
-| B | `itemId` | string | URL param | Fallback key if vendorItemId missing |
-| C | `coupang_product_id` | string | URL path | Product ID from /vp/products/{id} |
-| D | `categoryId` | string | URL param | Coupang category ID (from URL ONLY) |
-| E | `ProductURL` | string | System | Full Coupang product URL as-is |
-| F | `ItemTitle` | string | DOM | Product title |
-| G | `ItemPrice` | number | DOM | Coupang price (integer, no commas/symbols) - legacy |
-| H | `StandardImage` | string | DOM | **Normalized** path: `thumbnails/...` |
-| I | `ExtraImages` | JSON string | DOM | Array of image URLs |
-| J | `WeightKg` | string | Fixed | **ALWAYS "1"** (no scraping) |
-| K | `Options` | JSON string | DOM | Single option: `{"type":"SIZE","values":["S","M"]}` |
-| L | `ItemDescriptionText` | string | DOM | Plain text description (no HTML/images) |
-| M | `updatedAt` | ISO datetime | System | Last update timestamp |
-| N | `status` | string | System | 파이프라인 상태 ENUM. COLLECTED / REGISTERING / REGISTERED / ERROR 등 (CLAUDE.md 참고) |
-| O+ | `qoo10SellingPrice` 外 | — | System | Qoo10 등록 write-back 필드 (동적 추가, 아래 섹션 참고) |
+> **SSOT**: `backend/coupang/sheetSchema.js` — 이 문서는 사람이 읽는 참조용.
+> 컬럼 순서/추가 시 `sheetSchema.js` 를 먼저 수정하고 `npm run sheets:setup` 으로 시트 재초기화.
+
+총 28컬럼. 그룹별로 헤더 행에 배경색이 적용된다.
+
+### 그룹 1 — [C] Coupang 수집 (하늘색, A–L)
+
+| # | 컬럼명 | 타입 | 설명 |
+|---|--------|------|------|
+| A | `vendorItemId` | string | **PK** (URL 파라미터) |
+| B | `itemId` | string | Fallback key |
+| C | `coupang_product_id` | string | 상품 ID (URL path) |
+| D | `categoryId` | string | 카테고리 ID (URL에서만 추출) |
+| E | `ProductURL` | string | 원본 쿠팡 URL |
+| F | `ItemTitle` | string | 상품명 |
+| G | `ItemPrice` | number | 쿠팡 판매가 (KRW, 정수) |
+| H | `StandardImage` | string | 대표 이미지 (`thumbnails/...` normalized) |
+| I | `ExtraImages` | JSON string | 추가 이미지 배열 |
+| J | `WeightKg` | string | 무게 (기본값 `"1"`) |
+| K | `Options` | JSON string | 옵션 (현재 null) |
+| L | `ItemDescriptionText` | string | 상세 설명 (plain text) |
+
+### 그룹 2 — [Q] Qoo10 등록 (연보라, M–Y)
+
+| # | 컬럼명 | 타입 | 설명 |
+|---|--------|------|------|
+| M | `qoo10SellingPrice` | number | 판매가 (JPY, 등록 전 계산 후 write-back) |
+| N | `qoo10ItemId` | string | Qoo10 ItemCode |
+| O | `qoo10SellerCode` | string | 사용된 SellerCode |
+| P | `jpCategoryIdUsed` | string | Qoo10 카테고리 ID |
+| Q | `categoryMatchType` | string | MANUAL \| AUTO \| FALLBACK |
+| R | `categoryMatchConfidence` | number | 매핑 신뢰도 (0–1, AUTO only) |
+| S | `coupangCategoryKeyUsed` | string | 카테고리 매핑 key (normalized) |
+| T | `registrationMode` | string | DRY_RUN \| REAL |
+| U | `registrationStatus` | string | SUCCESS \| WARNING \| FAILED \| DRY_RUN |
+| V | `registrationMessage` | string | 상태 메시지 |
+| W | `lastRegisteredAt` | ISO datetime | 마지막 등록 시각 |
+| X | `needsUpdate` | string | YES \| NO |
+| Y | `changeFlags` | string | PRICE_UP 등 |
+
+### 그룹 3 — [SYS] 시스템 (연노랑, Z–AB)
+
+| # | 컬럼명 | 타입 | 설명 |
+|---|--------|------|------|
+| Z | `status` | string | 파이프라인 상태 ENUM (CLAUDE.md 참고) |
+| AA | `updatedAt` | ISO datetime | 마지막 수집/수정 시각 |
+| AB | `errorMessage` | string | 에러 메시지 (ERROR 상태 시) |
 
 ---
 
@@ -119,7 +149,7 @@ These fields are written back during Qoo10 registration:
 |-------|-------------|
 | `qoo10SellingPrice` | Computed JPY (written back pre-API, regardless of API success) |
 | `qoo10ItemId` | ItemCode or ItemNo from Qoo10 API response |
-| `updatedAt` | Timestamp of last update (ISO 8601) |
+| `lastRegisteredAt` | Timestamp of last registration attempt (ISO 8601) |
 
 **Pricing Computation:**
 - `ItemPrice` (KRW) is required as cost input

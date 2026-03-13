@@ -134,7 +134,11 @@ async function main() {
       // a. 검색 + 파싱 (블록 감지 시 Context 재생성 후 재시도)
       let items;
       try {
-        items = await searchCoupangByKeyword(kw.keyword, context, { maxPages: 2 });
+        items = await searchCoupangByKeyword(kw.keyword, context, {
+          maxPages: 2,
+          delayMin: config.COLLECT_DELAY_MIN_MS,
+          delayMax: config.COLLECT_DELAY_MAX_MS,
+        });
       } catch (err) {
         if (err.name !== 'BlockedError') throw err;
 
@@ -152,7 +156,11 @@ async function main() {
           context = await browserManager.getContext(browser);
 
           try {
-            items = await searchCoupangByKeyword(kw.keyword, context, { maxPages: 2 });
+            items = await searchCoupangByKeyword(kw.keyword, context, {
+              maxPages: 2,
+              delayMin: config.COLLECT_DELAY_MIN_MS,
+              delayMax: config.COLLECT_DELAY_MAX_MS,
+            });
             recovered = true;
             break;
           } catch (retryErr) {

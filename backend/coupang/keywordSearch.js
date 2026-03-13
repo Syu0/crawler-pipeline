@@ -131,36 +131,41 @@ async function parsePage(page) {
  * @param {import('playwright').BrowserContext} browserContext
  * @param {Object} [options]
  * @param {number} [options.maxPages=2]
+ * @param {number} [options.delayMin=1000]  페이지 간 최소 딜레이 ms
+ * @param {number} [options.delayMax=3000]  페이지 간 최대 딜레이 ms
  * @returns {Promise<Object[]>}
  */
 async function searchCoupangByKeyword(keyword, browserContext, options = {}) {
-  const { maxPages = 2 } = options;
+  const { maxPages = 2, delayMin = 1000, delayMax = 3000 } = options;
   const allItems = [];
 
-  for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
-    const url = buildSearchUrl(keyword, pageNum);
-    const page = await browserContext.newPage();
+  // 탭 1개를 열어 모든 페이지에 재사용 (새 탭마다 Akamai 차단 위험 방지)
+  const page = await browserContext.newPage();
 
-    try {
+  try {
+    for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+      const url = buildSearchUrl(keyword, pageNum);
       console.log(`  [검색] "${keyword}" p${pageNum} → ${url}`);
 
-      // Akamai 우회: 새 탭에서 검색 URL로 바로 이동하면 차단됨.
-      // 메인 페이지를 먼저 방문해 신뢰도를 확보한 뒤 검색 URL로 navigate.
       if (pageNum === 1) {
+        // p1: 홈 → 검색 URL (신뢰도 확보)
         await page.goto('https://www.coupang.com/', {
           waitUntil: 'domcontentloaded',
           timeout: 30000,
         });
-        // Akamai JS 챌린지 해소 대기 — title이 나타날 때까지
         await page
           .waitForFunction(() => document.title.length > 0, { timeout: 30000 })
           .catch(() => {});
 
-        // warming 블록 감지
         const warmingHtml = await page.content();
         if (isBlocked(page, warmingHtml)) {
           throw new BlockedError('warming');
         }
+      } else {
+        // p2+: 같은 탭에서 다음 페이지로 이동 (랜덤 딜레이 선행)
+        const delay = Math.floor(Math.random() * (delayMax - delayMin) + delayMin);
+        console.log(`  [딜레이] p${pageNum} 이동 전 ${delay}ms 대기...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
 
       const response = await page.goto(url, {
@@ -174,10 +179,8 @@ async function searchCoupangByKeyword(keyword, browserContext, options = {}) {
         break;
       }
 
-      // Akamai JS 챌린지 해소 대기
       await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
 
-      // 검색결과 카드 대기 (없으면 0개로 처리)
       await page
         .waitForSelector(SELECTORS.productCard, { timeout: 10000 })
         .catch(() => {});
@@ -193,7 +196,6 @@ async function searchCoupangByKeyword(keyword, browserContext, options = {}) {
         break;
       }
 
-      // href → productId/itemId/vendorItemId 파싱 (Node.js URL API 사용)
       const items = rawCards.map((card) => {
         const ids = parseProductIds(card.href);
         const fullUrl = card.href.startsWith('http')
@@ -207,7 +209,7 @@ async function searchCoupangByKeyword(keyword, browserContext, options = {}) {
           itemPrice: card.itemPrice,
           isRocket: card.isRocket,
           categoryName: card.categoryName,
-          categoryId: null, // 검색결과에서 categoryId 파싱 불가 → null
+          categoryId: null,
           productUrl: fullUrl,
           thumbnailImage: card.thumbnailImage,
         };
@@ -215,10 +217,9 @@ async function searchCoupangByKeyword(keyword, browserContext, options = {}) {
 
       console.log(`  [검색] "${keyword}" p${pageNum} — ${items.length}개 파싱`);
       allItems.push(...items);
-
-    } finally {
-      await page.close();
     }
+  } finally {
+    await page.close();
   }
 
   return allItems;

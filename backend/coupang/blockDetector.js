@@ -36,7 +36,7 @@ function isBlocked(page, html) {
   if (html.length < 1000) return true;
 
   // 2. 차단 키워드 포함
-  const BLOCK_KEYWORDS = ['access denied', 'robot', 'captcha', '차단', 'security check', 'blocked'];
+  const BLOCK_KEYWORDS = ['access denied', 'robot', 'captcha', 'security check', 'blocked'];
   const lower = html.toLowerCase();
   if (BLOCK_KEYWORDS.some((kw) => lower.includes(kw))) return true;
 

@@ -6,6 +6,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 const { google } = require('googleapis');
+const { COUPANG_DATA_HEADERS } = require('./sheetSchema');
 const fs = require('fs');
 const path = require('path');
 
@@ -185,59 +186,66 @@ async function getRowData(sheetId, tabName, rowNumber, headers) {
  */
 async function upsertRow(sheetId, tabName, headers, data, primaryKey, fallbackKey = null, preserveColumns = []) {
   const sheets = await getSheetsClient();
-  
+
   // Determine key value
   let keyValue = data[primaryKey];
   let keyColumn = primaryKey;
-  
+
   if (!keyValue && fallbackKey) {
     keyValue = data[fallbackKey];
     keyColumn = fallbackKey;
   }
-  
+
   if (!keyValue) {
     throw new Error(`Cannot upsert: both ${primaryKey} and ${fallbackKey || 'fallback'} are empty`);
   }
-  
-  // Find column index for the key
-  const keyColumnIndex = headers.indexOf(keyColumn);
+
+  // Always use actual sheet column order — caller's `headers` may be a subset or
+  // in a different order than the live sheet (e.g. after columns were added later).
+  // ensureHeaders adds any missing columns from `headers` and returns the full list.
+  const actualHeaders = await ensureHeaders(sheetId, tabName, headers);
+
+  // Find column index for the key in actual sheet headers
+  const keyColumnIndex = actualHeaders.indexOf(keyColumn);
   if (keyColumnIndex === -1) {
     throw new Error(`Key column "${keyColumn}" not found in headers`);
   }
-  
+
   // Find existing row
   const existingRowNum = await findRowByKey(sheetId, tabName, keyColumnIndex, keyValue);
   let existingData = null;
-  
-  // If row exists, get full existing data for change detection and preservation
+
+  // If row exists, read full row using actual headers so field mapping is correct
   if (existingRowNum && existingRowNum > 1) {
-    existingData = await getRowData(sheetId, tabName, existingRowNum, headers);
+    existingData = await getRowData(sheetId, tabName, existingRowNum, actualHeaders);
   }
-  
-  // Merge data: new data wins, but preserve specified columns from existing if new is empty
-  const mergedData = { ...data };
+
+  // Merge: existing data as base, new data overrides.
+  // Columns not present in `data` are preserved from the existing row automatically.
+  const mergedData = existingData ? { ...existingData, ...data } : { ...data };
+
+  // preserveColumns: extra guard — keep existing value when new data is explicitly empty
   if (existingData && preserveColumns.length > 0) {
     for (const col of preserveColumns) {
-      // Only preserve if existing has a non-empty value and new data is empty/undefined
       if (existingData[col] && (data[col] === undefined || data[col] === '' || data[col] === null)) {
         mergedData[col] = existingData[col];
       }
     }
   }
-  
-  // Build row values in header order (ensure array length matches headers)
-  const rowValues = headers.map(h => {
+
+  // Build row values in actual sheet column order
+  const rowValues = actualHeaders.map(h => {
     const val = mergedData[h];
     if (val === undefined || val === null) return '';
     if (typeof val === 'object') return JSON.stringify(val);
     return String(val);
   });
-  
+
   if (existingRowNum && existingRowNum > 1) {
     // Update existing row with fixed-width range to avoid column growth issues
     const updateRange = `${tabName}!A${existingRowNum}:ZZ${existingRowNum}`;
-    console.log(`[Sheets] Updating row ${existingRowNum} using range ${updateRange} (headers=${headers.length})`);
-    
+    console.log(`[Sheets] Updating row ${existingRowNum} using range ${updateRange} (headers=${actualHeaders.length})`);
+
     await sheets.spreadsheets.values.update({
       spreadsheetId: sheetId,
       range: updateRange,
@@ -249,7 +257,7 @@ async function upsertRow(sheetId, tabName, headers, data, primaryKey, fallbackKe
     return { action: 'updated', row: existingRowNum, existingData };
   } else {
     // Append new row
-    console.log(`[Sheets] Appending new row for ${keyColumn}=${keyValue} (headers=${headers.length})`);
+    console.log(`[Sheets] Appending new row for ${keyColumn}=${keyValue} (headers=${actualHeaders.length})`);
     const response = await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId,
       range: `${tabName}!A:A`,
@@ -259,12 +267,12 @@ async function upsertRow(sheetId, tabName, headers, data, primaryKey, fallbackKe
         values: [rowValues],
       },
     });
-    
+
     // Extract appended row number from response
     const updatedRange = response.data.updates?.updatedRange || '';
     const match = updatedRange.match(/!A(\d+)/);
     const appendedRow = match ? parseInt(match[1], 10) : null;
-    
+
     return { action: 'appended', row: appendedRow, existingData: null };
   }
 }
@@ -422,16 +430,10 @@ async function updateKeywordLastRun(sheets, spreadsheetId, rowIndex) {
  */
 async function upsertDiscoveredProducts(sheets, spreadsheetId, items) {
   const TAB = 'coupang_datas';
-  const DESIRED_HEADERS = [
-    'vendorItemId', 'itemId', 'coupang_product_id', 'categoryId',
-    'ProductURL', 'ItemTitle', 'ItemPrice', 'StandardImage',
-    'ExtraImages', 'WeightKg', 'Options', 'ItemDescriptionText',
-    'updatedAt', 'status',
-  ];
 
   // 헤더 보장 + 실제 시트 헤더 순서 가져오기
   // ensureHeaders 반환값이 실제 열 순서 — 이것을 기준으로 row 배열 빌드
-  const actualHeaders = await ensureHeaders(spreadsheetId, TAB, DESIRED_HEADERS);
+  const actualHeaders = await ensureHeaders(spreadsheetId, TAB, COUPANG_DATA_HEADERS);
 
   // 현재 vendorItemId 컬럼 전체 로드 → 중복 체크용 Set
   const colRes = await sheets.spreadsheets.values.get({
