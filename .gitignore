@@ -44,6 +44,11 @@ backend/keys/*.json
 # yam yam cookie store (쿠팡 세션 쿠키 — 절대 커밋 금지)
 backend/.cookies/
 
+# Browser daemon state files (runtime, gitignored)
+.browser-ws-endpoint
+.browser-pid
+.browser-started-at
+
 # Logs and debug files
 npm-debug.log*
 yarn-debug.log*
