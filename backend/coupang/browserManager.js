@@ -166,8 +166,7 @@ async function launch(options = {}) {
     await warmCtx.close();
   }
 
-  const pid = browser.process()?.pid ?? process.pid;
-  _writeState(browser.wsEndpoint(), pid);
+  _writeState(browser.wsEndpoint(), process.pid);
   console.log('[BrowserManager] 브라우저 준비 완료');
   return browser;
 }
