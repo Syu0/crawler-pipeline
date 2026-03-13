@@ -11,16 +11,19 @@
  *   3. browserManager.launch() → 기존 브라우저 재사용 or 신규 기동
  *   4. browserManager.getContext() → 쿠키 주입된 컨텍스트 생성
  *   5. 행별 루프:
- *      a. scrapeCoupangProductPlaywright(productUrl, context)
- *      b. 성공: status=COLLECTED + 수집 필드 write
- *      c. 실패: status=ERROR + errorMessage write, 다음 행 계속
- *      d. 행 간 딜레이 2~4초
+ *      a. Phase 1: scrapeCoupangProductPlaywright(productUrl, context)
+ *      b. Phase 2-5: detailPageParser.collectAllPhases(page, extraPhases)
+ *      c. 성공: status=COLLECTED + 수집 필드 write
+ *      d. 실패: status=ERROR + errorMessage write, 다음 행 계속
+ *      e. CONTEXT_REFRESH_INTERVAL개마다 Context 재생성
+ *      f. 행 간 딜레이 COLLECT_DELAY_MIN_MS~COLLECT_DELAY_MAX_MS
  *   6. 완료 요약
  *
  * CLI 옵션:
- *   --dry-run      시트 write 없이 수집 결과만 콘솔 출력
- *   --limit N      최대 N개만 처리 (기본값: 전체)
- *   --shutdown     완료 후 브라우저 종료 (기본: 브라우저 유지)
+ *   --dry-run         시트 write 없이 수집 결과만 콘솔 출력
+ *   --limit N         최대 N개만 처리 (기본값: 전체)
+ *   --shutdown        완료 후 브라우저 종료 (기본: 브라우저 유지)
+ *   --phases "1,2,3"  실행할 Phase 목록 (기본값: "1,2,3,4,5")
  */
 
 'use strict';
@@ -37,6 +40,7 @@ const {
 } = require('../coupang/sheetsClient');
 const { COUPANG_DATA_HEADERS } = require('../coupang/sheetSchema');
 const { scrapeCoupangProductPlaywright } = require('../coupang/playwrightScraper');
+const { collectAllPhases } = require('../coupang/detailPageParser');
 const browserManager = require('../coupang/browserManager');
 const { wait } = require('../coupang/blockDetector');
 
@@ -49,10 +53,24 @@ const PRESERVE_ON_ERROR = [
   'Options', 'ItemDescriptionText',
 ];
 
+// 상품 간 딜레이 (ms)
+// TODO: config 시트의 COLLECT_DELAY_MIN_MS / COLLECT_DELAY_MAX_MS 키로 런타임 로드
+const COLLECT_DELAY_MIN_MS = 3000;
+const COLLECT_DELAY_MAX_MS = 8000;
+
+// N개 상품마다 BrowserContext 재생성 (메모리 관리)
+// TODO: config 시트의 CONTEXT_REFRESH_INTERVAL 키로 런타임 로드
+const CONTEXT_REFRESH_INTERVAL = 10;
+
 // ── CLI 파싱 ─────────────────────────────────────────────────────────────────
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { dryRun: false, limit: null, shutdown: false };
+  const result = {
+    dryRun: false,
+    limit: null,
+    shutdown: false,
+    phases: ['1', '2', '3', '4', '5'],
+  };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--dry-run') {
       result.dryRun = true;
@@ -62,6 +80,10 @@ function parseArgs() {
       result.limit = parseInt(args[++i], 10);
     } else if (args[i].startsWith('--limit=')) {
       result.limit = parseInt(args[i].substring(8), 10);
+    } else if (args[i] === '--phases' && args[i + 1]) {
+      result.phases = args[++i].split(',').map((p) => p.trim()).filter(Boolean);
+    } else if (args[i].startsWith('--phases=')) {
+      result.phases = args[i].substring(9).split(',').map((p) => p.trim()).filter(Boolean);
     }
   }
   return result;
@@ -69,13 +91,17 @@ function parseArgs() {
 
 // ── 메인 ─────────────────────────────────────────────────────────────────────
 async function main() {
-  const { dryRun, limit, shutdown } = parseArgs();
+  const { dryRun, limit, shutdown, phases } = parseArgs();
+
+  // Phase 1은 playwrightScraper가 담당; Phase 2-5는 detailPageParser가 담당
+  const extraPhases = phases.filter((p) => p !== '1');
 
   console.log('='.repeat(50));
   console.log('Coupang Collect Discovered');
   console.log('='.repeat(50));
-  console.log(`Mode:  ${dryRun ? 'DRY-RUN (no sheet write)' : 'REAL'}`);
-  if (limit) console.log(`Limit: ${limit}개`);
+  console.log(`Mode:    ${dryRun ? 'DRY-RUN (no sheet write)' : 'REAL'}`);
+  console.log(`Phases:  ${phases.join(',')}${extraPhases.length ? ` (Phase 1: playwrightScraper, Phase ${extraPhases.join(',')}: detailPageParser)` : ''}`);
+  if (limit) console.log(`Limit:   ${limit}개`);
   if (shutdown) console.log('Shutdown: 완료 후 브라우저 종료');
   console.log('');
 
@@ -102,7 +128,8 @@ async function main() {
   // 2. 브라우저 획득 (기존 재사용 or 신규 기동)
   console.log('[2/2] 브라우저 초기화...');
   const browser = await browserManager.launch();
-  const context = await browserManager.getContext(browser);
+  let context = await browserManager.getContext(browser);
+  let contextUseCount = 0;
 
   // 헤더 보장
   if (!dryRun) {
@@ -116,18 +143,45 @@ async function main() {
   try {
     for (let i = 0; i < products.length; i++) {
       const product = products[i];
+
+      // Context 재생성 (메모리 관리)
+      if (contextUseCount > 0 && contextUseCount % CONTEXT_REFRESH_INTERVAL === 0) {
+        console.log(`  [Context] ${CONTEXT_REFRESH_INTERVAL}개 처리 완료 — Context 재생성...`);
+        await context.close();
+        context = await browserManager.getContext(browser);
+      }
+
       console.log(`\n${'─'.repeat(40)}`);
       console.log(`[${i + 1}/${products.length}] ${product.vendorItemId || product.itemId}`);
       console.log(`  URL: ${product.productUrl}`);
 
       try {
+        // ── Phase 1: 기본 수집 (기존 로직 유지) ─────────────────────────────
         const scraped = await scrapeCoupangProductPlaywright(product.productUrl, context);
+
+        // ── Phase 2-5: 추가 수집 (스텁 — 브라우저 테스트 후 구현 예정) ──────
+        let phaseData = {};
+        if (extraPhases.length > 0) {
+          const page = await context.newPage();
+          try {
+            await page.goto(product.productUrl, {
+              waitUntil: 'domcontentloaded',
+              timeout: 45000,
+            });
+            phaseData = await collectAllPhases(page, extraPhases);
+          } finally {
+            await page.close();
+          }
+        }
+
+        contextUseCount++;
 
         if (dryRun) {
           console.log('  [DRY-RUN] 수집 결과:');
-          console.log(`    ItemTitle: ${scraped.ItemTitle?.substring(0, 50)}`);
-          console.log(`    ItemPrice: ${scraped.ItemPrice}`);
+          console.log(`    ItemTitle:   ${scraped.ItemTitle?.substring(0, 50)}`);
+          console.log(`    ItemPrice:   ${scraped.ItemPrice}`);
           console.log(`    StandardImage: ${scraped.StandardImage ? 'OK' : '없음'}`);
+          console.log(`    CollectedPhases: ${phases.join(',')}`);
           successCount++;
           continue;
         }
@@ -147,18 +201,35 @@ async function main() {
           WeightKg:            scraped.WeightKg || '',
           Options:             scraped.Options || '',
           ItemDescriptionText: scraped.ItemDescriptionText || '',
+          // Phase 2-5 필드 (스텁 상태: 빈 값 또는 기본값)
+          DetailImages:        JSON.stringify(phaseData.detailImages || []),
+          OptionType:          phaseData.optionType || '',
+          OptionsRaw:          phaseData.optionsRaw != null
+                                 ? JSON.stringify(phaseData.optionsRaw)
+                                 : '',
+          StockStatus:         phaseData.stockStatus || '',
+          StockQty:            phaseData.stockQty != null ? String(phaseData.stockQty) : '',
+          ReviewCount:         phaseData.reviewCount != null ? String(phaseData.reviewCount) : '',
+          ReviewAvgRating:     phaseData.reviewAvgRating != null
+                                 ? String(phaseData.reviewAvgRating)
+                                 : '',
+          ProductAttributes:   phaseData.productAttributes
+                                 ? JSON.stringify(phaseData.productAttributes)
+                                 : '',
+          CollectedPhases:     phases.join(','),
           updatedAt:           new Date().toISOString(),
           status:              'COLLECTED',
           errorMessage:        '',
         };
 
         await upsertRow(SPREADSHEET_ID, TAB, HEADERS, data, 'vendorItemId', 'itemId');
-        console.log('  ✓ COLLECTED');
+        console.log(`  ✓ COLLECTED (phases: ${phases.join(',')})`);
         successCount++;
 
       } catch (err) {
         console.error(`  ✗ 오류: ${err.message}`);
         errorCount++;
+        contextUseCount++;
 
         if (!dryRun) {
           try {
@@ -182,14 +253,15 @@ async function main() {
 
       // 마지막 항목이 아니면 딜레이
       if (i < products.length - 1) {
-        const delay = Math.floor(Math.random() * 2000 + 2000);
+        const delay = Math.floor(
+          Math.random() * (COLLECT_DELAY_MAX_MS - COLLECT_DELAY_MIN_MS) + COLLECT_DELAY_MIN_MS
+        );
         console.log(`  [딜레이] ${delay}ms 대기...`);
         await wait(delay);
       }
     }
   } finally {
     await context.close();
-    // --shutdown 플래그가 있을 때만 브라우저 종료 (기본: persistent)
     if (shutdown) {
       console.log('[Browser] --shutdown: 브라우저 종료');
       await browserManager.close(browser);
