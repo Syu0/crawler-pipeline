@@ -8,8 +8,8 @@
  * 흐름:
  *   1. getDiscoveredProducts() → DISCOVERED 행 목록
  *   2. 없으면 종료
- *   3. Playwright browser/context 초기화 (stealth + 쿠키 주입)
- *   4. warming + 블록 체크 (blockDetector.js 재사용)
+ *   3. browserManager.launch() → 기존 브라우저 재사용 or 신규 기동
+ *   4. browserManager.getContext() → 쿠키 주입된 컨텍스트 생성
  *   5. 행별 루프:
  *      a. scrapeCoupangProductPlaywright(productUrl, context)
  *      b. 성공: status=COLLECTED + 수집 필드 write
@@ -18,8 +18,9 @@
  *   6. 완료 요약
  *
  * CLI 옵션:
- *   --dry-run   시트 write 없이 수집 결과만 콘솔 출력
- *   --limit N   최대 N개만 처리 (기본값: 전체)
+ *   --dry-run      시트 write 없이 수집 결과만 콘솔 출력
+ *   --limit N      최대 N개만 처리 (기본값: 전체)
+ *   --shutdown     완료 후 브라우저 종료 (기본: 브라우저 유지)
  */
 
 'use strict';
@@ -28,34 +29,20 @@ require('dotenv').config({
   path: require('path').join(__dirname, '..', '.env'),
 });
 
-const { chromium: playwrightChromium } = require('playwright-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-
 const {
   getSheetsClient,
   getDiscoveredProducts,
+  ensureHeaders,
+  upsertRow,
 } = require('../coupang/sheetsClient');
-const { ensureHeaders, upsertRow } = require('../coupang/sheetsClient');
+const { COUPANG_DATA_HEADERS } = require('../coupang/sheetSchema');
 const { scrapeCoupangProductPlaywright } = require('../coupang/playwrightScraper');
-const cookieStore = require('../services/cookieStore');
-const {
-  isBlocked,
-  wait,
-  sendBlockAlertEmail,
-  RETRY_WAIT_MS,
-  RETRY_COUNT,
-} = require('../coupang/blockDetector');
-
-playwrightChromium.use(StealthPlugin());
+const browserManager = require('../coupang/browserManager');
+const { wait } = require('../coupang/blockDetector');
 
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 const TAB = 'coupang_datas';
-const HEADERS = [
-  'vendorItemId', 'itemId', 'coupang_product_id', 'categoryId',
-  'ProductURL', 'ItemTitle', 'ItemPrice', 'StandardImage',
-  'ExtraImages', 'WeightKg', 'Options', 'ItemDescriptionText',
-  'updatedAt', 'status', 'errorMessage',
-];
+const HEADERS = COUPANG_DATA_HEADERS;
 const PRESERVE_ON_ERROR = [
   'coupang_product_id', 'categoryId', 'ProductURL', 'ItemTitle',
   'ItemPrice', 'StandardImage', 'ExtraImages', 'WeightKg',
@@ -65,10 +52,12 @@ const PRESERVE_ON_ERROR = [
 // ── CLI 파싱 ─────────────────────────────────────────────────────────────────
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { dryRun: false, limit: null };
+  const result = { dryRun: false, limit: null, shutdown: false };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--dry-run') {
       result.dryRun = true;
+    } else if (args[i] === '--shutdown') {
+      result.shutdown = true;
     } else if (args[i] === '--limit' && args[i + 1]) {
       result.limit = parseInt(args[++i], 10);
     } else if (args[i].startsWith('--limit=')) {
@@ -78,105 +67,16 @@ function parseArgs() {
   return result;
 }
 
-// ── 쿠키 문자열 파싱 ──────────────────────────────────────────────────────────
-function parseCookieString(cookieStr) {
-  if (!cookieStr) return [];
-  return cookieStr
-    .split(';')
-    .map((part) => {
-      const eqIdx = part.indexOf('=');
-      if (eqIdx === -1) return null;
-      const name = part.substring(0, eqIdx).trim();
-      const value = part.substring(eqIdx + 1).trim();
-      if (!name) return null;
-      return { name, value, domain: '.coupang.com', path: '/' };
-    })
-    .filter(Boolean);
-}
-
-// ── Playwright browser + context 초기화 ──────────────────────────────────────
-async function launchBrowser() {
-  const headless = process.env.PLAYWRIGHT_HEADLESS !== '0';
-  const browser = await playwrightChromium.launch({
-    headless,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-infobars',
-      '--window-size=1280,900',
-    ],
-  });
-
-  const context = await browser.newContext({
-    userAgent:
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    locale: 'ko-KR',
-    timezoneId: 'Asia/Seoul',
-    viewport: { width: 1280, height: 900 },
-    extraHTTPHeaders: { 'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8' },
-  });
-
-  return { browser, context };
-}
-
-// ── 쿠키 주입 ────────────────────────────────────────────────────────────────
-async function injectCookies(context) {
-  let cookieStr = process.env.COUPANG_COOKIE;
-
-  if (!cookieStr || !cookieStr.trim()) {
-    if (cookieStore.isExpired()) {
-      const data = cookieStore.loadCookieData();
-      if (data) {
-        throw new Error(
-          `쿠팡 쿠키가 만료되었습니다. yam yam 버튼을 눌러 갱신해주세요.\n만료일: ${data.expiresAt}`
-        );
-      }
-      return false;
-    }
-    cookieStr = cookieStore.loadCookies();
-  }
-
-  if (!cookieStr || !cookieStr.trim()) return false;
-
-  const cookies = parseCookieString(cookieStr);
-  if (cookies.length === 0) return false;
-
-  await context.addCookies(cookies);
-  return true;
-}
-
-// ── warming + 블록 감지 ───────────────────────────────────────────────────────
-async function warmupAndCheckBlock(context) {
-  const page = await context.newPage();
-  try {
-    console.log('[Playwright] 메인 페이지 warming 방문...');
-    await page.goto('https://www.coupang.com/', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
-    });
-    await page
-      .waitForFunction(() => document.title.length > 0, { timeout: 45000 })
-      .catch(() => {});
-    const title = await page.title();
-    console.log(`[Playwright] warming 완료 (title: ${title})`);
-
-    const html = await page.content();
-    return isBlocked(page, html);
-  } finally {
-    await page.close();
-  }
-}
-
 // ── 메인 ─────────────────────────────────────────────────────────────────────
 async function main() {
-  const { dryRun, limit } = parseArgs();
+  const { dryRun, limit, shutdown } = parseArgs();
 
   console.log('='.repeat(50));
   console.log('Coupang Collect Discovered');
   console.log('='.repeat(50));
   console.log(`Mode:  ${dryRun ? 'DRY-RUN (no sheet write)' : 'REAL'}`);
   if (limit) console.log(`Limit: ${limit}개`);
+  if (shutdown) console.log('Shutdown: 완료 후 브라우저 종료');
   console.log('');
 
   if (!SPREADSHEET_ID) {
@@ -199,35 +99,17 @@ async function main() {
   }
   console.log(`  대상: ${products.length}개\n`);
 
-  // 2. Playwright 초기화
+  // 2. 브라우저 획득 (기존 재사용 or 신규 기동)
   console.log('[2/2] 브라우저 초기화...');
-  const { browser, context } = await launchBrowser();
-  await injectCookies(context);
+  const browser = await browserManager.launch();
+  const context = await browserManager.getContext(browser);
 
-  // 헤더 보장 (errorMessage 컬럼 포함)
+  // 헤더 보장
   if (!dryRun) {
     await ensureHeaders(SPREADSHEET_ID, TAB, HEADERS);
   }
 
-  // 3. warming + 블록 체크
-  let blocked = await warmupAndCheckBlock(context);
-  if (blocked) {
-    for (let attempt = 1; attempt <= RETRY_COUNT; attempt++) {
-      console.log(
-        `[블록감지] Akamai IP 차단 감지. ${RETRY_WAIT_MS / 60000}분 대기 후 재시도 (${attempt}/${RETRY_COUNT})...`
-      );
-      await wait(RETRY_WAIT_MS);
-      blocked = await warmupAndCheckBlock(context);
-      if (!blocked) break;
-      if (attempt === RETRY_COUNT) {
-        await sendBlockAlertEmail();
-        await browser.close();
-        process.exit(1);
-      }
-    }
-  }
-
-  // 4. 행별 수집 루프
+  // 3. 행별 수집 루프
   let successCount = 0;
   let errorCount = 0;
 
@@ -306,10 +188,15 @@ async function main() {
       }
     }
   } finally {
-    await browser.close();
+    await context.close();
+    // --shutdown 플래그가 있을 때만 브라우저 종료 (기본: persistent)
+    if (shutdown) {
+      console.log('[Browser] --shutdown: 브라우저 종료');
+      await browserManager.close(browser);
+    }
   }
 
-  // 5. 완료 요약
+  // 4. 완료 요약
   console.log(`\n${'='.repeat(50)}`);
   console.log('완료 요약');
   console.log('='.repeat(50));
@@ -317,6 +204,7 @@ async function main() {
   console.log(`  성공:   ${successCount}개`);
   console.log(`  실패:   ${errorCount}개`);
   if (dryRun) console.log('  (DRY-RUN — 시트 write 없음)');
+  if (!shutdown) console.log('  브라우저: 유지 중 (npm run coupang:browser:stop 으로 종료)');
 }
 
 main().catch((err) => {

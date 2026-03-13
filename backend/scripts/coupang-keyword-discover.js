@@ -5,7 +5,7 @@
  * 흐름:
  *   1. config 시트 로드 (가격 상한, 제외 카테고리)
  *   2. keywords 시트에서 ACTIVE 키워드 목록 로드
- *   3. Playwright browser/context 초기화 (stealth + 쿠키 주입)
+ *   3. browserManager.launch() → 기존 브라우저 재사용 or 신규 기동
  *   4. 키워드별:
  *      a. 검색결과 파싱 (keywordSearch.js)
  *      b. 필터 적용 (productFilters.js)
@@ -16,6 +16,7 @@
  * CLI 옵션:
  *   --dry-run          시트 write 없이 콘솔 출력만
  *   --keyword "..."    keywords 시트 무시, 단일 키워드로 실행 (테스트용)
+ *   --shutdown         완료 후 브라우저 종료 (기본: 브라우저 유지)
  *
  * Usage:
  *   node backend/scripts/coupang-keyword-discover.js
@@ -30,9 +31,6 @@ require('dotenv').config({
   path: require('path').join(__dirname, '..', '.env'),
 });
 
-const { chromium: playwrightChromium } = require('playwright-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-
 const {
   getSheetsClient,
   getConfig,
@@ -42,15 +40,13 @@ const {
 } = require('../coupang/sheetsClient');
 const { searchCoupangByKeyword } = require('../coupang/keywordSearch');
 const { applyFilters } = require('../coupang/productFilters');
-const cookieStore = require('../services/cookieStore');
+const browserManager = require('../coupang/browserManager');
 const {
   wait,
   sendBlockAlertEmail,
   RETRY_WAIT_MS,
   RETRY_COUNT,
 } = require('../coupang/blockDetector');
-
-playwrightChromium.use(StealthPlugin());
 
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 const TRACE = process.env.COUPANG_TRACER === '1';
@@ -62,11 +58,13 @@ function trace(...args) {
 // ── CLI 파싱 ─────────────────────────────────────────────────────────────────
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { dryRun: false, keyword: null };
+  const result = { dryRun: false, keyword: null, shutdown: false };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--dry-run') {
       result.dryRun = true;
+    } else if (args[i] === '--shutdown') {
+      result.shutdown = true;
     } else if (args[i] === '--keyword' && args[i + 1]) {
       result.keyword = args[++i];
     } else if (args[i].startsWith('--keyword=')) {
@@ -76,112 +74,16 @@ function parseArgs() {
   return result;
 }
 
-// ── 쿠키 문자열 파싱 (playwrightScraper.js 와 동일한 형식) ───────────────────
-function parseCookieString(cookieStr) {
-  if (!cookieStr) return [];
-  return cookieStr
-    .split(';')
-    .map((part) => {
-      const eqIdx = part.indexOf('=');
-      if (eqIdx === -1) return null;
-      const name = part.substring(0, eqIdx).trim();
-      const value = part.substring(eqIdx + 1).trim();
-      if (!name) return null;
-      return { name, value, domain: '.coupang.com', path: '/' };
-    })
-    .filter(Boolean);
-}
-
-// ── Playwright browser + context 초기화 ──────────────────────────────────────
-async function launchBrowser() {
-  const headless = process.env.PLAYWRIGHT_HEADLESS !== '0';
-  trace(`Launching Chromium + Stealth (headless=${headless})`);
-
-  const browser = await playwrightChromium.launch({
-    headless,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-infobars',
-      '--window-size=1280,900',
-    ],
-  });
-
-  const context = await browser.newContext({
-    userAgent:
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    locale: 'ko-KR',
-    timezoneId: 'Asia/Seoul',
-    viewport: { width: 1280, height: 900 },
-    extraHTTPHeaders: { 'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8' },
-  });
-
-  return { browser, context };
-}
-
-// ── 메인 페이지 warming 방문 ──────────────────────────────────────────────────
-// Akamai는 처음 접속 URL에 따라 정책이 다름.
-// 검색 페이지(/np/search)를 바로 열면 쿠키가 있어도 Access Denied 반환.
-// 메인 페이지를 먼저 방문해 Akamai 신뢰도를 쌓은 뒤 검색 URL로 이동.
-async function warmupContext(context) {
-  const page = await context.newPage();
-  try {
-    console.log('[Playwright] 메인 페이지 warming 방문...');
-    await page.goto('https://www.coupang.com/', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
-    });
-    // Akamai JS 챌린지 → redirect → 실제 페이지 로드까지 대기
-    // title이 비어있으면 챌린지 페이지 — 실제 페이지 title이 나타날 때까지 기다림
-    await page
-      .waitForFunction(() => document.title.length > 0, { timeout: 45000 })
-      .catch(() => {});
-    const title = await page.title();
-    console.log(`[Playwright] warming 완료 (title: ${title})`);
-
-  } finally {
-    await page.close();
-  }
-}
-
-// ── 쿠키 주입 ────────────────────────────────────────────────────────────────
-async function injectCookies(context) {
-  let cookieStr = process.env.COUPANG_COOKIE;
-
-  if (!cookieStr || !cookieStr.trim()) {
-    if (cookieStore.isExpired()) {
-      const data = cookieStore.loadCookieData();
-      if (data) {
-        throw new Error(
-          `쿠팡 쿠키가 만료되었습니다. yam yam 버튼을 눌러 갱신해주세요.\n만료일: ${data.expiresAt}`
-        );
-      }
-      return false; // 파일 없음 — 비인증으로 시도
-    }
-    cookieStr = cookieStore.loadCookies();
-    if (cookieStr) trace(`cookieStore에서 쿠키 로드 (${cookieStore.daysUntilExpiry()}일 남음)`);
-  }
-
-  if (!cookieStr || !cookieStr.trim()) return false;
-
-  const cookies = parseCookieString(cookieStr);
-  if (cookies.length === 0) return false;
-
-  trace(`Injecting ${cookies.length} cookies`);
-  await context.addCookies(cookies);
-  return true;
-}
-
 // ── 메인 ─────────────────────────────────────────────────────────────────────
 async function main() {
-  const { dryRun, keyword: cliKeyword } = parseArgs();
+  const { dryRun, keyword: cliKeyword, shutdown } = parseArgs();
 
   console.log('='.repeat(50));
   console.log('Coupang Keyword Discovery');
   console.log('='.repeat(50));
   console.log(`Mode:     ${dryRun ? 'DRY-RUN (no sheet write)' : 'REAL'}`);
   if (cliKeyword) console.log(`Keyword:  "${cliKeyword}" (CLI override)`);
+  if (shutdown) console.log('Shutdown: 완료 후 브라우저 종료');
   console.log('');
 
   if (!SPREADSHEET_ID) {
@@ -213,11 +115,10 @@ async function main() {
     return;
   }
 
-  // 3. Playwright 초기화
+  // 3. 브라우저 획득 (기존 재사용 or 신규 기동)
   console.log('[Playwright] 브라우저 초기화...');
-  const { browser, context } = await launchBrowser();
-  await injectCookies(context);
-  await warmupContext(context);
+  const browser = await browserManager.launch();
+  let context = await browserManager.getContext(browser);
 
   // 4. 키워드별 루프
   let totalFound = 0;
@@ -230,7 +131,7 @@ async function main() {
       console.log(`\n${'─'.repeat(40)}`);
       console.log(`키워드: "${kw.keyword}"`);
 
-      // a. 검색 + 파싱 (블록 감지 시 재시도)
+      // a. 검색 + 파싱 (블록 감지 시 Context 재생성 후 재시도)
       let items;
       try {
         items = await searchCoupangByKeyword(kw.keyword, context, { maxPages: 2 });
@@ -245,6 +146,10 @@ async function main() {
             `[블록감지] ${RETRY_WAIT_MS / 60000}분 대기 후 재시도 (${attempt}/${RETRY_COUNT})...`
           );
           await wait(RETRY_WAIT_MS);
+
+          // 블록 감지 시: 현재 Context 닫고 새 Context로 재시도
+          await context.close().catch(() => {});
+          context = await browserManager.getContext(browser);
 
           try {
             items = await searchCoupangByKeyword(kw.keyword, context, { maxPages: 2 });
@@ -297,7 +202,12 @@ async function main() {
       }
     }
   } finally {
-    await browser.close();
+    await context.close().catch(() => {});
+    // --shutdown 플래그가 있을 때만 브라우저 종료 (기본: persistent)
+    if (shutdown) {
+      console.log('[Browser] --shutdown: 브라우저 종료');
+      await browserManager.close(browser);
+    }
   }
 
   // 5. 완료 요약
@@ -313,6 +223,7 @@ async function main() {
   } else {
     console.log(`  (DRY-RUN — 시트 write 없음)`);
   }
+  if (!shutdown) console.log('  브라우저: 유지 중 (npm run coupang:browser:stop 으로 종료)');
 }
 
 main().catch((err) => {
