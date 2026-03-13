@@ -94,9 +94,9 @@ Category dictionary accumulated from scraped products. Used for future Qoo10 cat
 > **SSOT**: `backend/coupang/sheetSchema.js` — 이 문서는 사람이 읽는 참조용.
 > 컬럼 순서/추가 시 `sheetSchema.js` 를 먼저 수정하고 `npm run sheets:setup` 으로 시트 재초기화.
 
-총 28컬럼. 그룹별로 헤더 행에 배경색이 적용된다.
+총 37컬럼. 그룹별로 헤더 행에 배경색이 적용된다.
 
-### 그룹 1 — [C] Coupang 수집 (하늘색, A–L)
+### 그룹 1 — [C] Coupang 수집 (하늘색, A–U)
 
 | # | 컬럼명 | 타입 | 설명 |
 |---|--------|------|------|
@@ -112,32 +112,41 @@ Category dictionary accumulated from scraped products. Used for future Qoo10 cat
 | J | `WeightKg` | string | 무게 (기본값 `"1"`) |
 | K | `Options` | JSON string | 옵션 (현재 null) |
 | L | `ItemDescriptionText` | string | 상세 설명 (plain text) |
+| M | `DetailImages` | JSON string | 상세페이지 이미지 URL 배열 |
+| N | `OptionType` | string | NONE \| SIZE \| COLOR \| CUSTOM \| MULTI |
+| O | `OptionsRaw` | JSON string | 전체 옵션 데이터 (axes 배열) |
+| P | `StockStatus` | string | IN_STOCK \| LOW_STOCK \| OUT_OF_STOCK |
+| Q | `StockQty` | number/null | 잔여수량 (표시될 때만) |
+| R | `ReviewCount` | number | 리뷰 건수 |
+| S | `ReviewAvgRating` | number | 평균 별점 (5점 만점) |
+| T | `ProductAttributes` | JSON string | 상품 속성 {key:value} |
+| U | `CollectedPhases` | string | 완료된 Phase 목록 (예: "1,2,3") |
 
-### 그룹 2 — [Q] Qoo10 등록 (연보라, M–Y)
-
-| # | 컬럼명 | 타입 | 설명 |
-|---|--------|------|------|
-| M | `qoo10SellingPrice` | number | 판매가 (JPY, 등록 전 계산 후 write-back) |
-| N | `qoo10ItemId` | string | Qoo10 ItemCode |
-| O | `qoo10SellerCode` | string | 사용된 SellerCode |
-| P | `jpCategoryIdUsed` | string | Qoo10 카테고리 ID |
-| Q | `categoryMatchType` | string | MANUAL \| AUTO \| FALLBACK |
-| R | `categoryMatchConfidence` | number | 매핑 신뢰도 (0–1, AUTO only) |
-| S | `coupangCategoryKeyUsed` | string | 카테고리 매핑 key (normalized) |
-| T | `registrationMode` | string | DRY_RUN \| REAL |
-| U | `registrationStatus` | string | SUCCESS \| WARNING \| FAILED \| DRY_RUN |
-| V | `registrationMessage` | string | 상태 메시지 |
-| W | `lastRegisteredAt` | ISO datetime | 마지막 등록 시각 |
-| X | `needsUpdate` | string | YES \| NO |
-| Y | `changeFlags` | string | PRICE_UP 등 |
-
-### 그룹 3 — [SYS] 시스템 (연노랑, Z–AB)
+### 그룹 2 — [Q] Qoo10 등록 (연보라, V–AH)
 
 | # | 컬럼명 | 타입 | 설명 |
 |---|--------|------|------|
-| Z | `status` | string | 파이프라인 상태 ENUM (CLAUDE.md 참고) |
-| AA | `updatedAt` | ISO datetime | 마지막 수집/수정 시각 |
-| AB | `errorMessage` | string | 에러 메시지 (ERROR 상태 시) |
+| V | `qoo10SellingPrice` | number | 판매가 (JPY, 등록 전 계산 후 write-back) |
+| W | `qoo10ItemId` | string | Qoo10 ItemCode |
+| X | `qoo10SellerCode` | string | 사용된 SellerCode |
+| Y | `jpCategoryIdUsed` | string | Qoo10 카테고리 ID |
+| Z | `categoryMatchType` | string | MANUAL \| AUTO \| FALLBACK |
+| AA | `categoryMatchConfidence` | number | 매핑 신뢰도 (0–1, AUTO only) |
+| AB | `coupangCategoryKeyUsed` | string | 카테고리 매핑 key (normalized) |
+| AC | `registrationMode` | string | DRY_RUN \| REAL |
+| AD | `registrationStatus` | string | SUCCESS \| WARNING \| FAILED \| DRY_RUN |
+| AE | `registrationMessage` | string | 상태 메시지 |
+| AF | `lastRegisteredAt` | ISO datetime | 마지막 등록 시각 |
+| AG | `needsUpdate` | string | YES \| NO |
+| AH | `changeFlags` | string | PRICE_UP 등 |
+
+### 그룹 3 — [SYS] 시스템 (연노랑, AI–AK)
+
+| # | 컬럼명 | 타입 | 설명 |
+|---|--------|------|------|
+| AI | `status` | string | 파이프라인 상태 ENUM (CLAUDE.md 참고) |
+| AJ | `updatedAt` | ISO datetime | 마지막 수집/수정 시각 |
+| AK | `errorMessage` | string | 에러 메시지 (ERROR 상태 시) |
 
 ---
 
