@@ -3,12 +3,15 @@
 /**
  * browserManager.js — Persistent Playwright Browser Manager
  *
- * 브라우저를 1회 기동 + warming 후 WS endpoint를 파일에 저장.
- * 이후 수집 스크립트는 connect()로 재사용 → Akamai 봇 판정 방지.
+ * 브라우저를 1회 기동 + warming 후 CDP URL을 파일에 저장.
+ * 이후 수집 스크립트는 connectOverCDP()로 재사용 → Akamai 봇 판정 방지.
+ *
+ * playwright-extra는 browser.wsEndpoint()를 노출하지 않으므로
+ * --remote-debugging-port 인자로 CDP 엔드포인트를 직접 지정한다.
  *
  * State files (project root, gitignored):
- *   .browser-ws-endpoint  — WS endpoint URL
- *   .browser-pid          — 브라우저 프로세스 PID
+ *   .browser-ws-endpoint  — CDP URL (http://localhost:PORT)
+ *   .browser-pid          — 브라우저 오너 Node.js 프로세스 PID
  *   .browser-started-at   — 기동 시각 ISO string
  */
 
@@ -29,6 +32,10 @@ const {
 } = require('./blockDetector');
 
 playwrightChromium.use(StealthPlugin());
+
+// ── CDP 포트 (env 오버라이드 가능) ────────────────────────────────────────────
+const CDP_PORT = parseInt(process.env.BROWSER_CDP_PORT || '9222', 10);
+const CDP_URL  = `http://localhost:${CDP_PORT}`;
 
 // ── state 파일 경로 ───────────────────────────────────────────────────────────
 const ROOT       = path.join(__dirname, '..', '..');
@@ -112,13 +119,13 @@ async function _warmup(context) {
 async function launch(options = {}) {
   const { skipWarming = false } = options;
 
-  // 기존 브라우저 연결 시도
+  // 기존 브라우저 연결 시도 (CDP)
   if (fs.existsSync(WS_FILE)) {
-    const wsEndpoint = fs.readFileSync(WS_FILE, 'utf8').trim();
-    if (wsEndpoint) {
+    const cdpUrl = fs.readFileSync(WS_FILE, 'utf8').trim();
+    if (cdpUrl) {
       try {
         console.log('[BrowserManager] 기존 브라우저에 연결 중...');
-        const browser = await playwrightChromium.connect(wsEndpoint);
+        const browser = await playwrightChromium.connectOverCDP(cdpUrl);
         console.log('[BrowserManager] 연결 성공 (warming 스킵)');
         return browser;
       } catch (e) {
@@ -128,7 +135,7 @@ async function launch(options = {}) {
     }
   }
 
-  // 신규 브라우저 기동
+  // 신규 브라우저 기동 (--remote-debugging-port로 CDP 노출)
   const headless = process.env.PLAYWRIGHT_HEADLESS !== '0';
   console.log('[BrowserManager] 새 브라우저 기동 중...');
   const browser = await playwrightChromium.launch({
@@ -139,6 +146,7 @@ async function launch(options = {}) {
       '--disable-blink-features=AutomationControlled',
       '--disable-infobars',
       '--window-size=1920,1080',
+      `--remote-debugging-port=${CDP_PORT}`,
     ],
   });
 
@@ -166,7 +174,7 @@ async function launch(options = {}) {
     await warmCtx.close();
   }
 
-  _writeState(browser.wsEndpoint(), process.pid);
+  _writeState(CDP_URL, process.pid);
   console.log('[BrowserManager] 브라우저 준비 완료');
   return browser;
 }
