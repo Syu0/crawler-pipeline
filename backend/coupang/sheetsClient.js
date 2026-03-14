@@ -540,6 +540,58 @@ async function getDiscoveredProducts(sheets, spreadsheetId) {
   return result;
 }
 
+/**
+ * `coupang_datas` 시트에서 재고 모니터링 대상 행 반환.
+ * status IN [REGISTERED, LIVE, OUT_OF_STOCK] + ProductURL 있는 행만.
+ *
+ * @param {object} sheets
+ * @param {string} spreadsheetId
+ * @param {string|null} [statusFilter] - 특정 status 하나만 필터 (null이면 전체 대상)
+ * @returns {Promise<Array<{row: number, vendorItemId: string, itemId: string, productUrl: string, status: string, qoo10ItemId: string}>>}
+ */
+async function getMonitoringProducts(sheets, spreadsheetId, statusFilter = null) {
+  const TAB = 'coupang_datas';
+  const MONITOR_STATUSES = ['REGISTERED', 'LIVE', 'OUT_OF_STOCK'];
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${TAB}!A:ZZ`,
+  });
+
+  const rows = res.data.values || [];
+  if (rows.length < 2) return [];
+
+  const headers = rows[0];
+  const statusIdx       = headers.indexOf('status');
+  const vendorItemIdIdx = headers.indexOf('vendorItemId');
+  const itemIdIdx       = headers.indexOf('itemId');
+  const productUrlIdx   = headers.indexOf('ProductURL');
+  const qoo10ItemIdIdx  = headers.indexOf('qoo10ItemId');
+
+  const targetStatuses = statusFilter ? [statusFilter] : MONITOR_STATUSES;
+
+  const result = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row    = rows[i];
+    const status = row[statusIdx] || '';
+    if (!targetStatuses.includes(status)) continue;
+
+    const productUrl = row[productUrlIdx] || '';
+    if (!productUrl) continue;
+
+    result.push({
+      row:          i + 1,
+      vendorItemId: row[vendorItemIdIdx] || '',
+      itemId:       row[itemIdIdx] || '',
+      productUrl,
+      status,
+      qoo10ItemId:  row[qoo10ItemIdIdx] || '',
+    });
+  }
+
+  return result;
+}
+
 Object.assign(module.exports, {
   ensureSheet,
   getConfig,
@@ -547,4 +599,5 @@ Object.assign(module.exports, {
   updateKeywordLastRun,
   upsertDiscoveredProducts,
   getDiscoveredProducts,
+  getMonitoringProducts,
 });

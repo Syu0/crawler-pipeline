@@ -35,7 +35,10 @@
     "coupang:browser:stop": "node backend/scripts/coupang-browser-stop.js",
     "coupang:browser:status": "node backend/scripts/coupang-browser-status.js",
     "coupang:collect": "node backend/scripts/coupang-collect-discovered.js",
-    "coupang:collect:dry": "node backend/scripts/coupang-collect-discovered.js --dry-run"
+    "coupang:collect:dry": "node backend/scripts/coupang-collect-discovered.js --dry-run",
+    "stock:check":      "node backend/scripts/coupang-stock-monitor.js",
+    "stock:check:dry":  "node backend/scripts/coupang-stock-monitor.js --dry-run",
+    "stock:check:test": "node backend/scripts/coupang-stock-monitor.js --dry-run --limit=3"
   },
   "dependencies": {
     "cross-env": "^7.0.3",
