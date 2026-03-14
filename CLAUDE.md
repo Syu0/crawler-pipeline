@@ -189,33 +189,53 @@ OPENCLAW_SESSION_ID
 
 ## 9. 현재 진행 상태 (2026-03 기준)
 
-### 9-A. crawler-pipeline 우선 작업
+### 9-A. crawler-pipeline 완료 항목
 
-- [x] **1순위** 재고/가격 업데이트 — `SetGoodsPriceQty` 기능 완성 및 실제 API 검증 완료
-- [x] **2순위** 쿠팡 서버사이드 수집 완료
+- [x] `SetGoodsPriceQty` 재고/가격 업데이트 API 래퍼 구현 및 실제 검증 완료
+- [x] 쿠팡 서버사이드 수집 기반 구축
   - Playwright + stealth + cookieStore 쿠키 주입으로 Akamai 우회 성공
   - 가격 셀렉터 타이밍 이슈 수정 완료 (`.final-price-amount` + `waitForSelector`)
-  - yam yam 크롬 확장으로 쿠키 원클릭 갱신 (`chrome-extension/yamyam/`)
+  - yamyam 크롬 확장으로 쿠키 원클릭 갱신 (`chrome-extension/yamyam/`)
   - 쿠키 만료 이메일 알림 구현 (meaningful.jy@gmail.com, D-3/D-0)
-  - 수집 필드: ItemTitle / ItemPrice / StandardImage / ItemDescriptionText
-  - 검증 완료: `npm run coupang:pw:dry:trace`
-- [ ] **3순위** 재고 모니터링 + Qoo10 qty=0 업데이트
-- [ ] **4순위** 룰 기반 자동 검수 시스템
-- [ ] **보류** UpdateGoods / EditGoodsContents / GetItemDetailInfo 테스트 스크립트
+  - 기본 수집 필드 동작 확인: ItemTitle / ItemPrice / StandardImage / ItemDescriptionText
+- [x] 키워드 기반 탐색 파이프라인 (`coupang-keyword-discover.js`)
+  - `keywords` 시트 ACTIVE 키워드 → 쿠팡 검색 → 필터 체인 → DISCOVERED 저장
+  - 필터 조건값 `config` 시트 런타임 로드 (코드 수정 없이 변경 가능)
+  - IP 블록 감지 + 재시도 (`blockDetector.js`): 1시간 대기 × 2회 → 이메일 알림
+- [x] DISCOVERED → COLLECTED 수집기 (`coupang-collect-discovered.js`)
+- [x] 시트 스키마 표준화 (`sheetSchema.js`) + `setup-sheets.js` 자동화
+- [x] status ENUM 파이프라인 전체 연결
+- [x] 재고 모니터링 품절 감지 구현 (`coupang-stock-monitor.js`)
+  - 접근법: 상품 상세 페이지 HTML에서 품절 셀렉터 파싱 (Playwright, Akamai 우회)
+  - 감지 동작 확인 완료 / Qoo10 qty 연결은 미완
 
-### 9-B. dashboard 작업
+### 9-B. 현재 작업 순서
+
+- [ ] **1순위** `COLLECTED → Qoo10 등록 자동 연결`
+  - 기존 `qoo10-auto-register.js` 등록 코드와 status ENUM 흐름 연결
+  - COLLECTED 상태 상품을 자동으로 읽어 등록 → REGISTERED 전이까지 end-to-end 동작 확인
+
+- [ ] **2순위** 쿠팡 수집 로직 보강
+  - 미수집 필드 추가: Options, ExtraImages, 상세 이미지 URL, 리뷰 5개, 문의글 5개
+  - 수집 실패 시 해당 필드 null 처리 (전체 row 실패로 이어지지 않도록)
+
+- [ ] **3순위** Qoo10 Update API 로직 추가
+  - 현재 구현된 `SetGoodsPriceQty` 외 기존 API 목록 검토
+  - 활용 가능한 API 식별 후 래퍼 추가: `UpdateGoods`, `EditGoodsContents` 등
+  - CLAUDE.md 섹션 5 `UpdateGoods 필드별 실제 API 매핑` 기준 준수
+
+- [ ] **4순위** 재고 모니터링 → Qoo10 qty=0 연결 (STEP 3 완성)
+  - 품절 감지 결과 → `SetGoodsPriceQty(qty=0)` 호출
+  - 시트 status → OUT_OF_STOCK 전이
+  - 재판매 감지 시 → qty=100 + LIVE 복구
+
+### 9-C. dashboard 작업
 
 - [ ] Chat 탭 OpenClaw 세션 연동 — `/api/openclaw/*` Vercel API Route 프록시
 
-### 완료
+### 9-D. 보류
 
-- [x] Qoo10 `SetNewGoods` 기본 통합
-- [x] `UpdateGoods` overwrite-safe 검증
-- [x] 필드별 API 매핑 확인 (Title / Qty / Description)
-- [x] 자동 필드 탐색 시스템 v2a 구축
-- [x] 대시보드 초기 배포 (Vercel)
-- [x] gracejudy 브랜치 통합 (dashboard + v2a docs)
-- [x] `SetGoodsPriceQty` 재고/가격 업데이트 API 래퍼 구현 및 실제 검증 완료
+- [ ] UpdateGoods / EditGoodsContents / GetItemDetailInfo 테스트 스크립트 (3순위 작업 시 함께 진행)
 
 ---
 
@@ -235,7 +255,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-03-10 | 대화 기록 기반 자동 생성*
+*마지막 업데이트: 2026-03-14 | 작업 순서 재조정*
 
 ---
 
