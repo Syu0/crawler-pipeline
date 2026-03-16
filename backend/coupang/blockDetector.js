@@ -74,12 +74,70 @@ function isBlockError(err) {
   );
 }
 
+// ── 에러 3-tier 분류 ─────────────────────────────────────────────────────────
+
+/**
+ * @param {Error} err
+ * @returns {'HARD_BLOCK' | 'SOFT_BLOCK' | 'ROW_ERROR'}
+ */
+function classifyError(err) {
+  const msg = (err.message || '').toLowerCase();
+  const status = err.status || err.statusCode || 0;
+
+  const hardPatterns = [/akamai/i, /bot.detect/i, /access.denied/i, /403/, /blocked/i];
+  if (status === 403 || hardPatterns.some((p) => p.test(msg))) return 'HARD_BLOCK';
+
+  if (status === 429 || /429|rate.limit|too.many.request/i.test(msg)) return 'SOFT_BLOCK';
+
+  return 'ROW_ERROR';
+}
+
+// ── SOFT_BLOCK 재시도 래퍼 ────────────────────────────────────────────────────
+
+/**
+ * SOFT_BLOCK(429) 발생 시 재시도 래퍼.
+ * HARD_BLOCK은 즉시 상위로 전파. ROW_ERROR도 즉시 상위로 전파.
+ *
+ * @param {Function} fn  실행할 비동기 함수 () => Promise<any>
+ * @param {{ maxRetries?: number, waitMs?: number }} opts
+ * @returns {Promise<{ success: boolean, result?: any, escalated: boolean }>}
+ *   escalated: true = SOFT_BLOCK 재시도 소진 → HARD_BLOCK으로 처리 필요
+ */
+async function withSoftBlockRetry(fn, opts = {}) {
+  const { maxRetries = 3, waitMs = 30_000 } = opts;
+  const actualWait = process.argv.includes('--test-block-wait') ? 5_000 : waitMs;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await fn();
+      return { success: true, result, escalated: false };
+    } catch (err) {
+      const tier = classifyError(err);
+
+      if (tier === 'HARD_BLOCK') throw err; // 즉시 상위 전파
+
+      if (tier === 'SOFT_BLOCK') {
+        if (attempt < maxRetries) {
+          console.warn(`[blockDetector] SOFT_BLOCK — ${attempt}/${maxRetries}회, ${actualWait / 1000}초 대기`);
+          await new Promise((r) => setTimeout(r, actualWait));
+          continue;
+        }
+        console.error(`[blockDetector] SOFT_BLOCK 재시도 ${maxRetries}회 소진 → HARD_BLOCK escalate`);
+        return { success: false, escalated: true };
+      }
+
+      throw err; // ROW_ERROR — 즉시 상위 전파
+    }
+  }
+}
+
 // ── 이메일 발송 ───────────────────────────────────────────────────────────────
 
 /**
- * 블록 비율 초과 알림 이메일 발송.
+ * 블록 알림 이메일 발송.
  *
- * @param {{ blocked: number, total: number, success: number, error: number } | null} stats
+ * 새 shape: { success, rowError, softBlock, hardBlock, total, lastUrl?, triggerReason }
+ * 구 shape:  { blocked, total, success, error } | null  (하위 호환)
  */
 async function sendBlockAlertEmail(stats = null) {
   const user = process.env.GMAIL_USER;
@@ -96,12 +154,30 @@ async function sendBlockAlertEmail(stats = null) {
     auth: { user, pass },
   });
 
-  const subject = '[쿠팡수집] IP 블록 비율 초과 — 수동 확인 필요';
-  const statsLine = stats
-    ? `수집 결과: 전체 ${stats.total}개 / 블록 ${stats.blocked}개 / 성공 ${stats.success}개 / 오류 ${stats.error}개`
-    : '';
+  const isNewShape = stats && stats.triggerReason !== undefined;
+
+  const subject = isNewShape
+    ? `[쿠팡수집] 블록 알림 — ${stats.triggerReason === 'HARD_BLOCK' ? 'HARD_BLOCK 감지' : 'ROW_ERROR 50% 초과'}`
+    : '[쿠팡수집] IP 블록 비율 초과 — 수동 확인 필요';
+
+  let statsLine = '';
+  if (isNewShape && stats) {
+    statsLine = [
+      `triggerReason: ${stats.triggerReason}`,
+      `success: ${stats.success} / total: ${stats.total}`,
+      `rowError: ${stats.rowError} / softBlock: ${stats.softBlock} / hardBlock: ${stats.hardBlock}`,
+      stats.lastUrl ? `lastUrl: ${stats.lastUrl}` : '',
+    ].filter(Boolean).join('\n');
+  } else if (stats) {
+    statsLine = `수집 결과: 전체 ${stats.total}개 / 블록 ${stats.blocked}개 / 성공 ${stats.success}개 / 오류 ${stats.error}개`;
+  }
+
   const text = [
-    'Akamai IP 차단이 전체 수집 대상의 50% 이상에서 감지되었습니다.',
+    isNewShape
+      ? (stats.triggerReason === 'HARD_BLOCK'
+          ? 'HARD_BLOCK이 감지되어 수집 루프가 중단되었습니다.'
+          : 'ROW_ERROR 비율이 50%를 초과했습니다.')
+      : 'Akamai IP 차단이 전체 수집 대상의 50% 이상에서 감지되었습니다.',
     statsLine,
     '',
     `감지 시각: ${new Date().toISOString()}`,
@@ -142,9 +218,11 @@ module.exports = {
   BlockedError,
   isBlocked,
   isBlockError,
+  classifyError,
   wait,
   sendBlockAlertEmail,
   withBlockRetry,
+  withSoftBlockRetry,
   RETRY_WAIT_MS,
   RETRY_COUNT,
 };
