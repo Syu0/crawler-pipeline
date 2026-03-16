@@ -37,12 +37,13 @@ const {
   getDiscoveredProducts,
   ensureHeaders,
   upsertRow,
+  upsertCoupangCategory,
 } = require('../coupang/sheetsClient');
 const { COUPANG_DATA_HEADERS } = require('../coupang/sheetSchema');
 const { scrapeCoupangProductPlaywright } = require('../coupang/playwrightScraper');
 const { collectAllPhases } = require('../coupang/detailPageParser');
 const browserManager = require('../coupang/browserManager');
-const { wait } = require('../coupang/blockDetector');
+const { wait, isBlockError, sendBlockAlertEmail } = require('../coupang/blockDetector');
 
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 const TAB = 'coupang_datas';
@@ -139,6 +140,7 @@ async function main() {
   // 3. 행별 수집 루프
   let successCount = 0;
   let errorCount = 0;
+  let blockedCount = 0;
 
   try {
     for (let i = 0; i < products.length; i++) {
@@ -178,9 +180,11 @@ async function main() {
 
         if (dryRun) {
           console.log('  [DRY-RUN] 수집 결과:');
-          console.log(`    ItemTitle:   ${scraped.ItemTitle?.substring(0, 50)}`);
-          console.log(`    ItemPrice:   ${scraped.ItemPrice}`);
-          console.log(`    StandardImage: ${scraped.StandardImage ? 'OK' : '없음'}`);
+          console.log(`    ItemTitle:      ${scraped.ItemTitle?.substring(0, 50)}`);
+          console.log(`    ItemPrice:      ${scraped.ItemPrice}`);
+          console.log(`    StandardImage:  ${scraped.StandardImage ? 'OK' : '없음'}`);
+          console.log(`    categoryId:     ${scraped.categoryId || '❌ 없음'}`);
+          console.log(`    breadcrumbPath: ${(scraped.breadcrumbTexts || []).join(' > ') || '없음'}`);
           console.log(`    CollectedPhases: ${phases.join(',')}`);
           successCount++;
           continue;
@@ -224,14 +228,34 @@ async function main() {
 
         await upsertRow(SPREADSHEET_ID, TAB, HEADERS, data, 'vendorItemId', 'itemId');
         console.log(`  ✓ COLLECTED (phases: ${phases.join(',')})`);
+
+        if (scraped.categoryId && scraped.breadcrumbTexts?.length) {
+          try {
+            await upsertCoupangCategory(sheets, SPREADSHEET_ID, {
+              categoryId: scraped.categoryId,
+              breadcrumbTexts: scraped.breadcrumbTexts,
+            });
+            console.log(`  ✓ coupang_categorys upserted (categoryId=${scraped.categoryId})`);
+          } catch (catErr) {
+            console.warn(`  [warn] coupang_categorys upsert 실패: ${catErr.message}`);
+          }
+        }
+
         successCount++;
 
       } catch (err) {
-        console.error(`  ✗ 오류: ${err.message}`);
-        errorCount++;
+        const blocked = isBlockError(err);
+        if (blocked) {
+          console.warn(`  ⚠ BLOCK: ${err.message.split('\n')[0]}`);
+          blockedCount++;
+        } else {
+          console.error(`  ✗ 오류: ${err.message}`);
+          errorCount++;
+        }
         contextUseCount++;
 
         if (!dryRun) {
+          const errPrefix = blocked ? 'BLOCK: ' : '';
           try {
             await upsertRow(
               SPREADSHEET_ID, TAB, HEADERS,
@@ -240,7 +264,7 @@ async function main() {
                 itemId:       product.itemId,
                 updatedAt:    new Date().toISOString(),
                 status:       'ERROR',
-                errorMessage: err.message.substring(0, 500),
+                errorMessage: (errPrefix + err.message).substring(0, 500),
               },
               'vendorItemId', 'itemId',
               PRESERVE_ON_ERROR
@@ -270,16 +294,33 @@ async function main() {
 
   // 4. 완료 요약
   console.log(`\n${'='.repeat(50)}`);
-  console.log('완료 요약');
+  console.log('[collect] Done —'
+    + ` success:${successCount}`
+    + ` blocked:${blockedCount}`
+    + ` error:${errorCount}`
+    + ` skipped:0`
+  );
   console.log('='.repeat(50));
   console.log(`  대상:   ${products.length}개`);
   console.log(`  성공:   ${successCount}개`);
+  console.log(`  블록:   ${blockedCount}개`);
   console.log(`  실패:   ${errorCount}개`);
   if (dryRun) console.log('  (DRY-RUN — 시트 write 없음)');
   if (!shutdown) console.log('  브라우저: 유지 중 (npm run coupang:browser:stop 으로 종료)');
+
+  // 블록 비율 50% 초과 시 알림
+  if (blockedCount > 0 && blockedCount / products.length > 0.5) {
+    console.warn(`[collect] 블록 비율 ${Math.round(blockedCount / products.length * 100)}% 초과 — 이메일 알림 발송`);
+    await sendBlockAlertEmail({
+      blocked: blockedCount,
+      total:   products.length,
+      success: successCount,
+      error:   errorCount,
+    });
+  }
 }
 
-main().catch((err) => {
+main().then(() => process.exit(0)).catch((err) => {
   console.error('\n✗ Error:', err.message);
   process.exit(1);
 });
