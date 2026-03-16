@@ -209,7 +209,7 @@ async function searchCoupangByKeyword(keyword, browserContext, options = {}) {
           itemPrice: card.itemPrice,
           isRocket: card.isRocket,
           categoryName: card.categoryName,
-          categoryId: null,
+          categoryId: new URL(fullUrl).searchParams.get('categoryId') || null,
           productUrl: fullUrl,
           thumbnailImage: card.thumbnailImage,
         };

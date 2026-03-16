@@ -211,23 +211,44 @@ OPENCLAW_SESSION_ID
 
 ### 9-B. 현재 작업 순서
 
-- [ ] **1순위** `COLLECTED → Qoo10 등록 자동 연결`
-  - 기존 `qoo10-auto-register.js` 등록 코드와 status ENUM 흐름 연결
-  - COLLECTED 상태 상품을 자동으로 읽어 등록 → REGISTERED 전이까지 end-to-end 동작 확인
+- [ ] **1순위** `쿠팡 블록 대응 강화`
+  - 현재: 블록 감지 → 1시간 대기 × 2회 → 포기 + 이메일 알림 → 파이프라인 중단
+  - 목표: 블록 상황에서도 파이프라인이 멈추지 않도록 대응 전략 강화
+  - 수정 대상: `blockDetector.js`, `coupang-collect-discovered.js` 흐름 제어
+  - **선행 이유**: 블록 대응이 안정화되어야 수집 보강 테스트 결과를 신뢰할 수 있음
+    (새 셀렉터 실패 원인이 블록인지 코드 문제인지 구분 불가 → 디버깅 오염 방지)
 
-- [ ] **2순위** 쿠팡 수집 로직 보강
+- [ ] **2순위** `쿠팡 수집 보강`
   - 미수집 필드 추가: Options, ExtraImages, 상세 이미지 URL, 리뷰 5개, 문의글 5개
   - 수집 실패 시 해당 필드 null 처리 (전체 row 실패로 이어지지 않도록)
+  - **3순위 Update API 테스트의 전제조건**: 수집 필드가 늘어나야 Update API 검증 대상이 생김
 
-- [ ] **3순위** Qoo10 Update API 로직 추가
-  - 현재 구현된 `SetGoodsPriceQty` 외 기존 API 목록 검토
-  - 활용 가능한 API 식별 후 래퍼 추가: `UpdateGoods`, `EditGoodsContents` 등
+- [ ] **3순위** `일본어 상품 타이틀 변환`
+  - **문제**: 한국어 타이틀 그대로 등록 → 일본 Qoo10 검색 노출 불가
+  - **요건**: 자연어 번역 아님 — 일본어 검색 키워드 중심의 SEO 최적화 타이틀
+  - **채택 방식**: 하이브리드 (브랜드명/숫자/단위 regex 추출 → Claude API SEO 프롬프트 → 카테고리 템플릿 fallback)
+  - **구현 위치**: `backend/qoo10/titleTranslator.js` 신규 모듈 → `qoo10-auto-register.js` 등록 직전 삽입
+
+- [ ] **4순위** `Qoo10 Update API 로직 추가`
+  - 현재 구현된 `SetGoodsPriceQty` 외 API 목록 검토
+  - 래퍼 추가: `UpdateGoods`, `EditGoodsContents`
   - CLAUDE.md 섹션 5 `UpdateGoods 필드별 실제 API 매핑` 기준 준수
 
-- [ ] **4순위** 재고 모니터링 → Qoo10 qty=0 연결 (STEP 3 완성)
+- [ ] **5순위** `재고 모니터링 → Qoo10 qty=0 연결`
   - 품절 감지 결과 → `SetGoodsPriceQty(qty=0)` 호출
   - 시트 status → OUT_OF_STOCK 전이
   - 재판매 감지 시 → qty=100 + LIVE 복구
+
+- [ ] **6순위** `COLLECTED → Qoo10 등록 파이프라인 자동 연결` (운영 직전)
+  - **포인트**: 현재 `qoo10-auto-register.js`는 status ENUM 흐름과 분리 — 수동 실행만 가능
+  - 목표: COLLECTED 상태 자동 감지 → REGISTERING 락 → 등록 → REGISTERED 전이 end-to-end 자동화
+  - **착수 조건**: 1~5순위 완료 후 — 수집/품질/업데이트 파이프라인이 안정화된 시점
+
+- [ ] **7순위** `Qoo10 시장 가격 경쟁성 검증`
+  - **채택 방식**: Qoo10 검색 스크래핑 자동화 (동일/유사 키워드 → 상위 N개 가격 수집 → 우리 가격 비교)
+  - **판단 로직**: 경쟁 불가 → 상품 교체 플래그 or 번들 기획 제안
+  - **선행 요건**: 1~5순위 파이프라인 안정화 이후 착수
+  - **난이도**: 높음
 
 ### 9-C. dashboard 작업
 
@@ -255,7 +276,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-03-14 | 작업 순서 재조정*
+*마지막 업데이트: 2026-03-16 | 작업 우선순위 최종 확정*
 
 ---
 

@@ -56,6 +56,27 @@ function normalizeImageUrl(url) {
   return url;
 }
 
+/**
+ * 브레드크럼에서 categoryId와 경로 텍스트를 추출한다.
+ * @param {import('playwright').Page} page
+ * @returns {Promise<{categoryId: string|null, breadcrumbTexts: string[]}>}
+ */
+async function extractBreadcrumb(page) {
+  return page.evaluate(() => {
+    const links = Array.from(
+      document.querySelectorAll('ul.breadcrumb li a[href*="/np/categories/"]')
+    );
+    if (!links.length) return { categoryId: null, breadcrumbTexts: [] };
+
+    const texts = links.map((a) => a.title || a.textContent.trim()).filter(Boolean);
+    const lastHref = links[links.length - 1].href;
+    const match = lastHref.match(/\/np\/categories\/(\d+)/);
+    const categoryId = match ? match[1] : null;
+
+    return { categoryId, breadcrumbTexts: texts };
+  }).catch(() => ({ categoryId: null, breadcrumbTexts: [] }));
+}
+
 // ---------------------------------------------------------------------------
 // 쿠키 문자열 파서 (Cookie 헤더 형식 → playwright addCookies 형식)
 // ---------------------------------------------------------------------------
@@ -400,7 +421,10 @@ async function scrapePage(context, productUrl) {
 
     trace(`Description length: ${itemDescriptionText.length}`);
 
-    return { itemTitle, itemPrice, standardImage, extraImages, itemDescriptionText };
+    const { categoryId: breadcrumbCategoryId, breadcrumbTexts } = await extractBreadcrumb(page);
+    trace(`Breadcrumb categoryId: ${breadcrumbCategoryId}, path: ${breadcrumbTexts.join(' > ')}`);
+
+    return { itemTitle, itemPrice, standardImage, extraImages, itemDescriptionText, breadcrumbCategoryId, breadcrumbTexts };
 
   } finally {
     await page.close();
@@ -444,14 +468,14 @@ async function scrapeCoupangProductPlaywright(productUrl, externalContext = null
   }
 
   try {
-    const { itemTitle, itemPrice, standardImage, extraImages, itemDescriptionText } =
+    const { itemTitle, itemPrice, standardImage, extraImages, itemDescriptionText, breadcrumbCategoryId, breadcrumbTexts } =
       await scrapePage(context, productUrl);
 
     const result = {
       vendorItemId: urlInfo.vendorItemId,
       itemId: urlInfo.itemId,
       coupang_product_id: urlInfo.coupangProductId,
-      categoryId: urlInfo.coupangCategoryId,
+      categoryId: urlInfo.coupangCategoryId || breadcrumbCategoryId,
       ProductURL: urlInfo.sourceUrl,
       ItemTitle: itemTitle,
       ItemPrice: itemPrice,
@@ -460,6 +484,7 @@ async function scrapeCoupangProductPlaywright(productUrl, externalContext = null
       WeightKg: '1',
       Options: null,
       ItemDescriptionText: itemDescriptionText || itemTitle,
+      breadcrumbTexts,
       updatedAt: new Date().toISOString(),
     };
 

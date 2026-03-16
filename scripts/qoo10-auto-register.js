@@ -62,7 +62,7 @@ async function readSheetRowsWithIndices() {
   
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${TAB_NAME}!A:Z`,
+    range: `${TAB_NAME}!A:AZ`,  // A:Z → A:AZ: status 컬럼(AI)이 26열 초과
   });
   
   const rows = response.data.values || [];
@@ -101,7 +101,7 @@ async function updateSheetRow(rowIndex, updates) {
   // Get headers to find column indices
   const headersResponse = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${TAB_NAME}!1:1`,
+    range: `${TAB_NAME}!A1:AZ1`,
   });
   
   const headers = headersResponse.data.values?.[0] || [];
@@ -191,7 +191,12 @@ function validateRow(row, isUpdateMode = false) {
   if (!isUpdateMode && !row.ItemTitle) {
     return { valid: false, reason: 'Missing ItemTitle' };
   }
-  
+
+  // Image validation - required for CREATE
+  if (!isUpdateMode && !row.StandardImage) {
+    return { valid: false, reason: 'Missing StandardImage' };
+  }
+
   return { valid: true };
 }
 
@@ -334,6 +339,29 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
     };
   }
   
+  // categoryPath3가 없으면 coupang_categorys에서 보완
+  if (!row.categoryPath3 && row.categoryId && sheetsClient) {
+    try {
+      const catRes = await sheetsClient.spreadsheets.values.get({
+        spreadsheetId: SHEET_ID,
+        range: 'coupang_categorys!A:I',
+      });
+      const catRows = catRes.data.values || [];
+      const catHeader = catRows[0] || [];
+      const idIdx = catHeader.indexOf('coupangCategoryId');
+      const path3Idx = catHeader.indexOf('depth3Path');
+      const path2Idx = catHeader.indexOf('depth2Path');
+      const found = catRows.find((r, i) => i > 0 && r[idIdx] === String(row.categoryId));
+      if (found) {
+        row.categoryPath3 = found[path3Idx] || '';
+        row.categoryPath2 = found[path2Idx] || '';
+        console.log(`  Category path (from coupang_categorys): ${row.categoryPath3}`);
+      }
+    } catch (e) {
+      // 무시 — FALLBACK으로 진행
+    }
+  }
+
   // Resolve JP category (never fails - has FALLBACK)
   let categoryResolution;
   try {
@@ -580,11 +608,13 @@ async function main() {
     console.log(`Found ${dataRows.length} total rows`);
     
     // Count row categories
-    const unregisteredRows = dataRows.filter(r => !r.qoo10ItemId);
+    // CREATE: status=COLLECTED or REGISTER_READY (수집 완료, 미등록)
+    // UPDATE: qoo10ItemId 있고 needsUpdate=YES
+    const unregisteredRows = dataRows.filter(r => r.status === 'COLLECTED' || r.status === 'REGISTER_READY');
     const registeredNeedsUpdate = dataRows.filter(r => r.qoo10ItemId && r.needsUpdate === 'YES');
     const registeredNoUpdate = dataRows.filter(r => r.qoo10ItemId && r.needsUpdate !== 'YES');
-    
-    console.log(`  Unregistered (CREATE):  ${unregisteredRows.length}`);
+
+    console.log(`  COLLECTED (CREATE):  ${unregisteredRows.length}`);
     console.log(`  Registered + needsUpdate=YES (UPDATE): ${registeredNeedsUpdate.length}`);
     console.log(`  Registered + no update: ${registeredNoUpdate.length} (will skip)`);
     
@@ -638,11 +668,13 @@ async function main() {
         console.log(`Processing: ${vendorItemId} [CREATE]`);
       }
 
-      // 등록 시작 전 REGISTERING 락 설정
-      try {
-        await updateSheetRow(row._rowIndex, { status: 'REGISTERING' });
-      } catch (e) {
-        console.warn(`  ⚠ Could not set REGISTERING lock: ${e.message}`);
+      // 등록 시작 전 REGISTERING 락 설정 (실제 API 호출 시에만 — DRY-RUN 또는 QOO10_ALLOW_REAL_REG=0 이면 락 안 걺)
+      if (isRealMode) {
+        try {
+          await updateSheetRow(row._rowIndex, { status: 'REGISTERING' });
+        } catch (e) {
+          console.warn(`  ⚠ Could not set REGISTERING lock: ${e.message}`);
+        }
       }
 
       const result = await registerProduct(row, options.dryRun, sheets);
@@ -764,20 +796,23 @@ async function main() {
           break;
           
         case 'DRY_RUN':
-        case 'DRY_RUN_API':
+        case 'DRY_RUN_API': {
           // Determine DRY-RUN status based on matchType
           const dryRunStatus = result.categoryResolution?.matchType === 'FALLBACK' ? 'WARNING' : 'DRY_RUN';
-          const dryRunMessage = result.categoryResolution?.matchType === 'FALLBACK' 
+          const dryRunMessage = result.categoryResolution?.matchType === 'FALLBACK'
             ? 'DRY-RUN with FALLBACK category (review required)'
             : 'DRY-RUN completed';
-          
+
           console.log(`  → DRY-RUN [${result.mode || 'CREATE'}]: price=${result.qoo10SellingPrice}, jpCat=${result.categoryResolution?.jpCategoryId} (${result.categoryResolution?.matchType})`);
           results.dryRun.push(result);
-          
-          // ALWAYS write back category resolution even in DRY-RUN
+
+          // ALWAYS write back category resolution even in DRY-RUN.
+          // Also reset status to COLLECTED — the REGISTERING lock may have been set
+          // if --dry-run flag was omitted but QOO10_ALLOW_REAL_REG was not enabled.
           try {
             await updateSheetRow(row._rowIndex, {
               ...categoryUpdate,
+              status: 'COLLECTED',   // release REGISTERING lock if it was set
               qoo10SellingPrice: result.qoo10SellingPrice,
               qoo10SellerCode: result.sellerCode || '',
               registrationMode: 'DRY_RUN',
@@ -785,11 +820,12 @@ async function main() {
               registrationMessage: dryRunMessage,
               lastRegisteredAt: new Date().toISOString()
             });
-            console.log(`  ✓ Sheet updated (DRY-RUN)`);
+            console.log(`  ✓ Sheet updated (DRY-RUN, status reset to COLLECTED)`);
           } catch (sheetErr) {
             console.log(`  ✗ Sheet update failed: ${sheetErr.message}`);
           }
           break;
+        }
       }
       
       console.log('');

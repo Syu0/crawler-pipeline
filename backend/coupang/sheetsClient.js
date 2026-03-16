@@ -592,6 +592,56 @@ async function getMonitoringProducts(sheets, spreadsheetId, statusFilter = null)
   return result;
 }
 
+/**
+ * `coupang_categorys` 탭에 카테고리 정보를 upsert한다.
+ * @param {object} sheets - Google Sheets API client
+ * @param {string} spreadsheetId
+ * @param {{ categoryId: string, breadcrumbTexts: string[] }} categoryData
+ */
+async function upsertCoupangCategory(sheets, spreadsheetId, categoryData) {
+  const TAB = 'coupang_categorys';
+  const { categoryId, breadcrumbTexts = [] } = categoryData;
+  if (!categoryId) return;
+
+  const texts = breadcrumbTexts.filter(Boolean);
+  const depth2Path = texts.slice(-2).join(' > ');
+  const depth3Path = texts.slice(-3).join(' > ');
+  const rootName   = texts[0] || '';
+  const parentName = texts[texts.length - 2] || '';
+  const leafName   = texts[texts.length - 1] || '';
+  const now = new Date().toISOString();
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${TAB}!A:I`,
+  });
+  const rows = res.data.values || [];
+  const header = rows[0] || [];
+  const idIdx = header.indexOf('coupangCategoryId');
+
+  const existingRowIdx = rows.findIndex((r, i) => i > 0 && r[idIdx] === String(categoryId));
+
+  if (existingRowIdx === -1) {
+    const newRow = [categoryId, depth2Path, depth3Path, rootName, parentName, leafName, now, now, 1];
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: `${TAB}!A:I`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [newRow] },
+    });
+  } else {
+    const r = rows[existingRowIdx];
+    const usedCount = parseInt(r[8] || '0', 10) + 1;
+    const sheetRow = existingRowIdx + 1;
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${TAB}!H${sheetRow}:I${sheetRow}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [[now, usedCount]] },
+    });
+  }
+}
+
 Object.assign(module.exports, {
   ensureSheet,
   getConfig,
@@ -600,4 +650,5 @@ Object.assign(module.exports, {
   upsertDiscoveredProducts,
   getDiscoveredProducts,
   getMonitoringProducts,
+  upsertCoupangCategory,
 });

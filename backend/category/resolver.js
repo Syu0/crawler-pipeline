@@ -21,6 +21,12 @@ const JP_CATEGORIES_TAB = 'japan_categories';
 
 // FALLBACK JP Category: "320002604" (Toothpaste Set sample category)
 const FALLBACK_JP_CATEGORY_ID = '320002604';
+
+// AUTO match threshold — candidates below this score are ignored
+const AUTO_THRESHOLD = 0.15;
+
+// Module-level cache for japan_categories (loaded once per process)
+let _jpCategoriesCache = null;
 const FALLBACK_JP_FULL_PATH = 'Fallback Category (Review Required)';
 
 // New headers for path-keyed category_mapping sheet
@@ -344,36 +350,40 @@ async function getMappings(sheets, sheetId) {
  * @returns {Array<object>} Array of JP category objects
  */
 async function getJpCategories(sheets, sheetId) {
+  if (_jpCategoriesCache) return _jpCategoriesCache;
+
   try {
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: sheetId,
       range: `${JP_CATEGORIES_TAB}!A:H`,
     });
-    
+
     const rows = response.data.values || [];
     if (rows.length < 2) return [];
-    
+
     const headers = rows[0];
     const categories = [];
-    
+
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       const obj = {};
-      
+
       headers.forEach((h, idx) => {
         obj[h] = row[idx] || '';
       });
-      
+
       // Parse boolean isLeaf
       obj.isLeaf = obj.isLeaf === 'true' || obj.isLeaf === true;
       // Parse numeric depth
       obj.depth = parseInt(obj.depth, 10) || 0;
-      
+
       categories.push(obj);
     }
-    
+
+    _jpCategoriesCache = categories;
+    console.log(`[CategoryResolver] Loaded ${categories.length} JP categories (cached)`);
     return categories;
-    
+
   } catch (err) {
     console.error('[CategoryResolver] Error reading JP categories:', err.message);
     return [];
@@ -402,113 +412,158 @@ async function writeMappingRow(sheets, sheetId, mapping) {
 }
 
 /**
- * Tokenize a path string for keyword matching
- * @param {string} path - Category path like "가전 > 냉장고 > 양문형"
- * @returns {string[]} Array of lowercase tokens
+ * Upsert a mapping row: update in-place if coupangCategoryKey already exists, else append.
+ * Always overwrites all fields with the provided mapping.
+ *
+ * @param {object} mapping - Must include coupangCategoryKey
  */
-function tokenizePath(path) {
-  if (!path) return [];
-  
-  return path
-    .split(/[\s>\/,]+/)
-    .map(t => t.trim().toLowerCase())
-    .filter(t => t.length > 0);
+async function upsertMappingRow(mapping) {
+  const sheetId = process.env.GOOGLE_SHEET_ID;
+  if (!sheetId) throw new Error('GOOGLE_SHEET_ID not set');
+
+  const sheets = await getSheetsClient();
+  await ensureMappingSheet(sheets, sheetId);
+
+  const key = normalizeCategoryPath(mapping.coupangCategoryKey || mapping.coupangPath3 || '');
+  if (!key) throw new Error('upsertMappingRow: coupangCategoryKey is required');
+
+  const mappings = await getMappings(sheets, sheetId);
+  const existing = mappings.get(key);
+
+  const rowValues = MAPPING_HEADERS.map(h => {
+    const val = mapping[h];
+    if (val === undefined || val === null) return '';
+    return String(val);
+  });
+
+  if (existing) {
+    // Update row in place
+    const rowNum = existing._rowIndex;
+    const data = MAPPING_HEADERS.map((h, colIdx) => ({
+      range: `${MAPPING_TAB}!${columnLetter(colIdx)}${rowNum}`,
+      values: [[rowValues[colIdx]]],
+    }));
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: sheetId,
+      requestBody: { valueInputOption: 'RAW', data },
+    });
+    console.log(`[CategoryResolver] upsert UPDATE row ${rowNum}: "${key}"`);
+  } else {
+    // Append new row
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: sheetId,
+      range: `${MAPPING_TAB}!A:J`,
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: [rowValues] },
+    });
+    console.log(`[CategoryResolver] upsert INSERT: "${key}"`);
+  }
 }
 
 /**
- * Calculate match score between Coupang path and JP category
+ * Column index → letter (A, B, ..., Z, AA, ...)
+ */
+function columnLetter(index) {
+  let letter = '';
+  while (index >= 0) {
+    letter = String.fromCharCode((index % 26) + 65) + letter;
+    index = Math.floor(index / 26) - 1;
+  }
+  return letter;
+}
+
+/**
+ * Tokenize a category path string into meaningful tokens (length >= 2).
+ * Splits on >, whitespace, slash.
+ * @param {string} str
+ * @returns {string[]}
+ */
+function tokenize(str) {
+  if (!str) return [];
+  return str
+    .split(/[>\s\/]+/)
+    .map(s => s.trim())
+    .filter(s => s.length >= 2);
+}
+
+/**
+ * Jaccard similarity between coupangKey and jpFullPath token sets.
  * @returns {number} Score 0-1
  */
-function calculateMatchScore(coupangTokens, jpFullPath, jpIsLeaf, jpDepth) {
-  if (!jpFullPath || coupangTokens.length === 0) return 0;
-  
-  const jpTokens = tokenizePath(jpFullPath);
-  if (jpTokens.length === 0) return 0;
-  
-  // Count matching tokens
-  let matchCount = 0;
-  for (const cToken of coupangTokens) {
-    for (const jToken of jpTokens) {
-      if (jToken.includes(cToken) || cToken.includes(jToken)) {
-        matchCount++;
-        break;
-      }
-    }
-  }
-  
-  // Base score from token matches
-  let score = matchCount / Math.max(coupangTokens.length, 1);
-  
-  // Prefer leaf categories
-  if (jpIsLeaf) {
-    score += 0.1;
-  }
-  
-  // Prefer deeper categories (more specific)
-  if (jpDepth >= 3) {
-    score += 0.05;
-  }
-  
-  return Math.min(score, 1.0);
+function computeMatchScore(coupangKey, jpFullPath) {
+  const cTokens = tokenize(coupangKey);
+  const jTokens = tokenize(jpFullPath);
+  if (cTokens.length === 0 || jTokens.length === 0) return 0;
+
+  const jSet = new Set(jTokens);
+  const intersection = cTokens.filter(t => jSet.has(t)).length;
+  const union = new Set([...cTokens, ...jTokens]).size;
+  return union === 0 ? 0 : intersection / union;
 }
 
 /**
- * Find Top N AUTO match candidates from JP categories
- * @param {string} coupangPath2 
- * @param {string} coupangPath3 
- * @param {Array<object>} jpCategories 
- * @param {number} topN - Number of top candidates to return (default 3)
- * @returns {Array<object>} Array of match candidates sorted by score desc
+ * Find the single best AUTO match from JP categories.
+ *
+ * Stage 1 — leaf filter:
+ *   Extract tokens from the last " > " segment of coupangKey (slash-split too).
+ *   Keep only JP categories whose fullPath contains at least one leaf token.
+ *
+ * Stage 2 — Jaccard on filtered candidates:
+ *   Pick the highest-scoring candidate using computeMatchScore.
+ *   Tiebreak: higher depth > isLeaf.
+ *
+ * Stage 3 — full-corpus fallback:
+ *   If Stage 1 produces 0 candidates, run Jaccard over all JP categories (old behavior).
+ *
+ * Returns null if no candidate meets AUTO_THRESHOLD.
+ *
+ * @param {string} coupangKey - Normalized coupang category key
+ * @param {Array<object>} jpCategories
+ * @returns {object|null}
  */
-function findTopAutoMatches(coupangPath2, coupangPath3, jpCategories, topN = 3) {
-  if (!jpCategories || jpCategories.length === 0) {
-    return [];
-  }
-  
-  // Tokenize Coupang paths (path3 has higher priority)
-  const tokens3 = tokenizePath(coupangPath3);
-  const tokens2 = tokenizePath(coupangPath2);
-  
-  // Combine tokens, giving slight priority to path3 tokens
-  const allTokens = [...new Set([...tokens3, ...tokens2])];
-  
-  if (allTokens.length === 0) {
-    return [];
-  }
-  
-  // Score all JP categories
-  const scoredCandidates = [];
-  
-  for (const jpCat of jpCategories) {
-    const score = calculateMatchScore(
-      allTokens, 
-      jpCat.fullPath, 
-      jpCat.isLeaf, 
-      jpCat.depth
-    );
-    
-    // Minimum threshold to be considered
-    if (score >= 0.25) {
-      scoredCandidates.push({
+function findBestAutoMatch(coupangKey, jpCategories) {
+  if (!jpCategories || jpCategories.length === 0 || !coupangKey) return null;
+
+  // Stage 1: leaf token extraction from last segment
+  const segments = coupangKey.split(' > ');
+  const lastSegment = segments[segments.length - 1] || '';
+  const leafTokens = lastSegment
+    .split(/[/\s]+/)
+    .map(s => s.trim())
+    .filter(s => s.length >= 2);
+
+  const leafCandidates = leafTokens.length > 0
+    ? jpCategories.filter(cat => leafTokens.some(token => cat.fullPath.includes(token)))
+    : [];
+
+  // Stage 3 fallback: no leaf candidates → search entire corpus
+  const pool = leafCandidates.length > 0 ? leafCandidates : jpCategories;
+
+  // Stage 2: Jaccard on pool
+  let best = null;
+
+  for (const jpCat of pool) {
+    const score = computeMatchScore(coupangKey, jpCat.fullPath);
+    if (score < AUTO_THRESHOLD) continue;
+
+    if (
+      !best ||
+      score > best.confidence ||
+      (score === best.confidence && jpCat.depth > best.depth) ||
+      (score === best.confidence && jpCat.depth === best.depth && jpCat.isLeaf && !best.isLeaf)
+    ) {
+      best = {
         jpCategoryId: jpCat.jpCategoryId,
         jpFullPath: jpCat.fullPath,
         isLeaf: jpCat.isLeaf,
         depth: jpCat.depth,
         confidence: Math.round(score * 100) / 100
-      });
+      };
     }
   }
-  
-  // Sort by score desc, then by depth desc (prefer more specific), then by isLeaf
-  scoredCandidates.sort((a, b) => {
-    if (b.confidence !== a.confidence) return b.confidence - a.confidence;
-    if (b.depth !== a.depth) return b.depth - a.depth;
-    if (a.isLeaf !== b.isLeaf) return a.isLeaf ? -1 : 1;
-    return 0;
-  });
-  
-  // Return top N
-  return scoredCandidates.slice(0, topN);
+
+  return best;
 }
 
 /**
@@ -562,51 +617,48 @@ async function resolveJpCategoryId(product) {
     };
   }
   
-  // 2) Generate Top 3 AUTO suggestions (for human review)
+  // 2) AUTO match using Jaccard similarity on Korean fullPath
   const jpCategories = await getJpCategories(sheets, sheetId);
-  let topCandidates = [];
-  
-  if (jpCategories.length > 0 && coupangCategoryKey) {
-    topCandidates = findTopAutoMatches(categoryPath2, categoryPath3, jpCategories, 3);
-    
-    if (topCandidates.length > 0) {
-      console.log(`[CategoryResolver] AUTO suggestions: ${topCandidates.length} candidates`);
-      console.log(`[CategoryResolver]   jpCategoryIds: ${topCandidates.map(c => c.jpCategoryId).join(', ')}`);
-      
-      // Write AUTO suggestions (only if no existing mapping for this key)
-      if (!existingMapping) {
-        try {
-          const now = new Date().toISOString();
-          
-          for (let i = 0; i < topCandidates.length; i++) {
-            const candidate = topCandidates[i];
-            await writeMappingRow(sheets, sheetId, {
-              coupangCategoryKey,
-              coupangPath2: categoryPath2,
-              coupangPath3: categoryPath3,
-              jpCategoryId: candidate.jpCategoryId,
-              jpFullPath: candidate.jpFullPath,
-              matchType: 'AUTO',
-              confidence: candidate.confidence,
-              note: `AUTO suggestion #${i + 1} of ${topCandidates.length} (review required)`,
-              updatedAt: now,
-              updatedBy: 'system'
-            });
-          }
-          
-          console.log(`[CategoryResolver] AUTO mapping created: ${topCandidates.length} rows`);
-        } catch (writeErr) {
-          console.warn(`[CategoryResolver] Failed to write AUTO suggestions: ${writeErr.message}`);
-        }
+  const autoMatch = coupangCategoryKey
+    ? findBestAutoMatch(coupangCategoryKey, jpCategories)
+    : null;
+
+  if (autoMatch) {
+    console.log(`[CategoryResolver] AUTO match: jpCategoryId=${autoMatch.jpCategoryId} confidence=${autoMatch.confidence} path="${autoMatch.jpFullPath}"`);
+
+    // Write to category_mapping for human review (only if no existing row)
+    if (!existingMapping) {
+      try {
+        await writeMappingRow(sheets, sheetId, {
+          coupangCategoryKey,
+          coupangPath2: categoryPath2,
+          coupangPath3: categoryPath3,
+          jpCategoryId: autoMatch.jpCategoryId,
+          jpFullPath: autoMatch.jpFullPath,
+          matchType: 'AUTO',
+          confidence: autoMatch.confidence,
+          note: 'AUTO — Jaccard match (review to promote to MANUAL)',
+          updatedAt: new Date().toISOString(),
+          updatedBy: 'system'
+        });
+      } catch (writeErr) {
+        console.warn(`[CategoryResolver] Failed to write AUTO row: ${writeErr.message}`);
       }
     }
+
+    return {
+      jpCategoryId: autoMatch.jpCategoryId,
+      matchType: 'AUTO',
+      confidence: autoMatch.confidence,
+      jpFullPath: autoMatch.jpFullPath,
+      coupangCategoryKey
+    };
   }
-  
-  // 3) Return FALLBACK - AUTO suggestions are for review only, not auto-applied
-  console.log(`[CategoryResolver] FALLBACK used (review required): jpCategoryId=${FALLBACK_JP_CATEGORY_ID}`);
-  
-  // Write FALLBACK row if no mappings exist and no AUTO candidates
-  if (!existingMapping && topCandidates.length === 0) {
+
+  // 3) FALLBACK
+  console.log(`[CategoryResolver] FALLBACK used: jpCategoryId=${FALLBACK_JP_CATEGORY_ID}`);
+
+  if (!existingMapping) {
     try {
       await writeMappingRow(sheets, sheetId, {
         coupangCategoryKey,
@@ -616,35 +668,48 @@ async function resolveJpCategoryId(product) {
         jpFullPath: FALLBACK_JP_FULL_PATH,
         matchType: 'FALLBACK',
         confidence: '0',
-        note: 'No AUTO match found - requires manual review',
+        note: 'No AUTO match found — requires manual review',
         updatedAt: new Date().toISOString(),
         updatedBy: 'system'
       });
     } catch (writeErr) {
-      console.warn(`[CategoryResolver] Failed to write FALLBACK mapping: ${writeErr.message}`);
+      console.warn(`[CategoryResolver] Failed to write FALLBACK row: ${writeErr.message}`);
     }
   }
-  
+
   return {
     jpCategoryId: FALLBACK_JP_CATEGORY_ID,
     matchType: 'FALLBACK',
     confidence: 0,
     jpFullPath: FALLBACK_JP_FULL_PATH,
-    coupangCategoryKey,
-    candidates: topCandidates
+    coupangCategoryKey
   };
 }
 
+/**
+ * Convenience wrapper: accepts a raw categoryPath3 string instead of a product object.
+ * @param {string} categoryPath3
+ * @returns {Promise<{jpCategoryId, matchType, confidence, jpFullPath, coupangCategoryKey}>}
+ */
+async function resolveCategory(categoryPath3) {
+  return resolveJpCategoryId({ categoryPath3, categoryPath2: '', categoryId: '' });
+}
+
 module.exports = {
+  resolveCategory,
   resolveJpCategoryId,
+  upsertMappingRow,
   normalizeCategoryPath,
   ensureMappingSheet,
   getMappings,
   getJpCategories,
-  findTopAutoMatches,
+  findBestAutoMatch,
+  computeMatchScore,
+  tokenize,
   migrateToPathKeyedSchema,
   MAPPING_HEADERS,
   MAPPING_TAB,
   FALLBACK_JP_CATEGORY_ID,
-  FALLBACK_JP_FULL_PATH
+  FALLBACK_JP_FULL_PATH,
+  AUTO_THRESHOLD
 };
