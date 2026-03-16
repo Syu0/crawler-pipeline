@@ -2,30 +2,24 @@
  * detailPageParser.js — 상품 상세 페이지 Phase별 데이터 추출
  *
  * 각 Phase 함수는 이미 로드된 Playwright Page 객체를 받아 데이터를 추출한다.
- * 현재는 Phase 1만 기존 playwrightScraper.js로 처리하므로 모든 함수가 스텁.
- * 셀렉터는 브라우저 테스트 후 확정하여 채운다.
+ * Phase 1은 playwrightScraper.js 담당. 이 파일은 Phase 2-5를 담당한다.
  *
  * Phase 정의:
  *   1 — 기본 정보 (title, price, standardImage, description)  ← playwrightScraper.js 담당
  *   2 — 옵션 정보 (optionType, optionsRaw)
- *   3 — 상세 이미지 (detailImages)  ← 스크롤 + lazy-load 대기 필요
+ *   3 — 상세 이미지 (detailImages)  ← 스크롤 + lazy-load 대기
  *   4 — 추가 정보 (weightKg, stockStatus, stockQty, productAttributes)
  *   5 — 리뷰 정보 (reviewCount, reviewAvgRating)
+ *
+ * 개별 필드 수집 실패 시 → warn 로그 + fallback 값 반환, row 전체 실패 금지.
  */
 
 'use strict';
 
 // ---------------------------------------------------------------------------
-// Phase 1 — 기본 정보
+// Phase 1 — 기본 정보 (playwrightScraper.js 담당 — 스텁 유지)
 // ---------------------------------------------------------------------------
-/**
- * Phase 1: 기본 정보 (이미 구현된 것들 — 이 함수는 기존 로직을 래핑)
- * @param {import('playwright').Page} page - 이미 상품 URL 로드된 상태
- * @returns {Promise<{title: string, price: string, standardImage: string, itemDescriptionText: string}>}
- */
 async function parseBasicInfo(page) {
-  // TODO: playwrightScraper.js의 scrapePage() 로직을 여기로 추출
-  // 현재는 collect 스크립트가 scrapeCoupangProductPlaywright()를 직접 호출하므로 스텁 유지
   return {};
 }
 
@@ -34,104 +28,327 @@ async function parseBasicInfo(page) {
 // ---------------------------------------------------------------------------
 /**
  * Phase 2: 옵션 정보
- * @param {import('playwright').Page} page
- * @returns {Promise<{optionType: string, optionsRaw: object|null}>}
- *
  * optionType: 'NONE' | 'SIZE' | 'COLOR' | 'CUSTOM' | 'MULTI'
- * optionsRaw: {
- *   axes: [{
- *     type: string,
- *     values: [{ name: string, priceDelta: number, available: boolean }]
- *   }]
- * } | null
- *
- * 쿠팡 옵션 DOM 구조:
- * - 단일 옵션: .prod-option__item 내 버튼/라벨
- * - 멀티 옵션: 여러 .prod-option__selected 그룹
- * - 옵션 없음: .prod-option 영역 자체가 없음
- *
- * TODO: 실제 셀렉터는 브라우저 테스트 후 확정
+ * optionsRaw: { axes: [{ axisType, values: [{ name, isAvailable, priceDelta }] }] } | null
  */
 async function parseOptions(page) {
-  // 스텁: 브라우저 테스트 시 구현
-  return { optionType: 'NONE', optionsRaw: null };
+  try {
+    const result = await page.evaluate(() => {
+      // 쿠팡 옵션 구조: .prod-option 아래 여러 .unit-product 그룹
+      // 각 그룹은 옵션 축 하나 (사이즈 / 색상 / 기타)
+      const groupEls = document.querySelectorAll(
+        '.prod-option .unit-product, .prod-option__selected-container'
+      );
+
+      if (!groupEls.length) {
+        // 옵션 영역 자체가 없으면 NONE
+        return { optionType: 'NONE', optionsRaw: null };
+      }
+
+      const axes = [];
+
+      groupEls.forEach((group) => {
+        // 축 이름
+        const labelEl = group.querySelector(
+          '.unit-title, .prod-option__type, .option-title, legend'
+        );
+        const axisLabel = labelEl ? labelEl.textContent.trim() : '';
+
+        // 옵션 값 버튼/아이템 목록
+        const itemEls = group.querySelectorAll(
+          '.unit-item, .prod-option__item, .option-list-item'
+        );
+        if (!itemEls.length) return;
+
+        const values = [];
+        itemEls.forEach((item) => {
+          const nameEl =
+            item.querySelector('.unit-name, .prod-option__name, .option-text') || item;
+          const name = nameEl.textContent.trim();
+          if (!name) return;
+
+          // 품절/비활성 판단
+          const isUnavailable =
+            item.classList.contains('disabled') ||
+            item.classList.contains('sold-out') ||
+            item.hasAttribute('disabled') ||
+            !!item.querySelector('.sold-out-img, .option-sold-out');
+
+          // 가격 delta ("+500원" 형태)
+          const priceEl = item.querySelector('.unit-price, .option-price, .price-delta');
+          let priceDelta = 0;
+          if (priceEl) {
+            const raw = priceEl.textContent.replace(/[^0-9-]/g, '');
+            priceDelta = parseInt(raw, 10) || 0;
+          }
+
+          values.push({ name, isAvailable: !isUnavailable, priceDelta });
+        });
+
+        if (!values.length) return;
+
+        // axisType 판단
+        const upper = axisLabel.toUpperCase();
+        let axisType = 'CUSTOM';
+        if (upper.includes('사이즈') || upper.includes('SIZE') || upper.includes('용량') || upper.includes('개수') || upper.includes('수량')) {
+          axisType = 'SIZE';
+        } else if (upper.includes('색') || upper.includes('COLOR') || upper.includes('컬러')) {
+          axisType = 'COLOR';
+        }
+
+        axes.push({ axisType, values });
+      });
+
+      if (!axes.length) {
+        return { optionType: 'NONE', optionsRaw: null };
+      }
+
+      let optionType = 'CUSTOM';
+      if (axes.length >= 2) {
+        optionType = 'MULTI';
+      } else if (axes[0].axisType === 'SIZE') {
+        optionType = 'SIZE';
+      } else if (axes[0].axisType === 'COLOR') {
+        optionType = 'COLOR';
+      }
+
+      return { optionType, optionsRaw: { axes } };
+    });
+
+    return result;
+  } catch (e) {
+    console.warn(`[detailPageParser] parseOptions failed: ${e.message}`);
+    return { optionType: 'NONE', optionsRaw: null };
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Phase 3 — 상세 이미지
 // ---------------------------------------------------------------------------
 /**
- * Phase 3: 상세 이미지 (상품설명 영역)
- * @param {import('playwright').Page} page
- * @returns {Promise<{detailImages: string[]}>}
- *
- * 수집 방법:
- * 1) 페이지 하단(상세설명 영역)까지 스크롤
- * 2) lazy-load 이미지 로드 대기
- * 3) 상세 영역 내 모든 img src 수집
- *
- * 주의: 쿠팡 상세 이미지는 lazy-load + data-src 패턴이 흔함
- *
- * TODO: 실제 셀렉터, 스크롤 로직은 브라우저 테스트 후 확정
+ * Phase 3: 상세 설명 영역 이미지 수집 (max 20개)
+ * 스크롤 후 lazy-load 이미지까지 포함한다.
  */
 async function parseDetailImages(page) {
-  // 스텁
-  return { detailImages: [] };
+  try {
+    // 상세 설명 영역까지 스크롤 + lazy-load 대기
+    await scrollToBottom(page);
+    await page.waitForTimeout(2000);
+
+    const detailImages = await page.evaluate(() => {
+      // 쿠팡 상세 설명 컨테이너 후보
+      const containers = [
+        document.querySelector('#productDetail'),
+        document.querySelector('#productDescription'),
+        document.querySelector('.prod-description-content'),
+        document.querySelector('.prod-description'),
+        document.querySelector('[class*="productDetail"]'),
+        document.querySelector('[id*="detail"]'),
+      ].filter(Boolean);
+
+      const urls = new Set();
+
+      containers.forEach((container) => {
+        container.querySelectorAll('img').forEach((img) => {
+          const src = img.src || img.dataset.src || img.dataset.lazySrc || '';
+          if (src && src.startsWith('http') && !src.includes('icon') && !src.includes('logo')) {
+            urls.add(src);
+          }
+        });
+      });
+
+      // 컨테이너 없으면 전체 페이지에서 큰 이미지만 (width/height 속성 기준)
+      if (!urls.size) {
+        document.querySelectorAll('img').forEach((img) => {
+          const w = parseInt(img.getAttribute('width') || '0', 10);
+          const h = parseInt(img.getAttribute('height') || '0', 10);
+          if ((w >= 300 || h >= 300) || (!w && !h)) {
+            const src = img.src || img.dataset.src || '';
+            if (src && src.startsWith('http')) urls.add(src);
+          }
+        });
+      }
+
+      return Array.from(urls).slice(0, 20);
+    });
+
+    return { detailImages };
+  } catch (e) {
+    console.warn(`[detailPageParser] parseDetailImages failed: ${e.message}`);
+    return { detailImages: [] };
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Phase 4 — 추가 정보 (무게, 재고, 상품 속성)
+// Phase 4 — 추가 정보 (재고, 무게, 상품 속성)
 // ---------------------------------------------------------------------------
 /**
- * Phase 4: 추가 정보
- * @param {import('playwright').Page} page
- * @returns {Promise<{weightKg: number, stockStatus: string, stockQty: number|null, productAttributes: object}>}
- *
- * weightKg: number (기본값 1)
- * stockStatus: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK'
- * stockQty: number | null
- * productAttributes: { [key: string]: string }
- *
- * 재고 판단:
- * - "품절" 텍스트 → OUT_OF_STOCK
- * - "n개 남음" → LOW_STOCK, qty = n
- * - 그 외 → IN_STOCK, qty = null
- *
- * 무게:
- * - 상품 속성 테이블에서 "무게", "중량" 키워드 검색
- * - 있으면 parseWeightToKg() 변환 (scraper.js의 함수 재사용 예정)
- * - 없으면 기본값 1
- *
- * TODO: 셀렉터 확정 후 구현
+ * Phase 4: 재고 상태, 수량, 무게, 상품 속성
+ * stockStatus: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK' | 'UNKNOWN'
  */
 async function parseProductInfo(page) {
-  // 스텁
-  return {
-    weightKg: 1,
-    stockStatus: 'IN_STOCK',
-    stockQty: null,
-    productAttributes: {},
-  };
+  // ── 재고 상태 ──────────────────────────────────────────────────────────────
+  let stockStatus = 'UNKNOWN';
+  let stockQty = null;
+  try {
+    const stockResult = await page.evaluate(() => {
+      // 품절 판단 — 여러 패턴
+      const soldOutTexts = ['품절', '일시품절', '재고없음', 'sold out', '판매완료'];
+      const bodyText = document.body.innerText.toLowerCase();
+
+      // 구매 버튼이 없거나 비활성이면 OUT_OF_STOCK
+      const buyBtn = document.querySelector(
+        '.prod-buy-btn, .buy-btn, button[class*="buy"], .btn-order'
+      );
+      if (buyBtn && (buyBtn.disabled || buyBtn.classList.contains('disabled'))) {
+        return { stockStatus: 'OUT_OF_STOCK', stockQty: null };
+      }
+
+      // 품절 전용 UI 요소
+      const soldOutEl = document.querySelector(
+        '.sold-out-text, .prod-soldout, [class*="soldOut"], .out-of-stock'
+      );
+      if (soldOutEl && soldOutEl.offsetParent !== null) {
+        return { stockStatus: 'OUT_OF_STOCK', stockQty: null };
+      }
+
+      // 텍스트 기반 판단
+      for (const t of soldOutTexts) {
+        if (bodyText.includes(t)) {
+          return { stockStatus: 'OUT_OF_STOCK', stockQty: null };
+        }
+      }
+
+      // 재고 적음 표시 ("N개 남음", "잔여 N개")
+      const lowStockMatch = document.body.innerText.match(/([0-9]+)\s*개\s*(남음|밖에\s*없|잔여)/);
+      if (lowStockMatch) {
+        return { stockStatus: 'LOW_STOCK', stockQty: parseInt(lowStockMatch[1], 10) };
+      }
+
+      return { stockStatus: 'IN_STOCK', stockQty: null };
+    });
+
+    stockStatus = stockResult.stockStatus;
+    stockQty = stockResult.stockQty;
+  } catch (e) {
+    console.warn(`[detailPageParser] stockStatus failed: ${e.message}`);
+    stockStatus = 'UNKNOWN';
+  }
+
+  // ── 무게 ───────────────────────────────────────────────────────────────────
+  let weightKg = 1;
+  try {
+    const rawWeight = await page.evaluate(() => {
+      // 상품 속성 테이블에서 무게/중량 키워드 탐색
+      const rows = document.querySelectorAll(
+        '.prod-attr-table tr, .spec-list li, .attribute-list li, table.product-info tr'
+      );
+      for (const row of rows) {
+        const text = row.textContent;
+        if (text.match(/무게|중량|weight/i)) {
+          const match = text.match(/([0-9]+(?:\.[0-9]+)?)\s*(kg|g|그램|킬로)/i);
+          if (match) return { value: parseFloat(match[1]), unit: match[2].toLowerCase() };
+        }
+      }
+      return null;
+    });
+
+    if (rawWeight) {
+      const unit = rawWeight.unit;
+      weightKg =
+        unit === 'g' || unit === '그램'
+          ? rawWeight.value / 1000
+          : rawWeight.value;
+      weightKg = Math.round(weightKg * 100) / 100;
+    }
+  } catch (e) {
+    console.warn(`[detailPageParser] weightKg failed: ${e.message}`);
+  }
+
+  // ── 상품 속성 ──────────────────────────────────────────────────────────────
+  let productAttributes = null;
+  try {
+    productAttributes = await page.evaluate(() => {
+      const attrs = {};
+      // 속성 테이블 (th/td 쌍 또는 dt/dd 쌍)
+      document.querySelectorAll(
+        '.prod-attr-table tr, .spec-list li, dl.product-attr dt, dl.product-attr dd'
+      ).forEach((row) => {
+        const key = row.querySelector('th, dt, .attr-key');
+        const val = row.querySelector('td, dd, .attr-val');
+        if (key && val) {
+          attrs[key.textContent.trim()] = val.textContent.trim();
+        }
+      });
+      return Object.keys(attrs).length ? attrs : null;
+    });
+  } catch (e) {
+    console.warn(`[detailPageParser] productAttributes failed: ${e.message}`);
+  }
+
+  return { weightKg, stockStatus, stockQty, productAttributes };
 }
 
 // ---------------------------------------------------------------------------
 // Phase 5 — 리뷰 정보
 // ---------------------------------------------------------------------------
 /**
- * Phase 5: 리뷰 정보
- * @param {import('playwright').Page} page
- * @returns {Promise<{reviewCount: number, reviewAvgRating: number}>}
- *
- * 수집 방법:
- * - 상품 페이지 상단의 별점/리뷰 건수 영역 파싱
- * - 또는 리뷰 탭 클릭 후 요약 정보 수집
- * - 리뷰가 0건이면 reviewCount=0, reviewAvgRating=0
- *
- * TODO: 셀렉터 확정 후 구현
+ * Phase 5: 리뷰 건수 + 평균 별점
  */
 async function parseReviews(page) {
-  // 스텁
-  return { reviewCount: 0, reviewAvgRating: 0 };
+  let reviewCount = null;
+  let reviewAvgRating = null;
+
+  try {
+    const result = await page.evaluate(() => {
+      // 리뷰 건수 — 여러 셀렉터
+      let count = null;
+      const countSelectors = [
+        '.review-count',
+        '.rating-review-count',
+        '[class*="reviewCount"]',
+        '[class*="review-total"]',
+        'a[href*="#review"] span',
+      ];
+      for (const sel of countSelectors) {
+        const el = document.querySelector(sel);
+        if (el) {
+          const raw = el.textContent.replace(/[^0-9]/g, '');
+          if (raw) { count = parseInt(raw, 10); break; }
+        }
+      }
+
+      // 별점 — 여러 셀렉터
+      let rating = null;
+      const ratingSelectors = [
+        '.rating-star-num',
+        '.rating-score',
+        '[class*="ratingScore"]',
+        '[class*="rating-num"]',
+        '.star-score',
+      ];
+      for (const sel of ratingSelectors) {
+        const el = document.querySelector(sel);
+        if (el) {
+          const raw = el.textContent.trim();
+          const parsed = parseFloat(raw);
+          if (!isNaN(parsed) && parsed >= 0 && parsed <= 5) {
+            rating = parsed;
+            break;
+          }
+        }
+      }
+
+      return { count, rating };
+    });
+
+    reviewCount = result.count;
+    reviewAvgRating = result.rating;
+  } catch (e) {
+    console.warn(`[detailPageParser] parseReviews failed: ${e.message}`);
+  }
+
+  return { reviewCount, reviewAvgRating };
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +356,6 @@ async function parseReviews(page) {
 // ---------------------------------------------------------------------------
 /**
  * 페이지 하단까지 점진적 스크롤 (lazy-load 이미지 트리거용)
- * @param {import('playwright').Page} page
  */
 async function scrollToBottom(page) {
   await page.evaluate(async () => {
@@ -157,10 +373,10 @@ async function scrollToBottom(page) {
 /**
  * 전체 Phase 실행기
  * @param {import('playwright').Page} page - 상품 URL이 이미 로드된 Page
- * @param {string[]} phases - 실행할 Phase 목록 (기본: ['1','2','3','4','5'])
+ * @param {string[]} phases - 실행할 Phase 목록 (기본: ['2','3','4','5'])
  * @returns {Promise<object>} 모든 Phase 결과 합친 객체 + collectedPhases
  */
-async function collectAllPhases(page, phases = ['1', '2', '3', '4', '5']) {
+async function collectAllPhases(page, phases = ['2', '3', '4', '5']) {
   const result = {};
 
   if (phases.includes('1')) {
@@ -170,9 +386,7 @@ async function collectAllPhases(page, phases = ['1', '2', '3', '4', '5']) {
     Object.assign(result, await parseOptions(page));
   }
   if (phases.includes('3')) {
-    // 스크롤 다운 후 lazy-load 대기
-    await scrollToBottom(page);
-    await page.waitForTimeout(2000);
+    // parseDetailImages 내부에서 스크롤 처리
     Object.assign(result, await parseDetailImages(page));
   }
   if (phases.includes('4')) {

@@ -395,11 +395,22 @@ async function scrapePage(context, productUrl) {
     // ── 추가 이미지 ──────────────────────────────────────────────────────────
     const extraImagesRaw = await page.evaluate(() => {
       const imgs = [];
-      document.querySelectorAll('.prod-image-list img, .thumb-list img').forEach((el) => {
-        const src = el.src || el.dataset.src || '';
-        if (src) imgs.push(src);
-      });
-      return imgs.slice(0, 5);
+      const selectors = [
+        '.prod-image-list img',
+        '.thumb-list img',
+        '.prod-image__items img',
+        '.thumbnail-image img',
+        '.image-gallery-thumbnail img',
+        '.prod-thumbnail img',
+      ];
+      const seen = new Set();
+      for (const sel of selectors) {
+        document.querySelectorAll(sel).forEach((el) => {
+          const src = el.src || el.dataset.src || el.dataset.lazySrc || '';
+          if (src && !seen.has(src)) { seen.add(src); imgs.push(src); }
+        });
+      }
+      return imgs.slice(0, 10);
     }).catch(() => []);
 
     const seen = new Set();
