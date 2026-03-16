@@ -46,13 +46,10 @@ function parseProductUrl(urlString) {
   };
 }
 
-function normalizeImageUrl(url) {
-  if (!url) return '';
-  if (url.startsWith('//')) url = 'https:' + url;
-  const idx = url.indexOf('thumbnails/');
-  if (idx !== -1) return url.substring(idx);
-  const imgIdx = url.indexOf('image/');
-  if (imgIdx !== -1) return url.substring(imgIdx);
+function normalizeImageUrl(src) {
+  if (!src) return '';
+  let url = src.startsWith('//') ? 'https:' + src : src;
+  url = url.replace(/\/remote\/[^/]+\//, '/remote/492x492ex/');
   return url;
 }
 
@@ -393,31 +390,16 @@ async function scrapePage(context, productUrl) {
     trace(`Main image: ${standardImage.substring(0, 80)}`);
 
     // ── 추가 이미지 ──────────────────────────────────────────────────────────
-    const extraImagesRaw = await page.evaluate(() => {
-      const imgs = [];
-      const selectors = [
-        '.prod-image-list img',
-        '.thumb-list img',
-        '.prod-image__items img',
-        '.thumbnail-image img',
-        '.image-gallery-thumbnail img',
-        '.prod-thumbnail img',
-      ];
-      const seen = new Set();
-      for (const sel of selectors) {
-        document.querySelectorAll(sel).forEach((el) => {
-          const src = el.src || el.dataset.src || el.dataset.lazySrc || '';
-          if (src && !seen.has(src)) { seen.add(src); imgs.push(src); }
-        });
-      }
-      return imgs.slice(0, 10);
-    }).catch(() => []);
+    const extraImagesRaw = await page.$$eval('ul.twc-static li img', (imgs) =>
+      imgs.map((img) => img.src || img.dataset.src || '').filter(Boolean)
+    ).catch(() => []);
 
     const seen = new Set();
     if (standardImage) seen.add(standardImage);
     const extraImages = extraImagesRaw
       .map(normalizeImageUrl)
-      .filter((u) => u && !seen.has(u) && seen.add(u));
+      .filter((u) => u && !seen.has(u) && seen.add(u))
+      .slice(0, 10);
 
     trace(`Extra images: ${extraImages.length}`);
 

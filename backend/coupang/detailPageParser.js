@@ -135,45 +135,20 @@ async function parseDetailImages(page) {
     await scrollToBottom(page);
     await page.waitForTimeout(2000);
 
-    const rawImages = await page.evaluate(() => {
-      // 쿠팡 상세 설명 컨테이너 후보
-      const containers = [
-        document.querySelector('#productDetail'),
-        document.querySelector('#productDescription'),
-        document.querySelector('.prod-description-content'),
-        document.querySelector('.prod-description'),
-        document.querySelector('[class*="productDetail"]'),
-        document.querySelector('[id*="detail"]'),
-      ].filter(Boolean);
+    // 두 셀렉터 병렬 수집 — 결과가 많은 쪽 사용
+    const [imgs1, imgs2] = await Promise.all([
+      page.$$eval('div.type-IMAGE_NO_SPACE img', (imgs) =>
+        imgs.map((img) => img.src || img.dataset.src || '').filter(Boolean)
+      ).catch(() => []),
+      page.$$eval('div.subType-IMAGE img', (imgs) =>
+        imgs.map((img) => img.src || img.dataset.src || '').filter(Boolean)
+      ).catch(() => []),
+    ]);
+    const rawImages = imgs1.length >= imgs2.length ? imgs1 : imgs2;
 
-      const urls = new Set();
-
-      containers.forEach((container) => {
-        container.querySelectorAll('img').forEach((img) => {
-          const src = img.src || img.dataset.src || img.dataset.lazySrc || '';
-          if (src && src.startsWith('http') && !src.includes('icon') && !src.includes('logo')) {
-            urls.add(src);
-          }
-        });
-      });
-
-      // 컨테이너 없으면 전체 페이지에서 큰 이미지만 (width/height 속성 기준)
-      if (!urls.size) {
-        document.querySelectorAll('img').forEach((img) => {
-          const w = parseInt(img.getAttribute('width') || '0', 10);
-          const h = parseInt(img.getAttribute('height') || '0', 10);
-          if ((w >= 300 || h >= 300) || (!w && !h)) {
-            const src = img.src || img.dataset.src || '';
-            if (src && src.startsWith('http')) urls.add(src);
-          }
-        });
-      }
-
-      return Array.from(urls).slice(0, 40);
-    });
-
-    // 로고/아이콘 제외 — 쿠팡 상품 이미지 URL 패턴만 통과
-    const detailImages = rawImages.filter(isProductDetailImage).slice(0, 20);
+    const detailImages = [...new Set(rawImages.map(normalizeDetailImageUrl))]
+      .filter(isProductDetailImage)
+      .slice(0, 20);
 
     return { detailImages };
   } catch (e) {
@@ -299,10 +274,9 @@ async function parseReviews(page) {
   let reviewCount = null;
   let reviewAvgRating = null;
 
+  // 리뷰 건수 — 셀렉터 순회
   try {
-    const result = await page.evaluate(() => {
-      // 리뷰 건수 — 여러 셀렉터
-      let count = null;
+    reviewCount = await page.evaluate(() => {
       const countSelectors = [
         '.count-review',
         '.prod-rating__count',
@@ -319,41 +293,27 @@ async function parseReviews(page) {
         const el = document.querySelector(sel);
         if (el) {
           const raw = el.textContent.replace(/[^0-9]/g, '');
-          if (raw) { count = parseInt(raw, 10); break; }
+          if (raw) return parseInt(raw, 10);
         }
       }
-
-      // 별점 — 여러 셀렉터
-      let rating = null;
-      const ratingSelectors = [
-        '.prod-rating__score',
-        '[data-ratingavg]',
-        '[class*="rating-avg"]',
-        '.rating-star-num',
-        '.rating-score',
-        '[class*="ratingScore"]',
-        '[class*="rating-num"]',
-        '.star-score',
-      ];
-      for (const sel of ratingSelectors) {
-        const el = document.querySelector(sel);
-        if (el) {
-          const raw = el.textContent.trim();
-          const parsed = parseFloat(raw);
-          if (!isNaN(parsed) && parsed >= 0 && parsed <= 5) {
-            rating = parsed;
-            break;
-          }
-        }
-      }
-
-      return { count, rating };
+      return null;
     });
-
-    reviewCount = result.count;
-    reviewAvgRating = result.rating;
   } catch (e) {
-    console.warn(`[detailPageParser] parseReviews failed: ${e.message}`);
+    console.warn(`[detailPageParser] reviewCount failed: ${e.message}`);
+  }
+
+  // 별점 — article 단위 full-star 개수로 평균 계산
+  try {
+    const ratingData = await page.$$eval('article', (articles) =>
+      articles
+        .map((article) => article.querySelectorAll('i[class*="twc-bg-full-star"]').length)
+        .filter((r) => r > 0)
+    );
+    reviewAvgRating = ratingData.length > 0
+      ? Math.round(ratingData.reduce((a, b) => a + b, 0) / ratingData.length * 10) / 10
+      : null;
+  } catch (e) {
+    console.warn(`[detailPageParser] reviewAvgRating failed: ${e.message}`);
   }
 
   return { reviewCount, reviewAvgRating };
@@ -362,6 +322,16 @@ async function parseReviews(page) {
 // ---------------------------------------------------------------------------
 // 헬퍼
 // ---------------------------------------------------------------------------
+/**
+ * 상세 이미지 URL 해상도 파라미터를 492x492ex로 교체하고 프로토콜을 보장한다.
+ */
+function normalizeDetailImageUrl(src) {
+  if (!src) return '';
+  let url = src.startsWith('//') ? 'https:' + src : src;
+  url = url.replace(/\/remote\/[^/]+\//, '/remote/492x492ex/');
+  return url;
+}
+
 /**
  * 쿠팡 상품 상세 이미지 URL 판별 — 로고/아이콘/썸네일 제외
  */
