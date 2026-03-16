@@ -302,21 +302,35 @@ async function parseReviews(page) {
     console.warn(`[detailPageParser] reviewCount failed: ${e.message}`);
   }
 
-  // 별점 — article 단위 full-star 개수로 평균 계산
+  // 별점 + 리뷰 요약 — article 단위 수집 (상위 5개)
+  let reviewSummary = null;
   try {
-    const ratingData = await page.$$eval('article', (articles) =>
-      articles
-        .map((article) => article.querySelectorAll('i[class*="twc-bg-full-star"]').length)
-        .filter((r) => r > 0)
+    const reviews = await page.$$eval('article', (articles) =>
+      articles.slice(0, 5).map((article) => {
+        const fullStars = article.querySelectorAll('i[class*="twc-bg-full-star"]').length;
+        const titleEl = article.querySelector('[class*="twc-mb-"][class*="twc-font-bold"]');
+        const contentEl = article.querySelector('span[translate="no"]');
+        const dateEls = article.querySelectorAll('[class*="twc-text-bluegray-700"]');
+        const dateEl = Array.from(dateEls).find((el) => /\d{4}\.\d{2}\.\d{2}/.test(el.textContent));
+        return {
+          rating: fullStars,
+          title: titleEl ? titleEl.textContent.trim() : null,
+          content: contentEl ? contentEl.textContent.trim().slice(0, 500) : null,
+          date: dateEl ? dateEl.textContent.trim() : null,
+        };
+      }).filter((r) => r.rating > 0)
     );
-    reviewAvgRating = ratingData.length > 0
-      ? Math.round(ratingData.reduce((a, b) => a + b, 0) / ratingData.length * 10) / 10
-      : null;
+
+    if (reviews.length > 0) {
+      const total = reviews.reduce((a, r) => a + r.rating, 0);
+      reviewAvgRating = Math.round(total / reviews.length * 10) / 10;
+      reviewSummary = JSON.stringify(reviews);
+    }
   } catch (e) {
-    console.warn(`[detailPageParser] reviewAvgRating failed: ${e.message}`);
+    console.warn(`[detailPageParser] reviewSummary failed: ${e.message}`);
   }
 
-  return { reviewCount, reviewAvgRating };
+  return { reviewCount, reviewAvgRating, reviewSummary };
 }
 
 // ---------------------------------------------------------------------------

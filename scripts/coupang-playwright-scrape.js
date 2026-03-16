@@ -20,6 +20,7 @@ const { scrapeCoupangProductPlaywright } = require('../backend/coupang/playwrigh
 const { collectAllPhases } = require('../backend/coupang/detailPageParser');
 const { ensureHeaders, upsertRow, findRowByKey, getRowData } = require('./lib/sheetsClient');
 const { checkAndNotify } = require('../backend/services/cookieExpiry');
+const { COUPANG_DATA_HEADERS } = require('../backend/coupang/sheetSchema');
 
 // 단독 실행용 경량 브라우저 팩토리 (browserManager 세션에 간섭하지 않음)
 async function _launchOwnBrowser() {
@@ -66,22 +67,7 @@ async function _launchOwnBrowser() {
   return { browser, context };
 }
 
-const SHEET_HEADERS = [
-  'vendorItemId',
-  'itemId',
-  'coupang_product_id',
-  'categoryId',
-  'ProductURL',
-  'ItemTitle',
-  'ItemPrice',
-  'StandardImage',
-  'ExtraImages',
-  'WeightKg',
-  'Options',
-  'ItemDescriptionText',
-  'updatedAt',
-  'status',
-];
+const SHEET_HEADERS = COUPANG_DATA_HEADERS;
 
 // 이미 파이프라인 진행 중인 상태 — Playwright 수집기가 덮어쓰지 않는다
 const PROTECTED_STATUSES = [
@@ -158,6 +144,7 @@ async function main() {
       StockQty:          phaseData.stockQty          ?? null,
       ReviewCount:       phaseData.reviewCount       ?? null,
       ReviewAvgRating:   phaseData.reviewAvgRating   ?? null,
+      ReviewSummary:     phaseData.reviewSummary      || null,
       ProductAttributes: phaseData.productAttributes || null,
       CollectedPhases:   '1,2,3,4,5',
       WeightKg:          phaseData.weightKg != null ? phaseData.weightKg : (productData.WeightKg || 1),
