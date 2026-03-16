@@ -135,7 +135,7 @@ async function parseDetailImages(page) {
     await scrollToBottom(page);
     await page.waitForTimeout(2000);
 
-    const detailImages = await page.evaluate(() => {
+    const rawImages = await page.evaluate(() => {
       // 쿠팡 상세 설명 컨테이너 후보
       const containers = [
         document.querySelector('#productDetail'),
@@ -169,8 +169,11 @@ async function parseDetailImages(page) {
         });
       }
 
-      return Array.from(urls).slice(0, 20);
+      return Array.from(urls).slice(0, 40);
     });
+
+    // 로고/아이콘 제외 — 쿠팡 상품 이미지 URL 패턴만 통과
+    const detailImages = rawImages.filter(isProductDetailImage).slice(0, 20);
 
     return { detailImages };
   } catch (e) {
@@ -188,48 +191,45 @@ async function parseDetailImages(page) {
  */
 async function parseProductInfo(page) {
   // ── 재고 상태 ──────────────────────────────────────────────────────────────
+  // 판단 우선순위:
+  //   1순위: 명시적 품절 UI (CSS 셀렉터) → OUT_OF_STOCK
+  //   2순위: 가격 요소 존재 → IN_STOCK
+  //   3순위: 가격도 없고 품절 표시도 없음 → UNKNOWN
   let stockStatus = 'UNKNOWN';
   let stockQty = null;
   try {
-    const stockResult = await page.evaluate(() => {
-      // 품절 판단 — 여러 패턴
-      const soldOutTexts = ['품절', '일시품절', '재고없음', 'sold out', '판매완료'];
-      const bodyText = document.body.innerText.toLowerCase();
+    // 가격 요소가 있으면 IN_STOCK 기본값
+    const priceEl = await page.$('.final-price-amount, .prod-price .total-price, .price-wrap .total-price');
+    stockStatus = priceEl ? 'IN_STOCK' : 'UNKNOWN';
 
-      // 구매 버튼이 없거나 비활성이면 OUT_OF_STOCK
-      const buyBtn = document.querySelector(
-        '.prod-buy-btn, .buy-btn, button[class*="buy"], .btn-order'
-      );
-      if (buyBtn && (buyBtn.disabled || buyBtn.classList.contains('disabled'))) {
-        return { stockStatus: 'OUT_OF_STOCK', stockQty: null };
+    // 명시적 품절 UI 요소 → OUT_OF_STOCK 오버라이드 (텍스트 기반 오탐 방지)
+    const outOfStockEl = await page.$(
+      '.oos-price, .soldout, [class*="sold-out"], [class*="outOfStock"], .sold-out-text, .prod-soldout, .out-of-stock'
+    );
+    if (outOfStockEl) {
+      stockStatus = 'OUT_OF_STOCK';
+    } else {
+      // 구매 버튼 비활성화 → OUT_OF_STOCK
+      const buyBtnDisabled = await page.evaluate(() => {
+        const btn = document.querySelector('.prod-buy-btn, .buy-btn, button[class*="buy"], .btn-order');
+        return btn && (btn.disabled || btn.classList.contains('disabled'));
+      });
+      if (buyBtnDisabled) stockStatus = 'OUT_OF_STOCK';
+    }
+
+    // 재고 적음 ("N개 남음") — 구매 영역 한정, IN_STOCK일 때만 체크
+    if (stockStatus === 'IN_STOCK') {
+      const lowStockQty = await page.evaluate(() => {
+        const prodArea = document.querySelector('#prod-right-area, .prod-buy-area, .prod-right-area');
+        const text = prodArea ? prodArea.innerText : '';
+        const match = text.match(/([0-9]+)\s*개\s*(남음|밖에\s*없|잔여)/);
+        return match ? parseInt(match[1], 10) : null;
+      });
+      if (lowStockQty !== null) {
+        stockStatus = 'LOW_STOCK';
+        stockQty = lowStockQty;
       }
-
-      // 품절 전용 UI 요소
-      const soldOutEl = document.querySelector(
-        '.sold-out-text, .prod-soldout, [class*="soldOut"], .out-of-stock'
-      );
-      if (soldOutEl && soldOutEl.offsetParent !== null) {
-        return { stockStatus: 'OUT_OF_STOCK', stockQty: null };
-      }
-
-      // 텍스트 기반 판단
-      for (const t of soldOutTexts) {
-        if (bodyText.includes(t)) {
-          return { stockStatus: 'OUT_OF_STOCK', stockQty: null };
-        }
-      }
-
-      // 재고 적음 표시 ("N개 남음", "잔여 N개")
-      const lowStockMatch = document.body.innerText.match(/([0-9]+)\s*개\s*(남음|밖에\s*없|잔여)/);
-      if (lowStockMatch) {
-        return { stockStatus: 'LOW_STOCK', stockQty: parseInt(lowStockMatch[1], 10) };
-      }
-
-      return { stockStatus: 'IN_STOCK', stockQty: null };
-    });
-
-    stockStatus = stockResult.stockStatus;
-    stockQty = stockResult.stockQty;
+    }
   } catch (e) {
     console.warn(`[detailPageParser] stockStatus failed: ${e.message}`);
     stockStatus = 'UNKNOWN';
@@ -304,6 +304,11 @@ async function parseReviews(page) {
       // 리뷰 건수 — 여러 셀렉터
       let count = null;
       const countSelectors = [
+        '.count-review',
+        '.prod-rating__count',
+        '.rating-total-count',
+        '[data-ratingcount]',
+        '[class*="review-count"]',
         '.review-count',
         '.rating-review-count',
         '[class*="reviewCount"]',
@@ -321,6 +326,9 @@ async function parseReviews(page) {
       // 별점 — 여러 셀렉터
       let rating = null;
       const ratingSelectors = [
+        '.prod-rating__score',
+        '[data-ratingavg]',
+        '[class*="rating-avg"]',
         '.rating-star-num',
         '.rating-score',
         '[class*="ratingScore"]',
@@ -354,6 +362,20 @@ async function parseReviews(page) {
 // ---------------------------------------------------------------------------
 // 헬퍼
 // ---------------------------------------------------------------------------
+/**
+ * 쿠팡 상품 상세 이미지 URL 판별 — 로고/아이콘/썸네일 제외
+ */
+function isProductDetailImage(url) {
+  if (!url || typeof url !== 'string') return false;
+  return (
+    url.includes('vendor_inventory') ||
+    url.includes('/image/product/') ||
+    url.includes('/image/retail/images/') ||
+    (url.startsWith('https://thumbnail.coupangcdn.com/thumbnails/remote/') &&
+      !url.includes('48x48'))
+  );
+}
+
 /**
  * 페이지 하단까지 점진적 스크롤 (lazy-load 이미지 트리거용)
  */
