@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"QOO10_WRITE_APPROVED\\\\|QOO10_ALLOW_REAL_REG\" ./scripts/*.js ./backend/qoo10/*.js)",
+      "Bash(node scripts/qoo10-test-setpricequantity.js)",
+      "Bash(node -e \":*)",
+      "Bash(node backend/scripts/qoo10.setGoodsPriceQty.js)",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(npx playwright:*)",
+      "Bash(cross-env COUPANG_SCRAPE_DRY_RUN=1 COUPANG_TRACER=1 PLAYWRIGHT_HEADLESS=0 node scripts/coupang-playwright-scrape.js --url \"https://www.coupang.com/vp/products/7107426071?itemId=17757771253&vendorItemId=84922122516&categoryId=317679\")",
+      "Bash(COUPANG_SCRAPE_DRY_RUN=1 COUPANG_TRACER=1 PLAYWRIGHT_HEADLESS=0 node scripts/coupang-playwright-scrape.js --url \"https://www.coupang.com/vp/products/7107426071?itemId=17757771253&vendorItemId=84922122516&categoryId=317679\")",
+      "Bash(COOKIE_TTL_DAYS=0 COUPANG_SCRAPE_DRY_RUN=1 COUPANG_TRACER=1 node scripts/coupang-playwright-scrape.js --url \"https://www.coupang.com/vp/products/7107426071?itemId=17757771253&vendorItemId=84922122516&categoryId=317679\")",
+      "Bash(node backend/scripts/coupang-keyword-discover.js --dry-run --keyword \"텀블러\")"
+    ]
+  }
+}
