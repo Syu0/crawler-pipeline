@@ -75,21 +75,18 @@ function parseArgs() {
 
 // ── Qoo10 qty 업데이트 ────────────────────────────────────────────────────────
 
-async function updateQoo10Qty(qoo10ItemId, qty, dryRun) {
+async function updateQoo10Qty(qoo10ItemId, qty) {
   if (!qoo10ItemId) {
-    console.log(`    [Qoo10] qoo10ItemId 없음 — qty 업데이트 스킵`);
-    return;
-  }
-  if (dryRun) {
-    console.log(`    [Qoo10][DRY-RUN] SetGoodsPriceQty itemCode=${qoo10ItemId} qty=${qty}`);
-    return;
+    return { success: false, errorMsg: 'qoo10ItemId 없음 - Qoo10 연결 불가' };
   }
   const result = await setGoodsPriceQty({ itemCode: qoo10ItemId, qty });
   if (result.success) {
     console.log(`    [Qoo10] qty=${qty} 업데이트 성공`);
-  } else {
-    console.warn(`    [Qoo10] qty 업데이트 실패: ${result.resultMsg || result.reason}`);
+    return { success: true };
   }
+  const errorMsg = `Qoo10 qty=${qty} 실패: ${result.resultMsg || result.reason}`;
+  console.warn(`    [Qoo10] qty 업데이트 실패: ${result.resultMsg || result.reason}`);
+  return { success: false, errorMsg };
 }
 
 // ── 시트 상태 업데이트 ────────────────────────────────────────────────────────
@@ -189,14 +186,27 @@ async function main() {
         }
 
         if (newStatus) {
+          const stockLabel = available ? 'IN_STOCK' : 'OUT_OF_STOCK';
           console.log(`  상태 전이: ${product.status} → ${newStatus}`);
-          await updateQoo10Qty(product.qoo10ItemId, qoo10Qty, dryRun);
-          if (!dryRun) {
-            await updateSheetStatus(product, newStatus);
+
+          if (dryRun) {
+            if (!product.qoo10ItemId) {
+              console.log(`  [DRY-RUN] vendorItemId=${product.vendorItemId} | 쿠팡: ${stockLabel} | Qoo10: qoo10ItemId 없음 — 상태 전이 불가`);
+            } else {
+              console.log(`  [DRY-RUN] vendorItemId=${product.vendorItemId} | 쿠팡: ${stockLabel} | Qoo10: qty=${qoo10Qty} 호출 예정 (ItemCode: ${product.qoo10ItemId})`);
+              console.log(`  [DRY-RUN] 시트: status ${product.status}→${newStatus} 예정`);
+            }
+            changedCount++;
           } else {
-            console.log(`  [DRY-RUN] 시트 업데이트: status=${newStatus}`);
+            const qoo10Result = await updateQoo10Qty(product.qoo10ItemId, qoo10Qty);
+            if (qoo10Result.success) {
+              await updateSheetStatus(product, newStatus);
+              changedCount++;
+            } else {
+              console.warn(`  상태 전이 취소: ${qoo10Result.errorMsg}`);
+              await updateSheetStatus(product, product.status, qoo10Result.errorMsg);
+            }
           }
-          changedCount++;
         } else {
           console.log(`  상태 유지: ${product.status}`);
         }

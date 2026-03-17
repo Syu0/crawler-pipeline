@@ -205,9 +205,12 @@ OPENCLAW_SESSION_ID
 - [x] DISCOVERED → COLLECTED 수집기 (`coupang-collect-discovered.js`)
 - [x] 시트 스키마 표준화 (`sheetSchema.js`) + `setup-sheets.js` 자동화
 - [x] status ENUM 파이프라인 전체 연결
-- [x] 재고 모니터링 품절 감지 구현 (`coupang-stock-monitor.js`)
+- [x] 재고 모니터링 → Qoo10 qty 연결 (`coupang-stock-monitor.js`, 브랜치: oc/stock-monitor-qoo10)
   - 접근법: 상품 상세 페이지 HTML에서 품절 셀렉터 파싱 (Playwright, Akamai 우회)
-  - 감지 동작 확인 완료 / Qoo10 qty 연결은 미완
+  - OUT_OF_STOCK 감지 → SetGoodsPriceQty(qty=0) → status OUT_OF_STOCK 전이
+  - IN_STOCK 복구 감지 → SetGoodsPriceQty(qty=100) → status LIVE 전이
+  - qoo10ItemId 없음 / API 실패 시 status 변경 없이 errorMessage만 기록
+  - dry-run 지원, row 독립 try-catch
 - [x] 일본어 타이틀 변환 모듈 (`backend/qoo10/titleTranslator.js`)
   - 방식: regex 추출 → Claude Haiku API → 카테고리 템플릿 fallback
   - 등록 직전 `qoo10-auto-register.js`에 삽입
@@ -253,7 +256,7 @@ OPENCLAW_SESSION_ID
   - 래퍼 완성: `getItemDetailInfo.js`, `updateGoods.updateGoodsTitle()`, `editGoodsContents.js`
   - `qoo10-auto-register.js` UPDATE 흐름: changeFlags 기반 분기로 교체
 
-- [ ] **5순위** `재고 모니터링 → Qoo10 qty=0 연결`
+- [x] **5순위** `재고 모니터링 → Qoo10 qty=0 연결` → 완료 (브랜치: oc/stock-monitor-qoo10)
   - 품절 감지 결과 → `SetGoodsPriceQty(qty=0)` 호출
   - 시트 status → OUT_OF_STOCK 전이
   - 재판매 감지 시 → qty=100 + LIVE 복구
@@ -295,7 +298,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-03-17 | 4순위 Qoo10 Update API 래퍼 완성*
+*마지막 업데이트: 2026-03-17 | 5순위 재고 모니터 → Qoo10 qty 연결 완성*
 
 ---
 
