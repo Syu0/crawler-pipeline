@@ -17,7 +17,7 @@ require('dotenv').config({
 });
 
 const { getSheetsClient, ensureSheet, ensureHeaders } = require('../coupang/sheetsClient');
-const { COUPANG_DATA_HEADERS, HEADER_GROUPS } = require('../coupang/sheetSchema');
+const { COUPANG_DATA_HEADERS, HEADER_GROUPS, QOO10_INVENTORY_SCHEMA } = require('../coupang/sheetSchema');
 
 async function getSheetNumericId(sheets, spreadsheetId, title) {
   const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -189,6 +189,79 @@ async function main() {
 
     await applyHeaderGroupColors(sheets, SPREADSHEET_ID, TITLE, HEADER_GROUPS);
     await applyChangeFlagsValidation(sheets, SPREADSHEET_ID, TITLE);
+  }
+
+  // ── 4. qoo10_inventory 시트 ───────────────────────────────────────────────
+  {
+    const TITLE   = QOO10_INVENTORY_SCHEMA.sheetName;
+    const HEADERS = QOO10_INVENTORY_SCHEMA.columns.map((c) => c.key);
+    const result  = await ensureSheet(sheets, SPREADSHEET_ID, TITLE, HEADERS);
+
+    if (result === 'created') {
+      console.log(`[${TITLE}] 시트 생성 완료`);
+    } else {
+      const actual = await ensureHeaders(SPREADSHEET_ID, TITLE, HEADERS);
+      console.log(`[${TITLE}] 헤더 확인 완료 (총 ${actual.length}컬럼)`);
+    }
+
+    // 헤더 배경색 적용
+    const sheetId = await getSheetNumericId(sheets, SPREADSHEET_ID, TITLE);
+    if (sheetId !== null) {
+      const hexToRgb = (hex) => ({
+        red:   parseInt(hex.slice(0, 2), 16) / 255,
+        green: parseInt(hex.slice(2, 4), 16) / 255,
+        blue:  parseInt(hex.slice(4, 6), 16) / 255,
+      });
+
+      // 그룹별 컬럼 범위 계산
+      const groupRanges = [];
+      let currentGroup = null;
+      let groupStart   = 0;
+      QOO10_INVENTORY_SCHEMA.columns.forEach((col, idx) => {
+        if (col.group !== currentGroup) {
+          if (currentGroup !== null) {
+            groupRanges.push({ group: currentGroup, start: groupStart, end: idx - 1 });
+          }
+          currentGroup = col.group;
+          groupStart   = idx;
+        }
+        if (idx === QOO10_INVENTORY_SCHEMA.columns.length - 1) {
+          groupRanges.push({ group: currentGroup, start: groupStart, end: idx });
+        }
+      });
+
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          requests: groupRanges.map((g) => ({
+            repeatCell: {
+              range: {
+                sheetId,
+                startRowIndex: 0, endRowIndex: 1,
+                startColumnIndex: g.start, endColumnIndex: g.end + 1,
+              },
+              cell: {
+                userEnteredFormat: {
+                  backgroundColor: hexToRgb(QOO10_INVENTORY_SCHEMA.groupColors[g.group]),
+                  textFormat: { bold: true },
+                },
+              },
+              fields: 'userEnteredFormat(backgroundColor,textFormat)',
+            },
+          })),
+        },
+      });
+      console.log(`[${TITLE}] 헤더 그룹 배경색 적용 완료`);
+
+      // freeze row 1
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          requests: [{ updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 1 } }, fields: 'gridProperties.frozenRowCount' } }],
+        },
+      });
+      console.log(`[${TITLE}] freeze_panes A2 적용 완료`);
+    }
   }
 
   console.log('\n완료.');

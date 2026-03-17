@@ -44,7 +44,9 @@
     "coupang:collect:dry": "node backend/scripts/coupang-collect-discovered.js --dry-run",
     "stock:check": "node backend/scripts/coupang-stock-monitor.js",
     "stock:check:dry": "node backend/scripts/coupang-stock-monitor.js --dry-run",
-    "stock:check:test": "node backend/scripts/coupang-stock-monitor.js --dry-run --limit=3"
+    "stock:check:test": "node backend/scripts/coupang-stock-monitor.js --dry-run --limit=3",
+    "qoo10:qty:fix":            "node backend/scripts/qoo10-qty-bulk-fix.js",
+    "qoo10:qty:fix:dry":        "node backend/scripts/qoo10-qty-bulk-fix.js --dry-run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.79.0",

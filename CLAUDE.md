@@ -231,6 +231,7 @@ OPENCLAW_SESSION_ID
 - [x] **4순위** Qoo10 Update API 래퍼 완성 | 브랜치: oc/update-api-wrappers
 - [x] **5순위** 재고 모니터링 → qty=0 연결 (`coupang-stock-monitor.js`) | 브랜치: oc/stock-monitor-qoo10
 - [x] **문서** CURRENT_TASK.md 동기화 완료 (2026-03-17)
+- [x] **인벤토리 관리** qoo10_inventory 시트 + 동기화/qty처리 스크립트 | 브랜치: oc/qoo10-inventory-mgmt
 
 #### 🔄 진행 중 / 대기
 
