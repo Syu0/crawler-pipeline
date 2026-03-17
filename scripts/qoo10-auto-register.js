@@ -21,6 +21,7 @@ const { updateExistingGoods } = require('../backend/qoo10/updateGoods');
 const { calculateSellingPrice } = require('./lib/qoo10PayloadGenerator');
 const { resolveJpCategoryId } = require('./lib/categoryResolver');
 const { decideItemPriceJpy } = require('../backend/pricing/priceDecision');
+const { translateTitle } = require('../backend/qoo10/titleTranslator');
 
 // Configuration
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
@@ -402,10 +403,23 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
   const sellingPrice = priceDecision.priceJpy;
   const extraImages = parseExtraImages(row.ExtraImages);
   const jpCategoryId = categoryResolution?.jpCategoryId || row.categoryId;
-  
+
+  // ── 타이틀 번역 (한국어 → 일본어 SEO 최적화) ──
+  let itemTitle = row.ItemTitle;
+  let titleMethod = 'fallback';
+  try {
+    const categoryPath = row.categoryPath3 || row.categoryPath2 || null;
+    const titleResult = await translateTitle(row.ItemTitle, categoryPath);
+    itemTitle = titleResult.jpTitle;
+    titleMethod = titleResult.method;
+    console.log(`  Title [${titleResult.method}]: ${row.ItemTitle.slice(0, 30)}... → ${itemTitle}`);
+  } catch (titleErr) {
+    console.warn(`  Title translation failed (${titleErr.message}), using original`);
+  }
+
   const payload = {
     SecondSubCat: jpCategoryId,
-    ItemTitle: row.ItemTitle,
+    ItemTitle: itemTitle,
     ItemPrice: String(sellingPrice),
     ItemQty: '100',
     ShippingNo: FIXED_SHIPPING_NO,
@@ -438,7 +452,8 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
       categoryResolution,
       payload,
       mode: isUpdateMode ? 'UPDATE' : 'CREATE',
-      qoo10ItemId: existingQoo10ItemId || null
+      qoo10ItemId: existingQoo10ItemId || null,
+      titleMethod
     };
   }
   
@@ -478,14 +493,15 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
         sellerCode: row.qoo10SellerCode || sellerCode,
         categoryResolution,
         mode: 'UPDATE',
-        payload: updateResult.payload
+        payload: updateResult.payload,
+        titleMethod
       };
     }
-    
+
     if (updateResult.success) {
       // Determine status based on category match type
       const registrationStatus = categoryResolution.matchType === 'FALLBACK' ? 'WARNING' : 'SUCCESS';
-      
+
       return {
         status: registrationStatus,
         vendorItemId,
@@ -493,7 +509,8 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
         qoo10SellingPrice: sellingPrice,
         sellerCode: row.qoo10SellerCode || sellerCode,
         categoryResolution,
-        mode: 'UPDATE'
+        mode: 'UPDATE',
+        titleMethod
       };
     } else {
       return {
@@ -503,7 +520,8 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
         qoo10SellingPrice: sellingPrice, // Still include computed price for write-back
         apiError: updateResult.resultMsg,
         categoryResolution,
-        mode: 'UPDATE'
+        mode: 'UPDATE',
+        titleMethod
       };
     }
   }
@@ -522,7 +540,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
         // Determine registration status based on matchType
         // FALLBACK = WARNING even if API succeeds
         const registrationStatus = categoryResolution.matchType === 'FALLBACK' ? 'WARNING' : 'SUCCESS';
-        
+
         return {
           status: registrationStatus,
           vendorItemId,
@@ -530,13 +548,14 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
           qoo10SellingPrice: sellingPrice,
           sellerCode: result.sellerCodeUsed,
           categoryResolution,
-          mode: 'CREATE'
+          mode: 'CREATE',
+          titleMethod
         };
       }
-      
+
       // API returned but not successful
       lastError = result.resultMsg || 'Unknown API error';
-      
+
       if (result.resultCode === -1 && result.resultMsg.includes('Dry-run')) {
         // Dry-run mode from registerNewGoods
         return {
@@ -545,7 +564,8 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
           qoo10SellingPrice: sellingPrice,
           reason: 'QOO10_ALLOW_REAL_REG not enabled',
           categoryResolution,
-          mode: 'CREATE'
+          mode: 'CREATE',
+          titleMethod
         };
       }
       
@@ -565,7 +585,8 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
     qoo10SellingPrice: sellingPrice, // Include computed price for write-back
     apiError: lastError,
     categoryResolution,
-    mode: 'CREATE'
+    mode: 'CREATE',
+    titleMethod
   };
 }
 
@@ -704,7 +725,7 @@ async function main() {
               status: 'REGISTERED',
               registrationMode: 'REAL',
               registrationStatus: 'SUCCESS',
-              registrationMessage: result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully',
+              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] ${result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully'}`,
               lastRegisteredAt: new Date().toISOString()
             };
             
@@ -743,7 +764,7 @@ async function main() {
               status: 'REGISTERED',
               registrationMode: 'REAL',
               registrationStatus: 'WARNING',
-              registrationMessage: 'FALLBACK category used (review required)',
+              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] FALLBACK category used (review required)`,
               lastRegisteredAt: new Date().toISOString()
             };
             
@@ -800,8 +821,8 @@ async function main() {
           // Determine DRY-RUN status based on matchType
           const dryRunStatus = result.categoryResolution?.matchType === 'FALLBACK' ? 'WARNING' : 'DRY_RUN';
           const dryRunMessage = result.categoryResolution?.matchType === 'FALLBACK'
-            ? 'DRY-RUN with FALLBACK category (review required)'
-            : 'DRY-RUN completed';
+            ? `[titleMethod=${result.titleMethod || 'fallback'}] DRY-RUN with FALLBACK category (review required)`
+            : `[titleMethod=${result.titleMethod || 'fallback'}] DRY-RUN completed`;
 
           console.log(`  → DRY-RUN [${result.mode || 'CREATE'}]: price=${result.qoo10SellingPrice}, jpCat=${result.categoryResolution?.jpCategoryId} (${result.categoryResolution?.matchType})`);
           results.dryRun.push(result);
