@@ -112,9 +112,12 @@ async function main() {
   // 쿠키 만료 알림 (만료 3일 전 / 당일 이메일 발송)
   await checkAndNotify().catch((e) => console.warn('[notify]', e.message));
 
+  let browser;
   try {
     // Phase 1 + 2-5 수집을 동일 브라우저 컨텍스트에서 실행 (browserManager 세션과 독립)
-    const { browser, context } = await _launchOwnBrowser();
+    const launched = await _launchOwnBrowser();
+    browser = launched.browser;
+    const { context } = launched;
     let productData;
     let phaseData = {};
 
@@ -131,7 +134,6 @@ async function main() {
       }
     } finally {
       await context.close();
-      await browser.close();
     }
 
     // Phase 2-5 결과 병합
@@ -192,6 +194,8 @@ async function main() {
     console.error(`\n✗ Error: ${err.message}`);
     if (process.env.COUPANG_TRACER === '1') console.error(err.stack);
     process.exit(1);
+  } finally {
+    if (browser) await browser.close();
   }
 }
 

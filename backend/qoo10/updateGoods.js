@@ -19,6 +19,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 const { updateGoods } = require('./client');
+const { getItemDetailInfo } = require('./getItemDetailInfo');
 
 // Default ShippingNo (same as registerNewGoods)
 const DEFAULT_SHIPPING_NO = '471554';
@@ -257,7 +258,66 @@ async function updateExistingGoods(input, currentRowData = {}) {
   }
 }
 
+/**
+ * Qoo10 상품 타이틀 업데이트 (title-only, SecondSubCat 자동 조회)
+ *
+ * CLAUDE.md: UpdateGoods는 Title 업데이트 전용으로만 안정적으로 동작.
+ * SecondSubCatは必須です (-99) 방지: 호출 전 GetItemDetailInfo로 현재 값 조회.
+ *
+ * @param {string} itemCode - Qoo10 ItemCode (qoo10ItemId)
+ * @param {string} jpTitle - 업데이트할 일본어 타이틀
+ * @returns {Promise<{success: boolean, resultCode: string, message: string, dryRun?: boolean}>}
+ */
+async function updateGoodsTitle(itemCode, jpTitle) {
+  const ALLOW_REAL = process.env.QOO10_ALLOW_REAL_REG === '1';
+
+  if (!ALLOW_REAL) {
+    console.log(`[UpdateGoodsTitle] DRY-RUN: would update title for itemCode=${itemCode}`);
+    return { success: true, resultCode: '-1', message: 'DRY-RUN: QOO10_ALLOW_REAL_REG not enabled', dryRun: true };
+  }
+
+  // 현재 상품 정보 조회 (필수 필드 재사용 — 없으면 UpdateGoods -99 에러)
+  let detail;
+  try {
+    detail = await getItemDetailInfo(itemCode);
+  } catch (err) {
+    return { success: false, resultCode: '-1', message: `GetItemDetailInfo failed: ${err.message}` };
+  }
+
+  const secondSubCat = detail.SecondSubCatCd || detail.SecondSubCat || detail.SecondSubCatNo || '';
+  if (!secondSubCat) {
+    return { success: false, resultCode: '-1', message: 'SecondSubCat not found in GetItemDetailInfo response' };
+  }
+
+  try {
+    const response = await updateGoods({
+      returnType: 'application/json',
+      ItemCode: String(itemCode),
+      SecondSubCat: String(secondSubCat),
+      ItemTitle: String(jpTitle),
+      // UpdateGoods 필수 필드 — 현재 값 그대로 유지
+      ItemPrice: String(detail.ItemPrice || '0').replace(/\.0+$/, ''),
+      ItemQty: String(detail.ItemQty || '100'),
+      ShippingNo: String(detail.ShippingNo || '471554'),
+      AdultYN: String(detail.AdultYN || 'N'),
+      AvailableDateType: String(detail.AvailableDateType || '0'),
+      AvailableDateValue: String(detail.AvailableDateValue || '2'),
+      ExpireDate: String(detail.ExpireDate || '2030-12-31'),
+      ProductionPlaceType: String(detail.ProductionPlaceType || '2'),
+      ProductionPlace: String(detail.ProductionPlace || 'Overseas'),
+    });
+
+    const resultCode = Number(response?.ResultCode ?? response?.resultCode ?? -999);
+    const message = response?.ResultMsg || response?.resultMsg || 'Unknown';
+    console.log(`[UpdateGoodsTitle] ResultCode=${resultCode}, ResultMsg=${message}`);
+    return { success: resultCode === 0, resultCode: String(resultCode), message };
+  } catch (err) {
+    return { success: false, resultCode: '-999', message: err.message };
+  }
+}
+
 module.exports = {
   updateExistingGoods,
-  buildUpdateGoodsParams
+  buildUpdateGoodsParams,
+  updateGoodsTitle
 };

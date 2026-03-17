@@ -13,10 +13,17 @@
 - [x] 완료 기준: 블록 발생 시에도 다른 row 처리 계속 가능
 - 브랜치: `oc/block-handling` | 커밋: `7b4f723`
 
-### 2단계: 쿠팡 수집 보강 (2순위)
-- [ ] Options, ExtraImages, 상세 이미지 URL 수집 추가
-- [ ] 리뷰 5개, 문의글 5개 수집 추가
-- [ ] 필드별 수집 실패 시 null 처리 (row 전체 실패 방지)
+### 2단계: 쿠팡 수집 보강 (2순위) ✅ 완료
+- [x] ExtraImages 수집 (셀렉터: ul.twc-static li img, 해상도 492x492ex 정규화)
+- [x] DetailImages 수집 (셀렉터: div.type-IMAGE_NO_SPACE img, 해상도 정규화)
+- [x] OptionType / OptionsRaw 수집
+- [x] StockStatus 수집 (가격 기반 판단 로직)
+- [x] ReviewCount / ReviewAvgRating 수집 (별 카운팅 방식)
+- [x] ReviewSummary 수집 (상위 5개 리뷰 JSON, 최대 500자)
+- [x] 필드별 독립 try-catch — row 전체 실패 방지
+- [x] CollectedPhases "1,2,..." 형식 기록
+- ⏸ 문의글(Q&A) — 전략 모듈(상세페이지/타이틀 전략) 시점으로 보류
+- 브랜치: `oc/collection-enhance` | 커밋: `395bb2f`
 
 ### 3단계: 일본어 타이틀 변환 모듈 (3순위)
 - [ ] `backend/qoo10/titleTranslator.js` 신규 생성
