@@ -222,55 +222,52 @@ OPENCLAW_SESSION_ID
   - `editGoodsContents.js`: 상세페이지 HTML 업데이트
   - `qoo10-auto-register.js` UPDATE 흐름 교체: changeFlags 기반 분기 (TITLE_CHANGED / DESC_CHANGED / PRICE_UP / PRICE_DOWN)
 
-### 9-B. 현재 작업 순서
+### 9-B. 현재 작업 순서 (2026-03-17 기준)
 
-- [ ] **1순위** `쿠팡 블록 대응 강화`
-  - 현재: 블록 감지 → 1시간 대기 × 2회 → 포기 + 이메일 알림 → 파이프라인 중단
-  - 목표: 블록 상황에서도 파이프라인이 멈추지 않도록 대응 전략 강화
-  - 수정 대상: `blockDetector.js`, `coupang-collect-discovered.js` 흐름 제어
-  - **선행 이유**: 블록 대응이 안정화되어야 수집 보강 테스트 결과를 신뢰할 수 있음
-    (새 셀렉터 실패 원인이 블록인지 코드 문제인지 구분 불가 → 디버깅 오염 방지)
+#### ✅ 완료
+- [x] **1순위** 쿠팡 블록 대응 강화 | 브랜치: oc/block-handling | 커밋: 7b4f723
+- [x] **2순위** 쿠팡 수집 보강 | 브랜치: oc/collection-enhance | 커밋: 395bb2f
+- [x] **3순위** 일본어 타이틀 변환 (`titleTranslator.js`) | 브랜치: oc/collection-enhance
+- [x] **4순위** Qoo10 Update API 래퍼 완성 | 브랜치: oc/update-api-wrappers
+- [x] **5순위** 재고 모니터링 → qty=0 연결 (`coupang-stock-monitor.js`) | 브랜치: oc/stock-monitor-qoo10
+- [x] **문서** CURRENT_TASK.md 동기화 완료 (2026-03-17)
 
-- [ ] **2순위** `쿠팡 수집 보강`
-  - 미수집 필드 추가: Options, ExtraImages, 상세 이미지 URL, 리뷰 5개, 문의글 5개
-  - 수집 실패 시 해당 필드 null 처리 (전체 row 실패로 이어지지 않도록)
-  - **3순위 Update API 테스트의 전제조건**: 수집 필드가 늘어나야 Update API 검증 대상이 생김
+#### 🔄 진행 중 / 대기
 
-- [x] **3순위** `일본어 상품 타이틀 변환` → 완료 (브랜치: oc/collection-enhance)
-  - **문제**: 한국어 타이틀 그대로 등록 → 일본 Qoo10 검색 노출 불가
-  - **채택 방식**: 하이브리드 (브랜드명/숫자/단위 regex 추출 → Claude Haiku API → 카테고리 템플릿 fallback)
-  - **구현 위치**: `backend/qoo10/titleTranslator.js` → `qoo10-auto-register.js` 등록 직전 삽입
+- [ ] **선행①** 타이틀 변환 미적용 상품 원인 파악
+  - 현상: Qoo10 셀러 화면에서 일부 상품이 한국어 타이틀로 등록됨
+  - 확인 필요: titleTranslator 적용 시점 이전 등록 상품인지 vs 코드 문제인지
+  - 방법: git log로 titleTranslator 머지 커밋 시점 확인 → 해당 시점 이전 등록 상품인지 대조
 
-- [ ] **[전략] 일본어 상세페이지 콘텐츠 생성** (전략 파트 — 개발 후순위)
-  - **배경**: 수집 상품 대부분이 이미지 1개 + 한국어 정보만 존재
-    → 일본 마켓 등록 시 상품 설명 품질이 낮아 검색 노출 및 전환율 저하
-  - **목표**: 수집된 텍스트(ItemTitle, ItemDescriptionText, OptionsRaw, ProductAttributes)
-    + 이미지(StandardImage, DetailImages) 조합 → 일본어 상세페이지 HTML 자동 생성
-  - **구현 위치**: `backend/qoo10/contentStrategy.js` 신규 모듈
-  - **연결 시점**: `EditGoodsContents` API 래퍼 완성 후 (4순위 Update API 작업 이후)
-  - **처리 방식**: Claude API (Sonnet) — 이미지+텍스트 멀티모달 인풋
-  - **트리거 조건**: DetailImages 수 < 3 OR ItemDescriptionText 길이 < 100자
-  - **선행 조건**: 4순위(Update API 래퍼) 완료 후 착수
+- [ ] **선행②** 재고 모니터 실검증 (qty=0 → qty=100)
+  - dry-run 확인은 완료됨 (품절 상품 탐지 로직 정상)
+  - 남은 것: 실제 시트 업데이트 + Qoo10 셀러 화면 재고 수량 변경 확인
+  - 이슈: stock:check 실행 시 쿠키 만료로 warming 단계 블록 발생
+  - 선행 조건: yamyam으로 쿠키 갱신 후 재시도
+  - 주의: stock:check도 쿠팡 쿠키에 의존함 → 운영 자동화 설계 시 쿠키 만료 감지 연결 필요
 
-- [x] **4순위** `Qoo10 Update API 로직 추가` → 완료 (브랜치: oc/update-api-wrappers)
-  - 래퍼 완성: `getItemDetailInfo.js`, `updateGoods.updateGoodsTitle()`, `editGoodsContents.js`
-  - `qoo10-auto-register.js` UPDATE 흐름: changeFlags 기반 분기로 교체
+- [ ] **6순위** COLLECTED → Qoo10 등록 파이프라인 자동 연결
+  - 착수 조건: 선행①② 완료 후
+  - 설계 포인트:
+    - PENDING_APPROVAL 상태 추가 (수집 완료 → 자동 등록 사이 사용자 승인 게이트)
+    - MAX_DAILY_REGISTER: config 시트에서 관리 (초기값 10)
+    - 자동화 파이프라인이 돌기 시작해도 소량(10개/일) 검증 운영 먼저
+  - status ENUM 추가: PENDING_APPROVAL (COLLECTED 다음, REGISTER_READY 이전)
 
-- [x] **5순위** `재고 모니터링 → Qoo10 qty=0 연결` → 완료 (브랜치: oc/stock-monitor-qoo10)
-  - 품절 감지 결과 → `SetGoodsPriceQty(qty=0)` 호출
-  - 시트 status → OUT_OF_STOCK 전이
-  - 재판매 감지 시 → qty=100 + LIVE 복구
+- [ ] **[전략] 일본어 상세페이지 콘텐츠 생성**
+  - 착수 조건: 6순위 자동 연결 완료 후
+  - 구현 위치: `backend/qoo10/contentStrategy.js`
+  - 트리거: DetailImages < 3개 OR ItemDescriptionText < 100자
 
-- [ ] **6순위** `COLLECTED → Qoo10 등록 파이프라인 자동 연결` (운영 직전)
-  - **포인트**: 현재 `qoo10-auto-register.js`는 status ENUM 흐름과 분리 — 수동 실행만 가능
-  - 목표: COLLECTED 상태 자동 감지 → REGISTERING 락 → 등록 → REGISTERED 전이 end-to-end 자동화
-  - **착수 조건**: 1~5순위 완료 후 — 수집/품질/업데이트 파이프라인이 안정화된 시점
+#### ⏸ 보류 (운영 안정화 후)
+- [ ] **7순위** Qoo10 시장 가격 경쟁성 자동 스크래핑
+- [ ] **운영 후** 카테고리 특화 전략, 마케팅, 상세페이지 품질 향상
 
-- [ ] **7순위** `Qoo10 시장 가격 경쟁성 검증`
-  - **채택 방식**: Qoo10 검색 스크래핑 자동화 (동일/유사 키워드 → 상위 N개 가격 수집 → 우리 가격 비교)
-  - **판단 로직**: 경쟁 불가 → 상품 교체 플래그 or 번들 기획 제안
-  - **선행 요건**: 1~5순위 파이프라인 안정화 이후 착수
-  - **난이도**: 높음
+#### 📋 별도 논의 (코드 작업 아님)
+- [ ] **시장 조사** 키워드/카테고리 전략 수립
+  - 현재 등록 카테고리: 텀블러, 자동차용품 계열
+  - 논의 필요: 이 방향 유지 vs 새 카테고리 진입
+  - 진행 방식: 새 채팅에서 별도 논의 후 keywords 시트에 반영
 
 ### 9-C. dashboard 작업
 
@@ -298,7 +295,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-03-17 | 5순위 재고 모니터 → Qoo10 qty 연결 완성*
+*마지막 업데이트: 2026-03-17 | 현재 작업 상태 동기화, 6순위 설계 포인트 정리*
 
 ---
 
