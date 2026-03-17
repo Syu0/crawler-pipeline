@@ -210,11 +210,20 @@ async function main() {
 
         if (dryRun) {
           console.log('  [DRY-RUN] 수집 결과:');
-          console.log(`    ItemTitle:      ${scraped.ItemTitle?.substring(0, 50)}`);
-          console.log(`    ItemPrice:      ${scraped.ItemPrice}`);
-          console.log(`    StandardImage:  ${scraped.StandardImage ? 'OK' : '없음'}`);
-          console.log(`    categoryId:     ${scraped.categoryId || '❌ 없음'}`);
-          console.log(`    breadcrumbPath: ${(scraped.breadcrumbTexts || []).join(' > ') || '없음'}`);
+          console.log(`    ItemTitle:       ${scraped.ItemTitle?.substring(0, 50)}`);
+          console.log(`    ItemPrice:       ${scraped.ItemPrice}`);
+          console.log(`    StandardImage:   ${scraped.StandardImage ? 'OK' : '없음'}`);
+          console.log(`    ExtraImages:     ${scraped.ExtraImages?.length || 0}개`);
+          console.log(`    categoryId:      ${scraped.categoryId || '❌ 없음'}`);
+          console.log(`    breadcrumbPath:  ${(scraped.breadcrumbTexts || []).join(' > ') || '없음'}`);
+          console.log(`    OptionType:      ${phaseData.optionType || '(not collected)'}`);
+          console.log(`    OptionsRaw:      ${phaseData.optionsRaw ? `axes:${phaseData.optionsRaw.axes?.length}` : 'null'}`);
+          console.log(`    DetailImages:    ${(phaseData.detailImages || []).length}개`);
+          console.log(`    StockStatus:     ${phaseData.stockStatus || '(not collected)'}`);
+          console.log(`    StockQty:        ${phaseData.stockQty ?? 'null'}`);
+          console.log(`    ReviewCount:     ${phaseData.reviewCount ?? 'null'}`);
+          console.log(`    ReviewAvgRating: ${phaseData.reviewAvgRating ?? 'null'}`);
+          console.log(`    WeightKg:        ${phaseData.weightKg ?? scraped.WeightKg}`);
           console.log(`    CollectedPhases: ${phases.join(',')}`);
           stats.success++;
           continue;
@@ -232,16 +241,16 @@ async function main() {
           ExtraImages:         Array.isArray(scraped.ExtraImages)
                                  ? scraped.ExtraImages.join('|')
                                  : (scraped.ExtraImages || ''),
-          WeightKg:            scraped.WeightKg || '',
+          WeightKg:            phaseData.weightKg != null ? String(phaseData.weightKg) : (scraped.WeightKg || ''),
           Options:             scraped.Options || '',
           ItemDescriptionText: scraped.ItemDescriptionText || '',
-          // Phase 2-5 필드 (스텁 상태: 빈 값 또는 기본값)
+          // Phase 2-5 필드
           DetailImages:        JSON.stringify(phaseData.detailImages || []),
-          OptionType:          phaseData.optionType || '',
+          OptionType:          phaseData.optionType || 'NONE',
           OptionsRaw:          phaseData.optionsRaw != null
                                  ? JSON.stringify(phaseData.optionsRaw)
                                  : '',
-          StockStatus:         phaseData.stockStatus || '',
+          StockStatus:         phaseData.stockStatus || 'UNKNOWN',
           StockQty:            phaseData.stockQty != null ? String(phaseData.stockQty) : '',
           ReviewCount:         phaseData.reviewCount != null ? String(phaseData.reviewCount) : '',
           ReviewAvgRating:     phaseData.reviewAvgRating != null

@@ -17,10 +17,13 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend'
 
 const { getSheetsClient } = require('./lib/sheetsClient');
 const { registerNewGoods } = require('../backend/qoo10/registerNewGoods');
-const { updateExistingGoods } = require('../backend/qoo10/updateGoods');
+const { updateGoodsTitle } = require('../backend/qoo10/updateGoods');
+const { editGoodsContents } = require('../backend/qoo10/editGoodsContents');
+const { setGoodsPriceQty } = require('../backend/scripts/qoo10.setGoodsPriceQty');
 const { calculateSellingPrice } = require('./lib/qoo10PayloadGenerator');
 const { resolveJpCategoryId } = require('./lib/categoryResolver');
 const { decideItemPriceJpy } = require('../backend/pricing/priceDecision');
+const { translateTitle } = require('../backend/qoo10/titleTranslator');
 
 // Configuration
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
@@ -402,10 +405,23 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
   const sellingPrice = priceDecision.priceJpy;
   const extraImages = parseExtraImages(row.ExtraImages);
   const jpCategoryId = categoryResolution?.jpCategoryId || row.categoryId;
-  
+
+  // ── 타이틀 번역 (한국어 → 일본어 SEO 최적화) ──
+  let itemTitle = row.ItemTitle;
+  let titleMethod = 'fallback';
+  try {
+    const categoryPath = row.categoryPath3 || row.categoryPath2 || null;
+    const titleResult = await translateTitle(row.ItemTitle, categoryPath);
+    itemTitle = titleResult.jpTitle;
+    titleMethod = titleResult.method;
+    console.log(`  Title [${titleResult.method}]: ${row.ItemTitle.slice(0, 30)}... → ${itemTitle}`);
+  } catch (titleErr) {
+    console.warn(`  Title translation failed (${titleErr.message}), using original`);
+  }
+
   const payload = {
     SecondSubCat: jpCategoryId,
-    ItemTitle: row.ItemTitle,
+    ItemTitle: itemTitle,
     ItemPrice: String(sellingPrice),
     ItemQty: '100',
     ShippingNo: FIXED_SHIPPING_NO,
@@ -438,38 +454,31 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
       categoryResolution,
       payload,
       mode: isUpdateMode ? 'UPDATE' : 'CREATE',
-      qoo10ItemId: existingQoo10ItemId || null
+      qoo10ItemId: existingQoo10ItemId || null,
+      titleMethod
     };
   }
   
   // ===== UPDATE MODE =====
   if (isUpdateMode) {
-    console.log(`[Registration] Updating existing Qoo10 item: ${existingQoo10ItemId}`);
-    
-    // Pass ALL fields like SetNewGoods - updateExistingGoods will build full payload
-    const updateResult = await updateExistingGoods({
-      ItemCode: existingQoo10ItemId,
-      // All fields from payload (like SetNewGoods)
-      SecondSubCat: payload.SecondSubCat,
-      ItemTitle: payload.ItemTitle,
-      ItemPrice: payload.ItemPrice,
-      ItemQty: payload.ItemQty || '100',
-      StandardImage: payload.StandardImage,
-      ItemDescription: payload.ItemDescription,
-      Weight: payload.Weight,
-      ProductionPlaceType: payload.ProductionPlaceType,
-      ProductionPlace: payload.ProductionPlace,
-      ShippingNo: FIXED_SHIPPING_NO,
-      // Additional fields for structural parity with SetNewGoods
-      RetailPrice: '0',
-      TaxRate: 'S',
-      ExpireDate: '2030-12-31',
-      AdultYN: 'N',
-      AvailableDateType: '0',
-      AvailableDateValue: '2',
-    }, row);
-    
-    if (updateResult.dryRun) {
+    const flags = (row.changeFlags || '').split(',').map(f => f.trim()).filter(Boolean);
+
+    if (flags.length === 0) {
+      return {
+        status: 'NO_CHANGES',
+        vendorItemId,
+        qoo10ItemId: existingQoo10ItemId,
+        message: 'changeFlags is empty — nothing to update',
+        mode: 'UPDATE'
+      };
+    }
+
+    console.log(`[Registration] UPDATE flags: [${flags.join(', ')}] for itemCode=${existingQoo10ItemId}`);
+
+    // DRY-RUN 분기 (QOO10_ALLOW_REAL_REG=0)
+    const ALLOW_REAL = process.env.QOO10_ALLOW_REAL_REG === '1';
+    if (!ALLOW_REAL) {
+      console.log(`[Registration] DRY-RUN: UPDATE skipped (QOO10_ALLOW_REAL_REG not set)`);
       return {
         status: 'DRY_RUN',
         vendorItemId,
@@ -478,34 +487,71 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
         sellerCode: row.qoo10SellerCode || sellerCode,
         categoryResolution,
         mode: 'UPDATE',
-        payload: updateResult.payload
+        titleMethod,
+        flags
       };
     }
-    
-    if (updateResult.success) {
-      // Determine status based on category match type
-      const registrationStatus = categoryResolution.matchType === 'FALLBACK' ? 'WARNING' : 'SUCCESS';
-      
-      return {
-        status: registrationStatus,
-        vendorItemId,
-        qoo10ItemId: existingQoo10ItemId,
-        qoo10SellingPrice: sellingPrice,
-        sellerCode: row.qoo10SellerCode || sellerCode,
-        categoryResolution,
-        mode: 'UPDATE'
-      };
-    } else {
+
+    const errors = [];
+    const fieldsUpdated = [];
+
+    // TITLE_CHANGED → updateGoodsTitle
+    if (flags.includes('TITLE_CHANGED')) {
+      const r = await updateGoodsTitle(existingQoo10ItemId, itemTitle);
+      if (r.success) {
+        fieldsUpdated.push('ItemTitle');
+      } else {
+        errors.push(`TITLE: ${r.message}`);
+      }
+    }
+
+    // DESC_CHANGED → editGoodsContents
+    if (flags.includes('DESC_CHANGED')) {
+      const descHtml = row.ItemDescriptionText || '';
+      const r = await editGoodsContents(existingQoo10ItemId, descHtml);
+      if (r.success) {
+        fieldsUpdated.push('ItemDescription');
+      } else {
+        errors.push(`DESC: ${r.message}`);
+      }
+    }
+
+    // PRICE_UP / PRICE_DOWN → SetGoodsPriceQty
+    if (flags.includes('PRICE_UP') || flags.includes('PRICE_DOWN')) {
+      const r = await setGoodsPriceQty({ itemCode: existingQoo10ItemId, price: Number(sellingPrice) });
+      if (r.success) {
+        fieldsUpdated.push('ItemPrice');
+      } else if (!r.dryRun) {
+        errors.push(`PRICE: ${r.resultMsg || r.reason || 'Unknown error'}`);
+      }
+    }
+
+    if (errors.length > 0) {
       return {
         status: 'FAILED',
         vendorItemId,
         qoo10ItemId: existingQoo10ItemId,
-        qoo10SellingPrice: sellingPrice, // Still include computed price for write-back
-        apiError: updateResult.resultMsg,
+        qoo10SellingPrice: sellingPrice,
+        apiError: errors.join(' | '),
         categoryResolution,
-        mode: 'UPDATE'
+        mode: 'UPDATE',
+        fieldsUpdated,
+        titleMethod
       };
     }
+
+    const registrationStatus = categoryResolution.matchType === 'FALLBACK' ? 'WARNING' : 'SUCCESS';
+    return {
+      status: registrationStatus,
+      vendorItemId,
+      qoo10ItemId: existingQoo10ItemId,
+      qoo10SellingPrice: sellingPrice,
+      sellerCode: row.qoo10SellerCode || sellerCode,
+      categoryResolution,
+      mode: 'UPDATE',
+      fieldsUpdated,
+      titleMethod
+    };
   }
   
   // ===== CREATE MODE =====
@@ -522,7 +568,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
         // Determine registration status based on matchType
         // FALLBACK = WARNING even if API succeeds
         const registrationStatus = categoryResolution.matchType === 'FALLBACK' ? 'WARNING' : 'SUCCESS';
-        
+
         return {
           status: registrationStatus,
           vendorItemId,
@@ -530,13 +576,14 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
           qoo10SellingPrice: sellingPrice,
           sellerCode: result.sellerCodeUsed,
           categoryResolution,
-          mode: 'CREATE'
+          mode: 'CREATE',
+          titleMethod
         };
       }
-      
+
       // API returned but not successful
       lastError = result.resultMsg || 'Unknown API error';
-      
+
       if (result.resultCode === -1 && result.resultMsg.includes('Dry-run')) {
         // Dry-run mode from registerNewGoods
         return {
@@ -545,7 +592,8 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
           qoo10SellingPrice: sellingPrice,
           reason: 'QOO10_ALLOW_REAL_REG not enabled',
           categoryResolution,
-          mode: 'CREATE'
+          mode: 'CREATE',
+          titleMethod
         };
       }
       
@@ -565,7 +613,8 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
     qoo10SellingPrice: sellingPrice, // Include computed price for write-back
     apiError: lastError,
     categoryResolution,
-    mode: 'CREATE'
+    mode: 'CREATE',
+    titleMethod
   };
 }
 
@@ -611,7 +660,8 @@ async function main() {
     // CREATE: status=COLLECTED or REGISTER_READY (수집 완료, 미등록)
     // UPDATE: qoo10ItemId 있고 needsUpdate=YES
     const unregisteredRows = dataRows.filter(r => r.status === 'COLLECTED' || r.status === 'REGISTER_READY');
-    const registeredNeedsUpdate = dataRows.filter(r => r.qoo10ItemId && r.needsUpdate === 'YES');
+    const registeredNeedsUpdate = dataRows.filter(r => r.qoo10ItemId && r.needsUpdate === 'YES'
+      && r.status !== 'COLLECTED' && r.status !== 'REGISTER_READY');
     const registeredNoUpdate = dataRows.filter(r => r.qoo10ItemId && r.needsUpdate !== 'YES');
 
     console.log(`  COLLECTED (CREATE):  ${unregisteredRows.length}`);
@@ -704,7 +754,7 @@ async function main() {
               status: 'REGISTERED',
               registrationMode: 'REAL',
               registrationStatus: 'SUCCESS',
-              registrationMessage: result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully',
+              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] ${result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully'}`,
               lastRegisteredAt: new Date().toISOString()
             };
             
@@ -743,7 +793,7 @@ async function main() {
               status: 'REGISTERED',
               registrationMode: 'REAL',
               registrationStatus: 'WARNING',
-              registrationMessage: 'FALLBACK category used (review required)',
+              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] FALLBACK category used (review required)`,
               lastRegisteredAt: new Date().toISOString()
             };
             
@@ -781,6 +831,7 @@ async function main() {
               registrationMode: 'REAL',
               registrationStatus: 'FAILED',
               registrationMessage: result.apiError || 'API error',
+              errorMessage: result.apiError || 'API error',
               lastRegisteredAt: new Date().toISOString()
             };
             
@@ -800,15 +851,19 @@ async function main() {
           // Determine DRY-RUN status based on matchType
           const dryRunStatus = result.categoryResolution?.matchType === 'FALLBACK' ? 'WARNING' : 'DRY_RUN';
           const dryRunMessage = result.categoryResolution?.matchType === 'FALLBACK'
-            ? 'DRY-RUN with FALLBACK category (review required)'
-            : 'DRY-RUN completed';
+            ? `[titleMethod=${result.titleMethod || 'fallback'}] DRY-RUN with FALLBACK category (review required)`
+            : `[titleMethod=${result.titleMethod || 'fallback'}] DRY-RUN completed`;
 
           console.log(`  → DRY-RUN [${result.mode || 'CREATE'}]: price=${result.qoo10SellingPrice}, jpCat=${result.categoryResolution?.jpCategoryId} (${result.categoryResolution?.matchType})`);
           results.dryRun.push(result);
 
-          // ALWAYS write back category resolution even in DRY-RUN.
-          // Also reset status to COLLECTED — the REGISTERING lock may have been set
-          // if --dry-run flag was omitted but QOO10_ALLOW_REAL_REG was not enabled.
+          // --dry-run 플래그: sheet write 완전 skip
+          if (options.dryRun) {
+            console.log(`  ✓ DRY-RUN skip (no sheet write)`);
+            break;
+          }
+
+          // QOO10_ALLOW_REAL_REG=0 (no --dry-run flag): REGISTERING 락 해제를 위해 write-back
           try {
             await updateSheetRow(row._rowIndex, {
               ...categoryUpdate,
@@ -883,7 +938,7 @@ async function main() {
     }
     
     if (results.dryRun.length > 0) {
-      console.log('=== DRY-RUN Results (sheet updated) ===');
+      console.log('=== DRY-RUN Results (no sheet writes performed) ===');
       results.dryRun.forEach(r => {
         const mode = r.mode || 'CREATE';
         console.log(`  [${mode}] ${r.vendorItemId}: jpCat=${r.categoryResolution?.jpCategoryId}, match=${r.categoryResolution?.matchType}, price=${r.qoo10SellingPrice}`);

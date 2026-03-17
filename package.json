@@ -42,11 +42,12 @@
     "coupang:browser:status": "node backend/scripts/coupang-browser-status.js",
     "coupang:collect": "node backend/scripts/coupang-collect-discovered.js",
     "coupang:collect:dry": "node backend/scripts/coupang-collect-discovered.js --dry-run",
-    "stock:check":      "node backend/scripts/coupang-stock-monitor.js",
-    "stock:check:dry":  "node backend/scripts/coupang-stock-monitor.js --dry-run",
+    "stock:check": "node backend/scripts/coupang-stock-monitor.js",
+    "stock:check:dry": "node backend/scripts/coupang-stock-monitor.js --dry-run",
     "stock:check:test": "node backend/scripts/coupang-stock-monitor.js --dry-run --limit=3"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.79.0",
     "cross-env": "^7.0.3",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",

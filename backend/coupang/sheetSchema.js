@@ -31,6 +31,7 @@ const COUPANG_DATA_HEADERS = [
   'StockQty',
   'ReviewCount',
   'ReviewAvgRating',
+  'ReviewSummary',
   'ProductAttributes',
   'CollectedPhases',
 
@@ -57,9 +58,9 @@ const COUPANG_DATA_HEADERS = [
 
 // 그룹별 컬럼 범위 (배경색 적용용)
 const HEADER_GROUPS = [
-  { label: '[C] Coupang', start: 0,  end: 20, color: { red: 0.68, green: 0.85, blue: 0.90 } }, // 하늘색
-  { label: '[Q] Qoo10',   start: 21, end: 33, color: { red: 0.85, green: 0.74, blue: 0.90 } }, // 연보라
-  { label: '[SYS]',       start: 34, end: 36, color: { red: 0.98, green: 0.90, blue: 0.68 } }, // 연노랑
+  { label: '[C] Coupang', start: 0,  end: 21, color: { red: 0.68, green: 0.85, blue: 0.90 } }, // 하늘색
+  { label: '[Q] Qoo10',   start: 22, end: 34, color: { red: 0.85, green: 0.74, blue: 0.90 } }, // 연보라
+  { label: '[SYS]',       start: 35, end: 37, color: { red: 0.98, green: 0.90, blue: 0.68 } }, // 연노랑
 ];
 
 module.exports = { COUPANG_DATA_HEADERS, HEADER_GROUPS };

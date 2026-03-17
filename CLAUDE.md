@@ -208,6 +208,16 @@ OPENCLAW_SESSION_ID
 - [x] 재고 모니터링 품절 감지 구현 (`coupang-stock-monitor.js`)
   - 접근법: 상품 상세 페이지 HTML에서 품절 셀렉터 파싱 (Playwright, Akamai 우회)
   - 감지 동작 확인 완료 / Qoo10 qty 연결은 미완
+- [x] 일본어 타이틀 변환 모듈 (`backend/qoo10/titleTranslator.js`)
+  - 방식: regex 추출 → Claude Haiku API → 카테고리 템플릿 fallback
+  - 등록 직전 `qoo10-auto-register.js`에 삽입
+  - API 실패 시에도 파이프라인 중단 없음 (fallback → 원본 타이틀 순)
+  - `registrationMessage`에 `[titleMethod=api|fallback]` prefix 기록
+- [x] Qoo10 Update API 래퍼 완성 (브랜치: oc/update-api-wrappers)
+  - `getItemDetailInfo.js`: SecondSubCat 조회 (UpdateGoods 필수 전처리)
+  - `updateGoods.js` → `updateGoodsTitle()`: ItemTitle 업데이트 전용 (SecondSubCat 자동 조회 포함)
+  - `editGoodsContents.js`: 상세페이지 HTML 업데이트
+  - `qoo10-auto-register.js` UPDATE 흐름 교체: changeFlags 기반 분기 (TITLE_CHANGED / DESC_CHANGED / PRICE_UP / PRICE_DOWN)
 
 ### 9-B. 현재 작업 순서
 
@@ -223,16 +233,25 @@ OPENCLAW_SESSION_ID
   - 수집 실패 시 해당 필드 null 처리 (전체 row 실패로 이어지지 않도록)
   - **3순위 Update API 테스트의 전제조건**: 수집 필드가 늘어나야 Update API 검증 대상이 생김
 
-- [ ] **3순위** `일본어 상품 타이틀 변환`
+- [x] **3순위** `일본어 상품 타이틀 변환` → 완료 (브랜치: oc/collection-enhance)
   - **문제**: 한국어 타이틀 그대로 등록 → 일본 Qoo10 검색 노출 불가
-  - **요건**: 자연어 번역 아님 — 일본어 검색 키워드 중심의 SEO 최적화 타이틀
-  - **채택 방식**: 하이브리드 (브랜드명/숫자/단위 regex 추출 → Claude API SEO 프롬프트 → 카테고리 템플릿 fallback)
-  - **구현 위치**: `backend/qoo10/titleTranslator.js` 신규 모듈 → `qoo10-auto-register.js` 등록 직전 삽입
+  - **채택 방식**: 하이브리드 (브랜드명/숫자/단위 regex 추출 → Claude Haiku API → 카테고리 템플릿 fallback)
+  - **구현 위치**: `backend/qoo10/titleTranslator.js` → `qoo10-auto-register.js` 등록 직전 삽입
 
-- [ ] **4순위** `Qoo10 Update API 로직 추가`
-  - 현재 구현된 `SetGoodsPriceQty` 외 API 목록 검토
-  - 래퍼 추가: `UpdateGoods`, `EditGoodsContents`
-  - CLAUDE.md 섹션 5 `UpdateGoods 필드별 실제 API 매핑` 기준 준수
+- [ ] **[전략] 일본어 상세페이지 콘텐츠 생성** (전략 파트 — 개발 후순위)
+  - **배경**: 수집 상품 대부분이 이미지 1개 + 한국어 정보만 존재
+    → 일본 마켓 등록 시 상품 설명 품질이 낮아 검색 노출 및 전환율 저하
+  - **목표**: 수집된 텍스트(ItemTitle, ItemDescriptionText, OptionsRaw, ProductAttributes)
+    + 이미지(StandardImage, DetailImages) 조합 → 일본어 상세페이지 HTML 자동 생성
+  - **구현 위치**: `backend/qoo10/contentStrategy.js` 신규 모듈
+  - **연결 시점**: `EditGoodsContents` API 래퍼 완성 후 (4순위 Update API 작업 이후)
+  - **처리 방식**: Claude API (Sonnet) — 이미지+텍스트 멀티모달 인풋
+  - **트리거 조건**: DetailImages 수 < 3 OR ItemDescriptionText 길이 < 100자
+  - **선행 조건**: 4순위(Update API 래퍼) 완료 후 착수
+
+- [x] **4순위** `Qoo10 Update API 로직 추가` → 완료 (브랜치: oc/update-api-wrappers)
+  - 래퍼 완성: `getItemDetailInfo.js`, `updateGoods.updateGoodsTitle()`, `editGoodsContents.js`
+  - `qoo10-auto-register.js` UPDATE 흐름: changeFlags 기반 분기로 교체
 
 - [ ] **5순위** `재고 모니터링 → Qoo10 qty=0 연결`
   - 품절 감지 결과 → `SetGoodsPriceQty(qty=0)` 호출
@@ -276,7 +295,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-03-16 | 작업 우선순위 최종 확정*
+*마지막 업데이트: 2026-03-17 | 4순위 Qoo10 Update API 래퍼 완성*
 
 ---
 

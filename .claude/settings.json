@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \":*)",
+      "Bash(find scripts:*)",
+      "Bash(node -e \"const cs = require\\(''./backend/services/cookieStore''\\); console.log\\(''isExpired:'', cs.isExpired\\(\\)\\); console.log\\(''daysUntilExpiry:'', cs.daysUntilExpiry\\(\\)\\); const d = cs.loadCookieData\\(\\); console.log\\(''expiresAt:'', d?.expiresAt\\); console.log\\(''cookieLength:'', cs.loadCookies\\(\\)?.length\\);\")",
+      "Bash(COUPANG_TRACER=1 npm run coupang:discover:dry -- --keyword \"텀블러\")",
+      "Read(//c/Users/skfka/AppData/Local/Temp/**)",
+      "Bash(timeout 120 node -e \":*)",
+      "Bash(node -e \"const fs=require\\(''fs''\\); const html=fs.readFileSync\\(''C:/Users/skfka/AppData/Local/Temp/coupang-search-debug.html'',''utf8''\\); const idx=html.indexOf\\(''CCEDFD''\\); const ctx=html.substring\\(idx-50,idx+300\\); const text=ctx.replace\\(/<[^>]+>/g,'' ''\\).replace\\(/\\\\s+/g,'' ''\\).trim\\(\\); console.log\\(text.substring\\(0,300\\)\\);\")",
+      "Bash(cross-env COUPANG_TRACER=1 node backend/scripts/coupang-keyword-discover.js --dry-run --keyword \"텀블러\")",
+      "Bash(COUPANG_TRACER=1 node backend/scripts/coupang-keyword-discover.js --dry-run --keyword \"텀블러\")"
+    ]
+  }
+}

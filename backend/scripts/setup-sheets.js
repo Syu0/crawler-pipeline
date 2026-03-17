@@ -57,6 +57,51 @@ async function applyHeaderGroupColors(sheets, spreadsheetId, tabName, headerGrou
   console.log(`[${tabName}] 헤더 그룹 배경색 적용 완료`);
 }
 
+async function applyChangeFlagsValidation(sheets, spreadsheetId, tabName) {
+  const sheetId = await getSheetNumericId(sheets, spreadsheetId, tabName);
+  if (sheetId === null) {
+    console.log(`[${tabName}] 시트를 찾을 수 없어 changeFlags 유효성 검사 건너뜀`);
+    return;
+  }
+
+  const colIndex = COUPANG_DATA_HEADERS.indexOf('changeFlags');
+  if (colIndex === -1) {
+    console.log(`[${tabName}] changeFlags 컬럼을 sheetSchema에서 찾을 수 없음`);
+    return;
+  }
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [{
+        setDataValidation: {
+          range: {
+            sheetId,
+            startRowIndex: 1,   // 헤더 행 제외
+            endRowIndex: 10000,
+            startColumnIndex: colIndex,
+            endColumnIndex: colIndex + 1,
+          },
+          rule: {
+            condition: {
+              type: 'ONE_OF_LIST',
+              values: [
+                { userEnteredValue: 'TITLE_CHANGED' },
+                { userEnteredValue: 'DESC_CHANGED' },
+                { userEnteredValue: 'PRICE_UP' },
+                { userEnteredValue: 'PRICE_DOWN' },
+              ],
+            },
+            showCustomUi: true,
+            strict: false,
+          },
+        },
+      }],
+    },
+  });
+  console.log(`[${tabName}] changeFlags 드롭다운 유효성 검사 적용 완료 (col ${colIndex})`);
+}
+
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 
 async function main() {
@@ -143,6 +188,7 @@ async function main() {
     }
 
     await applyHeaderGroupColors(sheets, SPREADSHEET_ID, TITLE, HEADER_GROUPS);
+    await applyChangeFlagsValidation(sheets, SPREADSHEET_ID, TITLE);
   }
 
   console.log('\n완료.');
