@@ -4,6 +4,7 @@ const DEFAULT_SERVER = 'http://localhost:4000';
 
 const btn = document.getElementById('send-btn');
 const statusEl = document.getElementById('status');
+const receiverHint = document.getElementById('receiver-hint');
 const metaEl = document.getElementById('meta');
 const urlInput = document.getElementById('server-url');
 const saveUrlBtn = document.getElementById('save-url-btn');
@@ -70,10 +71,12 @@ btn.addEventListener('click', async () => {
     // 4. 결과 저장 및 표시
     chrome.storage.local.set({ lastSentAt: now, expiresAt: json.expiresAt });
     setStatus(`✅ 신선한 쿠키 전송 완료!\n(${cookies.length}개)`, 'ok');
+    receiverHint.style.display = 'none';
     renderMeta(now, json.expiresAt);
 
   } catch (err) {
     setStatus(`❌ 전송 실패: ${err.message}`, 'err');
+    receiverHint.style.display = err.message.includes('Failed to fetch') ? 'block' : 'none';
   } finally {
     btn.disabled = false;
   }

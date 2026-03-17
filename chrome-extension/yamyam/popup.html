@@ -95,6 +95,26 @@
       cursor: pointer;
     }
     #save-url-btn:hover { background: #3a3a5a; color: #fff; }
+
+    #receiver-hint {
+      display: none;
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #aaa;
+      line-height: 1.7;
+      text-align: left;
+    }
+    #receiver-hint code {
+      font-family: 'Courier New', Courier, monospace;
+      background: #2a2a2a;
+      color: #ccc;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
   </style>
 </head>
 <body>
@@ -103,6 +123,10 @@
   <button id="send-btn">🍪 yam yam</button>
 
   <div id="status"></div>
+  <div id="receiver-hint">
+    리시버가 꺼져 있어요. 터미널에서 아래 명령어로 실행하세요:<br>
+    <code>npm run backend:start</code>
+  </div>
 
   <div class="meta" id="meta"></div>
 
