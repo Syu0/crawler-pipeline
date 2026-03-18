@@ -62,16 +62,17 @@
 상품은 반드시 아래 단일 status 값 하나만 가진다. **불린 플래그 복수 사용 금지.**
 
 ```
-DISCOVERED      → 검색결과에서 발견
-COLLECTED       → 쿠팡 상세 수집 완료
-REGISTER_READY  → Qoo10 등록 필수값 충족
-REGISTERING     → 등록 시도 중 (락 상태 — 중복 작업 금지)
-REGISTERED      → Qoo10 등록 성공
-VALIDATING      → 검수 진행 중 (락 상태)
-LIVE            → 판매 유지 중
-OUT_OF_STOCK    → 쿠팡 품절/판매불가 감지 → Qoo10 qty=0
-DEACTIVATED     → 삭제/복구 불가 → Qoo10 qty=0 고정 (수동으로만 해제)
-ERROR           → 복구 가능한 실패 상태
+DISCOVERED       → 검색결과에서 발견
+COLLECTED        → 쿠팡 상세 수집 완료
+PENDING_APPROVAL → 수집 완료, 일일 한도 내 대기 중. 시트에서 REGISTER_READY로 변경하면 등록 대상
+REGISTER_READY   → Qoo10 등록 필수값 충족 (수동 승인 완료)
+REGISTERING      → 등록 시도 중 (락 상태 — 중복 작업 금지)
+REGISTERED       → Qoo10 등록 성공
+VALIDATING       → 검수 진행 중 (락 상태)
+LIVE             → 판매 유지 중
+OUT_OF_STOCK     → 쿠팡 품절/판매불가 감지 → Qoo10 qty=0
+DEACTIVATED      → 삭제/복구 불가 → Qoo10 qty=0 고정 (수동으로만 해제)
+ERROR            → 복구 가능한 실패 상태
 ```
 
 > `REGISTERING`, `VALIDATING`은 락 상태. 중복 실행 방지 필수.
@@ -205,50 +206,78 @@ OPENCLAW_SESSION_ID
 - [x] DISCOVERED → COLLECTED 수집기 (`coupang-collect-discovered.js`)
 - [x] 시트 스키마 표준화 (`sheetSchema.js`) + `setup-sheets.js` 자동화
 - [x] status ENUM 파이프라인 전체 연결
-- [x] 재고 모니터링 품절 감지 구현 (`coupang-stock-monitor.js`)
+- [x] 재고 모니터링 → Qoo10 qty 연결 (`coupang-stock-monitor.js`, 브랜치: oc/stock-monitor-qoo10)
   - 접근법: 상품 상세 페이지 HTML에서 품절 셀렉터 파싱 (Playwright, Akamai 우회)
-  - 감지 동작 확인 완료 / Qoo10 qty 연결은 미완
+  - OUT_OF_STOCK 감지 → SetGoodsPriceQty(qty=0) → status OUT_OF_STOCK 전이
+  - IN_STOCK 복구 감지 → SetGoodsPriceQty(qty=100) → status LIVE 전이
+  - qoo10ItemId 없음 / API 실패 시 status 변경 없이 errorMessage만 기록
+  - dry-run 지원, row 독립 try-catch
+- [x] 일본어 타이틀 변환 모듈 (`backend/qoo10/titleTranslator.js`)
+  - 방식: regex 추출 → Claude Haiku API → 카테고리 템플릿 fallback
+  - 등록 직전 `qoo10-auto-register.js`에 삽입
+  - API 실패 시에도 파이프라인 중단 없음 (fallback → 원본 타이틀 순)
+  - `registrationMessage`에 `[titleMethod=api|fallback]` prefix 기록
+- [x] Qoo10 Update API 래퍼 완성 (브랜치: oc/update-api-wrappers)
+  - `getItemDetailInfo.js`: SecondSubCat 조회 (UpdateGoods 필수 전처리)
+  - `updateGoods.js` → `updateGoodsTitle()`: ItemTitle 업데이트 전용 (SecondSubCat 자동 조회 포함)
+  - `editGoodsContents.js`: 상세페이지 HTML 업데이트
+  - `qoo10-auto-register.js` UPDATE 흐름 교체: changeFlags 기반 분기 (TITLE_CHANGED / DESC_CHANGED / PRICE_UP / PRICE_DOWN)
+  > **changeFlags 허용값:**
+  > `PRICE_UP` | `PRICE_DOWN` | `TITLE_CHANGED` | `DESC_CHANGED` | `CATEGORY_CHANGED`
+  > 복수 플래그는 파이프(`|`)로 구분. 처리 완료 후 빈 문자열로 초기화.
+  > `CATEGORY_CHANGED`: UpdateGoods 필요. 현재 자동 처리 코드 없음 → 수동 트리거.
+  > 전체 목록은 config 시트 `VALID_CHANGE_FLAGS` 키 참고.
+- [x] 인벤토리 관리 qoo10_inventory 시트 + 동기화/qty처리 스크립트 | 브랜치: oc/qoo10-inventory-mgmt
 
-### 9-B. 현재 작업 순서
+### 9-B. 현재 작업 순서 (2026-03-18 기준)
 
-- [ ] **1순위** `쿠팡 블록 대응 강화`
-  - 현재: 블록 감지 → 1시간 대기 × 2회 → 포기 + 이메일 알림 → 파이프라인 중단
-  - 목표: 블록 상황에서도 파이프라인이 멈추지 않도록 대응 전략 강화
-  - 수정 대상: `blockDetector.js`, `coupang-collect-discovered.js` 흐름 제어
-  - **선행 이유**: 블록 대응이 안정화되어야 수집 보강 테스트 결과를 신뢰할 수 있음
-    (새 셀렉터 실패 원인이 블록인지 코드 문제인지 구분 불가 → 디버깅 오염 방지)
+#### ✅ 완료
+- [x] **1순위** 쿠팡 블록 대응 강화 | 브랜치: oc/block-handling | 커밋: 7b4f723
+- [x] **2순위** 쿠팡 수집 보강 | 브랜치: oc/collection-enhance | 커밋: 395bb2f
+- [x] **3순위** 일본어 타이틀 변환 (`titleTranslator.js`) | 브랜치: oc/collection-enhance
+- [x] **4순위** Qoo10 Update API 래퍼 완성 | 브랜치: oc/update-api-wrappers
+- [x] **5순위** 재고 모니터링 → qty=0 연결 (`coupang-stock-monitor.js`) | 브랜치: oc/stock-monitor-qoo10
+- [x] **문서** CURRENT_TASK.md 동기화 완료 (2026-03-17)
+- [x] **인벤토리 관리** qoo10_inventory 시트 + 동기화/qty처리 스크립트 | 브랜치: oc/qoo10-inventory-mgmt
+- [x] **선행①** 타이틀 변환 미적용 상품 원인 파악
+  - 결론: 코드 버그 없음. 시트 ItemTitle은 원본 한국어 유지(설계 의도), Qoo10 실제 타이틀은 일본어 정상 적용.
+  - 레거시 4개(머지 이전 등록): 운영 중 Update 흐름 실행 시 자동 갱신됨
+- [x] **선행②** 재고 모니터 실검증
+  - IN_STOCK 유지 정상 확인. OUT_OF_STOCK 전이 경로는 dry-run 검증 완료.
+  - 추가 발견: 1195611873 카테고리 미스매치 (category_mapping 시트 MANUAL 수정 필요)
+- [x] **6순위** COLLECTED → Qoo10 등록 파이프라인 자동 연결 | 브랜치: oc/auto-register-pipeline
+  - `coupang-promote-to-pending.js`: COLLECTED → PENDING_APPROVAL (MAX_DAILY_REGISTER 한도)
+  - `qoo10-auto-register.js`: REGISTER_READY만 처리 (COLLECTED 건너뜀)
+  - `setup-sheets.js`: MAX_DAILY_REGISTER 기본값 추가 + --force-defaults 옵션
 
-- [ ] **2순위** `쿠팡 수집 보강`
-  - 미수집 필드 추가: Options, ExtraImages, 상세 이미지 URL, 리뷰 5개, 문의글 5개
-  - 수집 실패 시 해당 필드 null 처리 (전체 row 실패로 이어지지 않도록)
-  - **3순위 Update API 테스트의 전제조건**: 수집 필드가 늘어나야 Update API 검증 대상이 생김
+#### 🔄 대기 중
 
-- [ ] **3순위** `일본어 상품 타이틀 변환`
-  - **문제**: 한국어 타이틀 그대로 등록 → 일본 Qoo10 검색 노출 불가
-  - **요건**: 자연어 번역 아님 — 일본어 검색 키워드 중심의 SEO 최적화 타이틀
-  - **채택 방식**: 하이브리드 (브랜드명/숫자/단위 regex 추출 → Claude API SEO 프롬프트 → 카테고리 템플릿 fallback)
-  - **구현 위치**: `backend/qoo10/titleTranslator.js` 신규 모듈 → `qoo10-auto-register.js` 등록 직전 삽입
+- [ ] **[추후 연동]** PENDING_APPROVAL 승인 자동화
+  - 현재: 시트에서 수동으로 REGISTER_READY 변경
+  - 검토: 대시보드 승인 버튼 or Slack 액션 연동
+  - 착수 조건: 대시보드 개발 단계 또는 운영 자동화 필요 시점
 
-- [ ] **4순위** `Qoo10 Update API 로직 추가`
-  - 현재 구현된 `SetGoodsPriceQty` 외 API 목록 검토
-  - 래퍼 추가: `UpdateGoods`, `EditGoodsContents`
-  - CLAUDE.md 섹션 5 `UpdateGoods 필드별 실제 API 매핑` 기준 준수
+- [ ] **[cron 붙일 때]** AUTO_REGISTER_ENABLED 플래그 추가
+  - config 시트에 `AUTO_REGISTER_ENABLED` 키 추가 (true/false)
+  - promote 스크립트 실행 시작 시점에 이 값을 읽어 false면 즉시 종료 (cron 긴급정지용)
+  - false 시 출력: `[promote] 비활성화 상태입니다 (AUTO_REGISTER_ENABLED=false). config 시트에서 true로 변경하면 재개됩니다.`
+  - setup-sheets.js 기본값에도 추가
 
-- [ ] **5순위** `재고 모니터링 → Qoo10 qty=0 연결`
-  - 품절 감지 결과 → `SetGoodsPriceQty(qty=0)` 호출
-  - 시트 status → OUT_OF_STOCK 전이
-  - 재판매 감지 시 → qty=100 + LIVE 복구
+- [ ] **[전략] 일본어 상세페이지 콘텐츠 생성**
+  - 착수 조건: 6순위 자동 연결 완료 후
+  - 구현 위치: `backend/qoo10/contentStrategy.js`
+  - 트리거: DetailImages < 3개 OR ItemDescriptionText < 100자
 
-- [ ] **6순위** `COLLECTED → Qoo10 등록 파이프라인 자동 연결` (운영 직전)
-  - **포인트**: 현재 `qoo10-auto-register.js`는 status ENUM 흐름과 분리 — 수동 실행만 가능
-  - 목표: COLLECTED 상태 자동 감지 → REGISTERING 락 → 등록 → REGISTERED 전이 end-to-end 자동화
-  - **착수 조건**: 1~5순위 완료 후 — 수집/품질/업데이트 파이프라인이 안정화된 시점
+#### ⏸ 보류 (운영 안정화 후)
+- [ ] **7순위** Qoo10 시장 가격 경쟁성 자동 스크래핑
+- [ ] **운영 후** 카테고리 특화 전략, 마케팅, 상세페이지 품질 향상
 
-- [ ] **7순위** `Qoo10 시장 가격 경쟁성 검증`
-  - **채택 방식**: Qoo10 검색 스크래핑 자동화 (동일/유사 키워드 → 상위 N개 가격 수집 → 우리 가격 비교)
-  - **판단 로직**: 경쟁 불가 → 상품 교체 플래그 or 번들 기획 제안
-  - **선행 요건**: 1~5순위 파이프라인 안정화 이후 착수
-  - **난이도**: 높음
+#### 📋 별도 논의 (코드 작업 아님)
+- [ ] **시장 조사** 키워드/카테고리 전략 수립
+  - 현재 등록 카테고리: 텀블러, 자동차용품 계열
+  - 논의 필요: 이 방향 유지 vs 새 카테고리 진입
+  - 진행 방식: 새 채팅에서 별도 논의 후 keywords 시트에 반영
+- [ ] **카테고리 미스매치 수동 수정**: 1195611873 (자동차 기어노브) → category_mapping 시트에서 jpCategoryId를 자동차 카테고리로 MANUAL 변경
 
 ### 9-C. dashboard 작업
 
@@ -276,7 +305,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-03-16 | 작업 우선순위 최종 확정*
+*마지막 업데이트: 2026-03-18 | 6순위 COLLECTED → Qoo10 자동 연결 파이프라인 완료*
 
 ---
 
