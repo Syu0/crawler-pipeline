@@ -25,10 +25,7 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const cookieStore = require('../services/cookieStore');
 const {
   isBlocked,
-  wait,
   sendBlockAlertEmail,
-  RETRY_WAIT_MS,
-  RETRY_COUNT,
 } = require('./blockDetector');
 
 playwrightChromium.use(StealthPlugin());
@@ -152,23 +149,17 @@ async function launch(options = {}) {
 
   if (!skipWarming) {
     const warmCtx = await getContext(browser);
-    let blocked = await _warmup(warmCtx);
+    const blocked = await _warmup(warmCtx);
 
     if (blocked) {
-      for (let attempt = 1; attempt <= RETRY_COUNT; attempt++) {
-        console.log(
-          `[BrowserManager] 블록 감지. ${RETRY_WAIT_MS / 60000}분 대기 (${attempt}/${RETRY_COUNT})...`
-        );
-        await wait(RETRY_WAIT_MS);
-        blocked = await _warmup(warmCtx);
-        if (!blocked) break;
-        if (attempt === RETRY_COUNT) {
-          await sendBlockAlertEmail();
-          await warmCtx.close();
-          await browser.close();
-          process.exit(1);
-        }
-      }
+      console.error('[BrowserManager] 블록 감지 — 이메일 발송 후 종료');
+      await sendBlockAlertEmail(null, {
+        subject: '[RoughDiamond] Coupang IP 블록 감지',
+        text: "IP 블록이 감지되었습니다. 공유기 재시작 후 'npm run coupang:browser:start'를 다시 실행하세요.",
+      });
+      await warmCtx.close();
+      await browser.close();
+      process.exit(1);
     }
 
     await warmCtx.close();

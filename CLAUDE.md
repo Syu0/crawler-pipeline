@@ -195,6 +195,7 @@ OPENCLAW_SESSION_ID
 
 - [x] `SetGoodsPriceQty` 재고/가격 업데이트 API 래퍼 구현 및 실제 검증 완료
 - [x] 브라우저 데몬 가드 (`browserGuard.js`) — 데몬 미실행 시 즉시 종료 + 안내
+- [x] 블록 감지 즉시 이메일 발송 + 종료 (재시도 2회 제거)
 - [x] 쿠팡 서버사이드 수집 기반 구축
   - Playwright + stealth + cookieStore 쿠키 주입으로 Akamai 우회 성공
   - 가격 셀렉터 타이밍 이슈 수정 완료 (`.final-price-amount` + `waitForSelector`)

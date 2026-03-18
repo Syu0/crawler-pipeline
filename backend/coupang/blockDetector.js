@@ -138,8 +138,9 @@ async function withSoftBlockRetry(fn, opts = {}) {
  *
  * 새 shape: { success, rowError, softBlock, hardBlock, total, lastUrl?, triggerReason }
  * 구 shape:  { blocked, total, success, error } | null  (하위 호환)
+ * override:  { subject, text } — subject/text 직접 지정 (warming 블록 등 전용 메시지)
  */
-async function sendBlockAlertEmail(stats = null) {
+async function sendBlockAlertEmail(stats = null, override = null) {
   const user = process.env.GMAIL_USER;
   const pass = process.env.GMAIL_APP_PASSWORD;
   const to = process.env.NOTIFY_EMAIL || user;
@@ -153,6 +154,12 @@ async function sendBlockAlertEmail(stats = null) {
     service: 'gmail',
     auth: { user, pass },
   });
+
+  if (override && override.subject && override.text) {
+    await transporter.sendMail({ from: user, to, subject: override.subject, text: override.text });
+    console.log(`[blockDetector] 블록 알림 이메일 발송 완료 → ${to}`);
+    return;
+  }
 
   const isNewShape = stats && stats.triggerReason !== undefined;
 
