@@ -245,10 +245,13 @@ OPENCLAW_SESSION_ID
 - [x] **선행②** 재고 모니터 실검증
   - IN_STOCK 유지 정상 확인. OUT_OF_STOCK 전이 경로는 dry-run 검증 완료.
   - 추가 발견: 1195611873 카테고리 미스매치 (category_mapping 시트 MANUAL 수정 필요)
-- [x] **6순위** COLLECTED → Qoo10 등록 파이프라인 자동 연결 | 브랜치: oc/auto-register-pipeline
+- [x] **6순위** COLLECTED → Qoo10 등록 파이프라인 자동 연결 | 브랜치: oc/auto-register-pipeline (머지 완료)
   - `coupang-promote-to-pending.js`: COLLECTED → PENDING_APPROVAL (MAX_DAILY_REGISTER 한도)
   - `qoo10-auto-register.js`: REGISTER_READY만 처리 (COLLECTED 건너뜀)
   - `setup-sheets.js`: MAX_DAILY_REGISTER 기본값 추가 + --force-defaults 옵션
+  - ux: COLLECTED 0개 시 다음 행동 안내 추가
+  - docs: 매일 시작 절차 운영 매뉴얼 TODO 추가
+  - ux: 블록 대기 로그에 시작/재시도 예정 시각 추가
 
 #### 🔄 대기 중
 
@@ -311,7 +314,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-03-18 | 6순위 COLLECTED → Qoo10 자동 연결 파이프라인 완료*
+*마지막 업데이트: 2026-03-18 | 6순위 oc/auto-register-pipeline 머지 완료*
 
 ---
 
