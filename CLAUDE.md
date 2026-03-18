@@ -114,11 +114,12 @@ https://api.qoo10.jp/GMKT.INC.Front.QAPIService/ebayjapan.qapi
 
 ```
 ItemTitle        → ItemsBasic.UpdateGoods       ✅ overwrite-safe 확인
+SecondSubCat     → ItemsBasic.UpdateGoods       ✅ (CATEGORY_CHANGED 분기에서 사용)
 ItemQty          → ItemsOrder.SetGoodsPriceQty
 ItemDescription  → ItemsContents.EditGoodsContents
 ```
 
-> `UpdateGoods`는 Title 업데이트 전용으로만 안정적으로 동작한다.
+> `UpdateGoods`는 Title / SecondSubCat 업데이트에 안정적으로 동작한다.
 > 재고/가격/상세는 반드시 전용 API를 사용하라.
 
 ### 테스트 안전장치
@@ -222,10 +223,11 @@ OPENCLAW_SESSION_ID
   - `updateGoods.js` → `updateGoodsTitle()`: ItemTitle 업데이트 전용 (SecondSubCat 자동 조회 포함)
   - `editGoodsContents.js`: 상세페이지 HTML 업데이트
   - `qoo10-auto-register.js` UPDATE 흐름 교체: changeFlags 기반 분기 (TITLE_CHANGED / DESC_CHANGED / PRICE_UP / PRICE_DOWN)
+  - `updateGoodsCategory()`: SecondSubCat 카테고리 변경 (CATEGORY_CHANGED 플래그 처리)
   > **changeFlags 허용값:**
   > `PRICE_UP` | `PRICE_DOWN` | `TITLE_CHANGED` | `DESC_CHANGED` | `CATEGORY_CHANGED`
   > 복수 플래그는 파이프(`|`)로 구분. 처리 완료 후 빈 문자열로 초기화.
-  > `CATEGORY_CHANGED`: UpdateGoods 필요. 현재 자동 처리 코드 없음 → 수동 트리거.
+  > `CATEGORY_CHANGED`: category_mapping 시트에서 MANUAL jpCategoryId 조회 → UpdateGoods 자동 처리.
   > 전체 목록은 config 시트 `VALID_CHANGE_FLAGS` 키 참고.
 - [x] 인벤토리 관리 qoo10_inventory 시트 + 동기화/qty처리 스크립트 | 브랜치: oc/qoo10-inventory-mgmt
 

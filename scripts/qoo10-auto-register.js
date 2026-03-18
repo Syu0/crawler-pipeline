@@ -17,7 +17,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend'
 
 const { getSheetsClient } = require('./lib/sheetsClient');
 const { registerNewGoods } = require('../backend/qoo10/registerNewGoods');
-const { updateExistingGoods } = require('../backend/qoo10/updateGoods');
+const { updateExistingGoods, updateGoodsCategory } = require('../backend/qoo10/updateGoods');
 const { calculateSellingPrice } = require('./lib/qoo10PayloadGenerator');
 const { resolveJpCategoryId } = require('./lib/categoryResolver');
 const { decideItemPriceJpy } = require('../backend/pricing/priceDecision');
@@ -442,6 +442,121 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
     };
   }
   
+  // ===== CATEGORY_CHANGED 분기 =====
+  // changeFlags에 CATEGORY_CHANGED 포함 시 UpdateGoods로 SecondSubCat만 업데이트 후 반환
+  if (isUpdateMode) {
+    const changeFlags = (row.changeFlags || '').split('|').map(f => f.trim()).filter(Boolean);
+    if (changeFlags.includes('CATEGORY_CHANGED')) {
+      console.log(`[Registration] CATEGORY_CHANGED detected for ${existingQoo10ItemId}`);
+
+      // category_mapping에서 최신 MANUAL jpCategoryId 조회
+      const coupangCategoryKey = row.coupangCategoryKeyUsed || '';
+      let newJpCategoryId = null;
+
+      if (coupangCategoryKey) {
+        try {
+          const { getSheetsClient } = require('./lib/sheetsClient');
+          const sh = sheetsClient || await getSheetsClient();
+          const mapRes = await sh.spreadsheets.values.get({
+            spreadsheetId: SHEET_ID,
+            range: 'category_mapping!A:J',
+          });
+          const mapRows = mapRes.data.values || [];
+          const mapHeader = mapRows[0] || [];
+          const keyIdx = mapHeader.indexOf('coupangCategoryKey');
+          const catIdx = mapHeader.indexOf('jpCategoryId');
+          const typeIdx = mapHeader.indexOf('matchType');
+          // MANUAL 우선, 없으면 첫 번째 일치 row 사용
+          let fallbackCatId = null;
+          for (let i = 1; i < mapRows.length; i++) {
+            const r = mapRows[i];
+            if (r[keyIdx] === coupangCategoryKey) {
+              if (r[typeIdx] === 'MANUAL') {
+                newJpCategoryId = r[catIdx];
+                break;
+              } else if (!fallbackCatId) {
+                fallbackCatId = r[catIdx];
+              }
+            }
+          }
+          if (!newJpCategoryId) newJpCategoryId = fallbackCatId;
+        } catch (e) {
+          console.warn(`[Registration] category_mapping lookup failed: ${e.message}`);
+        }
+      }
+
+      if (!newJpCategoryId) {
+        console.warn(`[Registration] CATEGORY_CHANGED skip — no jpCategoryId found for key="${coupangCategoryKey}"`);
+        return {
+          status: 'FAILED',
+          vendorItemId,
+          qoo10ItemId: existingQoo10ItemId,
+          qoo10SellingPrice: computedPriceJpy,
+          apiError: `CATEGORY_CHANGED: jpCategoryId not found in category_mapping for key="${coupangCategoryKey}"`,
+          categoryResolution,
+          mode: 'CATEGORY_CHANGED'
+        };
+      }
+
+      if (dryRun) {
+        console.log(`[DRY_RUN] CATEGORY_CHANGED: would update SecondSubCat to ${newJpCategoryId}`);
+        return {
+          status: 'DRY_RUN',
+          vendorItemId,
+          qoo10ItemId: existingQoo10ItemId,
+          qoo10SellingPrice: computedPriceJpy,
+          categoryResolution,
+          mode: 'CATEGORY_CHANGED',
+          newJpCategoryId
+        };
+      }
+
+      const catResult = await updateGoodsCategory(existingQoo10ItemId, newJpCategoryId);
+
+      if (catResult.dryRun) {
+        console.log(`[DRY_RUN] CATEGORY_CHANGED: would update SecondSubCat to ${newJpCategoryId}`);
+        return {
+          status: 'DRY_RUN',
+          vendorItemId,
+          qoo10ItemId: existingQoo10ItemId,
+          qoo10SellingPrice: computedPriceJpy,
+          categoryResolution,
+          mode: 'CATEGORY_CHANGED',
+          newJpCategoryId
+        };
+      }
+
+      if (catResult.success) {
+        // changeFlags에서 CATEGORY_CHANGED 제거 (다른 플래그 유지)
+        const remaining = changeFlags.filter(f => f !== 'CATEGORY_CHANGED').join('|');
+        return {
+          status: 'SUCCESS',
+          vendorItemId,
+          qoo10ItemId: existingQoo10ItemId,
+          qoo10SellingPrice: computedPriceJpy,
+          categoryResolution: {
+            jpCategoryId: newJpCategoryId,
+            matchType: 'MANUAL',
+            coupangCategoryKey
+          },
+          mode: 'CATEGORY_CHANGED',
+          _changeFlagsAfter: remaining,
+          _registrationMessage: `[categoryUpdate] SecondSubCat updated to ${newJpCategoryId}`
+        };
+      } else {
+        return {
+          status: 'FAILED',
+          vendorItemId,
+          qoo10ItemId: existingQoo10ItemId,
+          qoo10SellingPrice: computedPriceJpy,
+          apiError: catResult.resultMsg,
+          categoryResolution,
+          mode: 'CATEGORY_CHANGED'
+        };
+      }
+    }
+  }
+
   // ===== UPDATE MODE =====
   if (isUpdateMode) {
     console.log(`[Registration] Updating existing Qoo10 item: ${existingQoo10ItemId}`);
@@ -704,19 +819,24 @@ async function main() {
               status: 'REGISTERED',
               registrationMode: 'REAL',
               registrationStatus: 'SUCCESS',
-              registrationMessage: result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully',
+              registrationMessage: result._registrationMessage
+              || (result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully'),
               lastRegisteredAt: new Date().toISOString()
             };
-            
+
             // Only set these if we have values (don't overwrite existing with empty)
             if (result.qoo10ItemId) sheetUpdate.qoo10ItemId = result.qoo10ItemId;
             if (result.qoo10SellingPrice) sheetUpdate.qoo10SellingPrice = result.qoo10SellingPrice;
             if (result.sellerCode) sheetUpdate.qoo10SellerCode = result.sellerCode;
-            
-            // Clear needsUpdate flag after successful update
+
+            // Clear needsUpdate / changeFlags after successful update
             if (result.mode === 'UPDATE') {
               sheetUpdate.needsUpdate = 'NO';
               sheetUpdate.changeFlags = '';
+            } else if (result.mode === 'CATEGORY_CHANGED') {
+              // 나머지 changeFlags 유지, CATEGORY_CHANGED만 제거
+              sheetUpdate.changeFlags = result._changeFlagsAfter ?? '';
+              if (!sheetUpdate.changeFlags) sheetUpdate.needsUpdate = 'NO';
             }
             
             await updateSheetRow(row._rowIndex, sheetUpdate);

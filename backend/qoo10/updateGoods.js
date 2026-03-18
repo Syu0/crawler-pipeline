@@ -18,7 +18,7 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-const { updateGoods } = require('./client');
+const { updateGoods, getItemDetailInfo } = require('./client');
 
 // Default ShippingNo (same as registerNewGoods)
 const DEFAULT_SHIPPING_NO = '471554';
@@ -257,7 +257,83 @@ async function updateExistingGoods(input, currentRowData = {}) {
   }
 }
 
+/**
+ * Update SecondSubCat (category) for an existing Qoo10 item.
+ * Fetches current ItemTitle via GetItemDetailInfo (required by UpdateGoods).
+ *
+ * @param {string} itemCode - Qoo10 item code
+ * @param {string} newJpCategoryId - New JP category ID (SecondSubCat)
+ * @returns {Promise<Object>} Result object
+ */
+async function updateGoodsCategory(itemCode, newJpCategoryId) {
+  const ALLOW_REAL = process.env.QOO10_ALLOW_REAL_REG === '1';
+
+  if (!itemCode) {
+    return { success: false, resultCode: -1, resultMsg: 'ItemCode is required' };
+  }
+  if (!newJpCategoryId) {
+    return { success: false, resultCode: -1, resultMsg: 'newJpCategoryId is required' };
+  }
+
+  console.log(`[UpdateGoodsCategory] Fetching current info for ItemCode=${itemCode}`);
+
+  // Step 1: get current title (required by UpdateGoods)
+  let currentTitle = '';
+  try {
+    const detail = await getItemDetailInfo(itemCode);
+    // API returns ResultObject with item data
+    const obj = detail.ResultObject || detail.resultObject || detail;
+    currentTitle = obj.ItemTitle || obj.itemTitle || '';
+    if (!currentTitle) {
+      console.warn(`[UpdateGoodsCategory] Could not read ItemTitle from GetItemDetailInfo response`);
+    }
+  } catch (err) {
+    return { success: false, resultCode: -999, resultMsg: `GetItemDetailInfo failed: ${err.message}` };
+  }
+
+  if (!ALLOW_REAL) {
+    console.log(`[UpdateGoodsCategory] DRY-RUN: would set SecondSubCat=${newJpCategoryId} (ItemTitle="${currentTitle}")`);
+    return {
+      success: true,
+      resultCode: -1,
+      resultMsg: 'Dry-run mode: QOO10_ALLOW_REAL_REG not enabled',
+      dryRun: true,
+      itemCode,
+      newJpCategoryId,
+      currentTitle
+    };
+  }
+
+  // Step 2: call UpdateGoods with SecondSubCat + current title
+  const params = {
+    returnType: 'application/json',
+    ItemCode: String(itemCode),
+    SecondSubCat: String(newJpCategoryId),
+    ItemTitle: currentTitle,
+  };
+
+  console.log(`[UpdateGoodsCategory] Calling UpdateGoods: ItemCode=${itemCode} SecondSubCat=${newJpCategoryId}`);
+
+  try {
+    const response = await updateGoods(params);
+    const resultCode = Number(response.ResultCode ?? response.resultCode ?? -999);
+    const resultMsg = response.ResultMsg || response.resultMsg || 'Unknown';
+
+    if (resultCode === 0) {
+      console.log(`[UpdateGoodsCategory] SUCCESS: SecondSubCat updated to ${newJpCategoryId}`);
+      return { success: true, resultCode, resultMsg, itemCode, newJpCategoryId };
+    } else {
+      console.error(`[UpdateGoodsCategory] FAILED: ${resultMsg} (code: ${resultCode})`);
+      return { success: false, resultCode, resultMsg, itemCode, newJpCategoryId };
+    }
+  } catch (err) {
+    console.error(`[UpdateGoodsCategory] Exception: ${err.message}`);
+    return { success: false, resultCode: -999, resultMsg: err.message, itemCode, newJpCategoryId };
+  }
+}
+
 module.exports = {
   updateExistingGoods,
-  buildUpdateGoodsParams
+  buildUpdateGoodsParams,
+  updateGoodsCategory
 };

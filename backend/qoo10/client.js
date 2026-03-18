@@ -160,9 +160,21 @@ function updateGoods(params) {
   return qoo10PostMethod('ItemsBasic.UpdateGoods', params, '1.1');
 }
 
+/**
+ * GetItemDetailInfo method - read-back existing item details
+ * @param {string} itemCode - Qoo10 item code
+ */
+function getItemDetailInfo(itemCode) {
+  return qoo10PostMethod('ItemsLookup.GetItemDetailInfo', {
+    returnType: 'application/json',
+    ItemCode: String(itemCode)
+  }, '1.1');
+}
+
 module.exports = {
   qoo10PostMethod,
   testQoo10Connection,
   setNewGoods,
-  updateGoods
+  updateGoods,
+  getItemDetailInfo
 };
