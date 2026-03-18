@@ -125,7 +125,10 @@ async function main() {
   console.log(`[promote] COLLECTED 상품: ${collectedRows.length}개 발견`);
 
   if (collectedRows.length === 0) {
-    console.log('[promote] 전환할 COLLECTED 상품이 없습니다. 종료합니다.');
+    console.log('[promote] 전환할 COLLECTED 상품이 없습니다.');
+    console.log('          → DISCOVERED 상품을 수집하려면: npm run coupang:collect');
+    console.log('          → 키워드 탐색부터 필요하다면:  npm run coupang:discover');
+    console.log('                                         npm run coupang:collect');
     return;
   }
 
