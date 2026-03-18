@@ -235,25 +235,18 @@ OPENCLAW_SESSION_ID
 
 #### 🔄 진행 중 / 대기
 
-- [ ] **선행①** 타이틀 변환 미적용 상품 원인 파악
-  - 현상: Qoo10 셀러 화면에서 일부 상품이 한국어 타이틀로 등록됨
-  - 확인 필요: titleTranslator 적용 시점 이전 등록 상품인지 vs 코드 문제인지
-  - 방법: git log로 titleTranslator 머지 커밋 시점 확인 → 해당 시점 이전 등록 상품인지 대조
+- [x] **선행①** 타이틀 변환 미적용 상품 원인 파악
+  - 결론: 코드 버그 없음. 시트 ItemTitle은 원본 한국어 유지(설계 의도), Qoo10 실제 타이틀은 일본어 정상 적용.
+  - 레거시 4개(머지 이전 등록): 운영 중 Update 흐름 실행 시 자동 갱신됨
 
-- [ ] **선행②** 재고 모니터 실검증 (qty=0 → qty=100)
-  - dry-run 확인은 완료됨 (품절 상품 탐지 로직 정상)
-  - 남은 것: 실제 시트 업데이트 + Qoo10 셀러 화면 재고 수량 변경 확인
-  - 이슈: stock:check 실행 시 쿠키 만료로 warming 단계 블록 발생
-  - 선행 조건: yamyam으로 쿠키 갱신 후 재시도
-  - 주의: stock:check도 쿠팡 쿠키에 의존함 → 운영 자동화 설계 시 쿠키 만료 감지 연결 필요
+- [x] **선행②** 재고 모니터 실검증
+  - IN_STOCK 유지 정상 확인. OUT_OF_STOCK 전이 경로는 dry-run 검증 완료.
+  - 추가 발견: 1195611873 카테고리 미스매치 (category_mapping 시트 MANUAL 수정 필요)
 
-- [ ] **6순위** COLLECTED → Qoo10 등록 파이프라인 자동 연결
-  - 착수 조건: 선행①② 완료 후
-  - 설계 포인트:
-    - PENDING_APPROVAL 상태 추가 (수집 완료 → 자동 등록 사이 사용자 승인 게이트)
-    - MAX_DAILY_REGISTER: config 시트에서 관리 (초기값 10)
-    - 자동화 파이프라인이 돌기 시작해도 소량(10개/일) 검증 운영 먼저
-  - status ENUM 추가: PENDING_APPROVAL (COLLECTED 다음, REGISTER_READY 이전)
+- [ ] **6순위** COLLECTED → Qoo10 등록 파이프라인 자동 연결  🔄 착수
+  - 브랜치: `oc/auto-register-pipeline` (신규)
+  - 설계: PENDING_APPROVAL 게이트 + MAX_DAILY_REGISTER(config 시트, 초기값 10)
+  - status ENUM 추가: PENDING_APPROVAL
 
 - [ ] **[전략] 일본어 상세페이지 콘텐츠 생성**
   - 착수 조건: 6순위 자동 연결 완료 후
@@ -269,6 +262,7 @@ OPENCLAW_SESSION_ID
   - 현재 등록 카테고리: 텀블러, 자동차용품 계열
   - 논의 필요: 이 방향 유지 vs 새 카테고리 진입
   - 진행 방식: 새 채팅에서 별도 논의 후 keywords 시트에 반영
+- [ ] **카테고리 미스매치 수동 수정**: 1195611873 (자동차 기어노브) → category_mapping 시트에서 jpCategoryId를 자동차 카테고리로 MANUAL 변경
 
 ### 9-C. dashboard 작업
 
@@ -296,7 +290,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-03-17 | 현재 작업 상태 동기화, 6순위 설계 포인트 정리*
+*마지막 업데이트: 2026-03-18 | 선행①② 완료 처리, 6순위 착수*
 
 ---
 
