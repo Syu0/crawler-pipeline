@@ -41,6 +41,7 @@ const {
 } = require('../coupang/sheetsClient');
 const { COUPANG_DATA_HEADERS } = require('../coupang/sheetSchema');
 const { scrapeCoupangProductPlaywright } = require('../coupang/playwrightScraper');
+const { assertBrowserRunning } = require('./browserGuard');
 const { collectAllPhases } = require('../coupang/detailPageParser');
 const browserManager = require('../coupang/browserManager');
 const { wait, classifyError, withSoftBlockRetry, sendBlockAlertEmail } = require('../coupang/blockDetector');
@@ -92,6 +93,7 @@ function parseArgs() {
 
 // ── 메인 ─────────────────────────────────────────────────────────────────────
 async function main() {
+  await assertBrowserRunning();
   const { dryRun, limit, shutdown, phases } = parseArgs();
 
   // Phase 1은 playwrightScraper가 담당; Phase 2-5는 detailPageParser가 담당

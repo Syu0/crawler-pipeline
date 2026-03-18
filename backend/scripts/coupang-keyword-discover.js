@@ -47,6 +47,7 @@ const {
   RETRY_WAIT_MS,
   RETRY_COUNT,
 } = require('../coupang/blockDetector');
+const { assertBrowserRunning } = require('./browserGuard');
 
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 const TRACE = process.env.COUPANG_TRACER === '1';
@@ -76,6 +77,7 @@ function parseArgs() {
 
 // ── 메인 ─────────────────────────────────────────────────────────────────────
 async function main() {
+  await assertBrowserRunning();
   const { dryRun, keyword: cliKeyword, shutdown } = parseArgs();
 
   console.log('='.repeat(50));

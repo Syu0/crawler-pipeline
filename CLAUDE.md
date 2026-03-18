@@ -184,6 +184,8 @@ OPENCLAW_SESSION_ID
 - `DEACTIVATED`는 코드가 자동 해제 금지. 사람이 수동으로만 풀기.
 - Emergent 프롬프트 작성 시: **수정 범위 명시 + 아키텍처 변경 금지 지시 포함**.
 - 군더더기 없이 바로 구현. 한 줄이면 한 줄로 끝낸다.
+- 브라우저를 사용하는 스크립트는 반드시 `browserGuard.assertBrowserRunning()`으로 시작한다.
+  새 Playwright 인스턴스 생성 = Akamai 블록 트리거.
 
 ---
 
@@ -192,6 +194,7 @@ OPENCLAW_SESSION_ID
 ### 9-A. crawler-pipeline 완료 항목
 
 - [x] `SetGoodsPriceQty` 재고/가격 업데이트 API 래퍼 구현 및 실제 검증 완료
+- [x] 브라우저 데몬 가드 (`browserGuard.js`) — 데몬 미실행 시 즉시 종료 + 안내
 - [x] 쿠팡 서버사이드 수집 기반 구축
   - Playwright + stealth + cookieStore 쿠키 주입으로 Akamai 우회 성공
   - 가격 셀렉터 타이밍 이슈 수정 완료 (`.final-price-amount` + `waitForSelector`)

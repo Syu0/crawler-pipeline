@@ -40,6 +40,7 @@ const {
   RETRY_COUNT,
 } = require('../coupang/blockDetector');
 const { setGoodsPriceQty } = require('./qoo10.setGoodsPriceQty');
+const { assertBrowserRunning } = require('./browserGuard');
 
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 const TAB            = 'coupang_datas';
@@ -111,6 +112,7 @@ async function updateSheetStatus(product, newStatus, errorMessage = '') {
 // ── 메인 ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+  await assertBrowserRunning();
   const { dryRun, limit, statusFilter } = parseArgs();
 
   console.log('='.repeat(50));
