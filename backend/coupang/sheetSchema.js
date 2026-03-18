@@ -48,6 +48,14 @@ const COUPANG_DATA_HEADERS = [
   'registrationMessage',
   'lastRegisteredAt',
   'needsUpdate',
+  // changeFlags 허용값:
+  //   PRICE_UP         - 가격 인상 감지
+  //   PRICE_DOWN       - 가격 인하 감지
+  //   TITLE_CHANGED    - 타이틀 변경 (UpdateGoods 트리거)
+  //   DESC_CHANGED     - 상세페이지 변경 (EditGoodsContents 트리거)
+  //   CATEGORY_CHANGED - 카테고리 변경 (UpdateGoods 필요, 현재 수동 처리)
+  // 복수 플래그: 파이프 구분 (예: "PRICE_UP|TITLE_CHANGED")
+  // 처리 완료 후 빈 문자열로 초기화
   'changeFlags',
 
   // ── [SYS] 시스템 ──────────────────────────────

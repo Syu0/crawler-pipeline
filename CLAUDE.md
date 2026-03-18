@@ -221,6 +221,11 @@ OPENCLAW_SESSION_ID
   - `updateGoods.js` → `updateGoodsTitle()`: ItemTitle 업데이트 전용 (SecondSubCat 자동 조회 포함)
   - `editGoodsContents.js`: 상세페이지 HTML 업데이트
   - `qoo10-auto-register.js` UPDATE 흐름 교체: changeFlags 기반 분기 (TITLE_CHANGED / DESC_CHANGED / PRICE_UP / PRICE_DOWN)
+  > **changeFlags 허용값:**
+  > `PRICE_UP` | `PRICE_DOWN` | `TITLE_CHANGED` | `DESC_CHANGED` | `CATEGORY_CHANGED`
+  > 복수 플래그는 파이프(`|`)로 구분. 처리 완료 후 빈 문자열로 초기화.
+  > `CATEGORY_CHANGED`: UpdateGoods 필요. 현재 자동 처리 코드 없음 → 수동 트리거.
+  > 전체 목록은 config 시트 `VALID_CHANGE_FLAGS` 키 참고.
 
 ### 9-B. 현재 작업 순서 (2026-03-17 기준)
 
