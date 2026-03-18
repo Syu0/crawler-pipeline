@@ -156,9 +156,12 @@ async function launch(options = {}) {
 
     if (blocked) {
       for (let attempt = 1; attempt <= RETRY_COUNT; attempt++) {
-        console.log(
-          `[BrowserManager] 블록 감지. ${RETRY_WAIT_MS / 60000}분 대기 (${attempt}/${RETRY_COUNT})...`
-        );
+        const _now = new Date();
+        const _retry = new Date(_now.getTime() + RETRY_WAIT_MS);
+        const _fmt = (d) => d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        console.log(`[BrowserManager] 블록 감지. ${RETRY_WAIT_MS / 60000}분 대기 (${attempt}/${RETRY_COUNT})...`);
+        console.log(`                 시작: ${_fmt(_now)}`);
+        console.log(`                 재시도 예정: ${_fmt(_retry)}`);
         await wait(RETRY_WAIT_MS);
         blocked = await _warmup(warmCtx);
         if (!blocked) break;
