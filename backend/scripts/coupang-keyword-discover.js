@@ -41,13 +41,9 @@ const {
 const { searchCoupangByKeyword } = require('../coupang/keywordSearch');
 const { applyFilters } = require('../coupang/productFilters');
 const browserManager = require('../coupang/browserManager');
-const {
-  wait,
-  sendBlockAlertEmail,
-  RETRY_WAIT_MS,
-  RETRY_COUNT,
-} = require('../coupang/blockDetector');
+const { sendBlockAlertEmail } = require('../coupang/blockDetector');
 const { assertBrowserRunning } = require('./browserGuard');
+const { randomDelay } = require('./delay');
 
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 const TRACE = process.env.COUPANG_TRACER === '1';
@@ -144,37 +140,9 @@ async function main() {
       } catch (err) {
         if (err.name !== 'BlockedError') throw err;
 
-        console.log(`[블록감지] Akamai IP 차단 감지 — "${kw.keyword}"`);
-        let recovered = false;
-
-        for (let attempt = 1; attempt <= RETRY_COUNT; attempt++) {
-          console.log(
-            `[블록감지] ${RETRY_WAIT_MS / 60000}분 대기 후 재시도 (${attempt}/${RETRY_COUNT})...`
-          );
-          await wait(RETRY_WAIT_MS);
-
-          // 블록 감지 시: 현재 Context 닫고 새 Context로 재시도
-          await context.close().catch(() => {});
-          context = await browserManager.getContext(browser);
-
-          try {
-            items = await searchCoupangByKeyword(kw.keyword, context, {
-              maxPages: 2,
-              delayMin: config.COLLECT_DELAY_MIN_MS,
-              delayMax: config.COLLECT_DELAY_MAX_MS,
-            });
-            recovered = true;
-            break;
-          } catch (retryErr) {
-            if (retryErr.name !== 'BlockedError') throw retryErr;
-            if (attempt === RETRY_COUNT) {
-              await sendBlockAlertEmail();
-              process.exit(1);
-            }
-          }
-        }
-
-        if (!recovered) continue;
+        console.error(`[블록감지] Akamai IP 차단 감지 — "${kw.keyword}" — 즉시 종료`);
+        await sendBlockAlertEmail();
+        process.exit(1);
       }
 
       totalFound += items.length;
@@ -209,6 +177,13 @@ async function main() {
       // d. lastRunAt 업데이트 (keywords 시트 행이 있을 때만)
       if (kw.row) {
         await updateKeywordLastRun(sheets, SPREADSHEET_ID, kw.row);
+      }
+
+      // e. 키워드 간 딜레이 (마지막 키워드 제외)
+      if (keywords.indexOf(kw) < keywords.length - 1) {
+        const minMs = dryRun ? 500 : 3000;
+        const maxMs = dryRun ? 500 : 7000;
+        await randomDelay(minMs, maxMs);
       }
     }
   } finally {

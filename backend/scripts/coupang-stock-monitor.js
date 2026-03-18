@@ -41,6 +41,7 @@ const {
 } = require('../coupang/blockDetector');
 const { setGoodsPriceQty } = require('./qoo10.setGoodsPriceQty');
 const { assertBrowserRunning } = require('./browserGuard');
+const { randomDelay } = require('./delay');
 
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 const TAB            = 'coupang_datas';
@@ -241,11 +242,9 @@ async function main() {
 
       // 마지막 항목이 아니면 딜레이
       if (i < products.length - 1) {
-        const delay = Math.floor(
-          Math.random() * (MONITOR_DELAY_MAX_MS - MONITOR_DELAY_MIN_MS) + MONITOR_DELAY_MIN_MS
-        );
-        console.log(`  [딜레이] ${delay}ms 대기...`);
-        await wait(delay);
+        const minMs = dryRun ? 500 : MONITOR_DELAY_MIN_MS;
+        const maxMs = dryRun ? 500 : MONITOR_DELAY_MAX_MS;
+        await randomDelay(minMs, maxMs);
       }
     }
   } finally {

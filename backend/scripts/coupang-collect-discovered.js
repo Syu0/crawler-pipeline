@@ -42,6 +42,7 @@ const {
 const { COUPANG_DATA_HEADERS } = require('../coupang/sheetSchema');
 const { scrapeCoupangProductPlaywright } = require('../coupang/playwrightScraper');
 const { assertBrowserRunning } = require('./browserGuard');
+const { randomDelay } = require('./delay');
 const { collectAllPhases } = require('../coupang/detailPageParser');
 const browserManager = require('../coupang/browserManager');
 const { wait, classifyError, withSoftBlockRetry, sendBlockAlertEmail } = require('../coupang/blockDetector');
@@ -328,11 +329,9 @@ async function main() {
 
       // 마지막 항목이 아니면 딜레이
       if (i < products.length - 1) {
-        const delay = Math.floor(
-          Math.random() * (COLLECT_DELAY_MAX_MS - COLLECT_DELAY_MIN_MS) + COLLECT_DELAY_MIN_MS
-        );
-        console.log(`  [딜레이] ${delay}ms 대기...`);
-        await wait(delay);
+        const minMs = dryRun ? 500 : COLLECT_DELAY_MIN_MS;
+        const maxMs = dryRun ? 500 : COLLECT_DELAY_MAX_MS;
+        await randomDelay(minMs, maxMs);
       }
     }
   } finally {

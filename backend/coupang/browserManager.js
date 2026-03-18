@@ -28,6 +28,47 @@ const {
   sendBlockAlertEmail,
 } = require('./blockDetector');
 
+// 쿠키 유효성 체크 — warming 전에 만료 시 즉시 종료
+async function _assertCookieValid() {
+  // COUPANG_COOKIE env var로 직접 주입 시 체크 스킵
+  const envCookie = process.env.COUPANG_COOKIE;
+  if (envCookie && envCookie.trim()) return;
+
+  const data = cookieStore.loadCookieData();
+  if (!data) {
+    console.error('[BrowserManager] 쿠팡 쿠키가 없습니다.');
+    console.error("yamyam 크롬 확장에서 쿠키를 갱신한 후 'npm run coupang:browser:start'를 다시 실행하세요.");
+    await sendBlockAlertEmail(null, {
+      subject: '[RoughDiamond] Coupang 쿠키 만료',
+      text: "쿠팡 쿠키가 없습니다. yamyam 크롬 확장에서 쿠키를 갱신한 후 'npm run coupang:browser:start'를 다시 실행하세요.",
+    });
+    process.exit(1);
+  }
+
+  if (cookieStore.isExpired()) {
+    const updatedAt = data.updatedAt ? new Date(data.updatedAt) : null;
+    const elapsedH = updatedAt
+      ? Math.floor((Date.now() - updatedAt.getTime()) / 3600000)
+      : null;
+    const elapsedStr = elapsedH != null ? `(수신 후 ${elapsedH}시간 경과)` : '';
+    console.error(`[BrowserManager] 쿠키가 만료되었습니다. ${elapsedStr}`);
+    console.error("yamyam 크롬 확장에서 쿠키를 갱신한 후 'npm run coupang:browser:start'를 다시 실행하세요.");
+    await sendBlockAlertEmail(null, {
+      subject: '[RoughDiamond] Coupang 쿠키 만료',
+      text: `쿠팡 쿠키가 만료되었습니다. ${elapsedStr} yamyam 크롬 확장에서 쿠키를 갱신한 후 'npm run coupang:browser:start'를 다시 실행하세요.`,
+    });
+    process.exit(1);
+  }
+
+  const updatedAt = data.updatedAt ? new Date(data.updatedAt) : null;
+  if (updatedAt) {
+    const elapsedMs = Date.now() - updatedAt.getTime();
+    const h = Math.floor(elapsedMs / 3600000);
+    const m = Math.floor((elapsedMs % 3600000) / 60000);
+    console.log(`[BrowserManager] 쿠키 유효 확인 (수신 후 ${h}h ${m}m 경과)`);
+  }
+}
+
 playwrightChromium.use(StealthPlugin());
 
 // ── CDP 포트 (env 오버라이드 가능) ────────────────────────────────────────────
@@ -148,6 +189,8 @@ async function launch(options = {}) {
   });
 
   if (!skipWarming) {
+    await _assertCookieValid();
+
     const warmCtx = await getContext(browser);
     const blocked = await _warmup(warmCtx);
 
