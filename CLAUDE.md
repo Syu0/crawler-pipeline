@@ -286,6 +286,12 @@ OPENCLAW_SESSION_ID
 ### 9-D. 보류
 
 - [ ] UpdateGoods / EditGoodsContents / GetItemDetailInfo 테스트 스크립트 (3순위 작업 시 함께 진행)
+- [ ] **[운영 매뉴얼 작성 시]** 매일 시작 절차 문서화
+  - 순서 중요. 아래 두 명령을 매일 출근 시 / PC 재시작 후 실행해야 함:
+    1. `npm run backend:start`          # yamyam 쿠키 수신 서버 (쿠키 주입 없으면 Akamai 블록)
+    2. `npm run coupang:browser:start`  # Playwright 브라우저 데몬
+  - 2번을 먼저 실행하거나 1번 없이 실행하면 warming 단계에서 즉시 블록됨
+  - 운영 매뉴얼(RUNBOOK.md 또는 별도 OPERATIONS.md)에 정식 절차로 포함할 것
 
 ---
 
