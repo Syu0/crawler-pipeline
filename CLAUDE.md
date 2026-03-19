@@ -184,6 +184,10 @@ OPENCLAW_SESSION_ID
 - `DEACTIVATED`는 코드가 자동 해제 금지. 사람이 수동으로만 풀기.
 - Emergent 프롬프트 작성 시: **수정 범위 명시 + 아키텍처 변경 금지 지시 포함**.
 - 군더더기 없이 바로 구현. 한 줄이면 한 줄로 끝낸다.
+- 브라우저를 사용하는 스크립트는 반드시 `browserGuard.assertBrowserRunning()`으로 시작한다.
+  새 Playwright 인스턴스 생성 = Akamai 블록 트리거.
+- 수집 스크립트의 상품 간 딜레이는 `delay.js`의 `randomDelay(4000, 10000)`을 사용한다.
+  dry-run 모드에서는 500ms 고정.
 
 ---
 
@@ -192,6 +196,10 @@ OPENCLAW_SESSION_ID
 ### 9-A. crawler-pipeline 완료 항목
 
 - [x] `SetGoodsPriceQty` 재고/가격 업데이트 API 래퍼 구현 및 실제 검증 완료
+- [x] 브라우저 데몬 가드 (`browserGuard.js`) — 데몬 미실행 시 즉시 종료 + 안내
+- [x] 블록 감지 즉시 이메일 발송 + 종료 (재시도 2회 제거)
+- [x] 쿠키 유효성 자동 체크 — 만료 시 이메일 알림 + 수집 중단 (`browserManager.launch()` warming 전)
+- [x] 수집 랜덤 딜레이 (`delay.js`) — 상품 간 4~10초, dry-run 500ms 고정
 - [x] 쿠팡 서버사이드 수집 기반 구축
   - Playwright + stealth + cookieStore 쿠키 주입으로 Akamai 우회 성공
   - 가격 셀렉터 타이밍 이슈 수정 완료 (`.final-price-amount` + `waitForSelector`)
@@ -216,12 +224,11 @@ OPENCLAW_SESSION_ID
 
 ### 9-B. 현재 작업 순서
 
-- [ ] **1순위** `쿠팡 블록 대응 강화`
-  - 현재: 블록 감지 → 1시간 대기 × 2회 → 포기 + 이메일 알림 → 파이프라인 중단
-  - 목표: 블록 상황에서도 파이프라인이 멈추지 않도록 대응 전략 강화
-  - 수정 대상: `blockDetector.js`, `coupang-collect-discovered.js` 흐름 제어
-  - **선행 이유**: 블록 대응이 안정화되어야 수집 보강 테스트 결과를 신뢰할 수 있음
-    (새 셀렉터 실패 원인이 블록인지 코드 문제인지 구분 불가 → 디버깅 오염 방지)
+- [x] **1순위** `쿠팡 블록 대응 강화` ✅ 완료
+  - 블록 감지 즉시 종료 (재시도 루프 제거)
+  - 쿠키 유효성 자동 체크 (warming 전)
+  - 브라우저 데몬 가드 (`browserGuard.js`)
+  - 수집 랜덤 딜레이 (`delay.js`, dry-run 500ms)
 
 - [ ] **2순위** `쿠팡 수집 보강`
   - 미수집 필드 추가: Options, ExtraImages, 상세 이미지 URL, 리뷰 5개, 문의글 5개
@@ -291,7 +298,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-03-17 | 3순위 일본어 타이틀 변환 완료*
+*마지막 업데이트: 2026-03-19 | browser-guard 머지 — 블록 예방 강화 + 브라우저 데몬 가드 완료*
 
 ---
 

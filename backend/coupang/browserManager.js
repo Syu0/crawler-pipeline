@@ -25,11 +25,49 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const cookieStore = require('../services/cookieStore');
 const {
   isBlocked,
-  wait,
   sendBlockAlertEmail,
-  RETRY_WAIT_MS,
-  RETRY_COUNT,
 } = require('./blockDetector');
+
+// 쿠키 유효성 체크 — warming 전에 만료 시 즉시 종료
+async function _assertCookieValid() {
+  // COUPANG_COOKIE env var로 직접 주입 시 체크 스킵
+  const envCookie = process.env.COUPANG_COOKIE;
+  if (envCookie && envCookie.trim()) return;
+
+  const data = cookieStore.loadCookieData();
+  if (!data) {
+    console.error('[BrowserManager] 쿠팡 쿠키가 없습니다.');
+    console.error("yamyam 크롬 확장에서 쿠키를 갱신한 후 'npm run coupang:browser:start'를 다시 실행하세요.");
+    await sendBlockAlertEmail(null, {
+      subject: '[RoughDiamond] Coupang 쿠키 만료',
+      text: "쿠팡 쿠키가 없습니다. yamyam 크롬 확장에서 쿠키를 갱신한 후 'npm run coupang:browser:start'를 다시 실행하세요.",
+    });
+    process.exit(1);
+  }
+
+  if (cookieStore.isExpired()) {
+    const updatedAt = data.updatedAt ? new Date(data.updatedAt) : null;
+    const elapsedH = updatedAt
+      ? Math.floor((Date.now() - updatedAt.getTime()) / 3600000)
+      : null;
+    const elapsedStr = elapsedH != null ? `(수신 후 ${elapsedH}시간 경과)` : '';
+    console.error(`[BrowserManager] 쿠키가 만료되었습니다. ${elapsedStr}`);
+    console.error("yamyam 크롬 확장에서 쿠키를 갱신한 후 'npm run coupang:browser:start'를 다시 실행하세요.");
+    await sendBlockAlertEmail(null, {
+      subject: '[RoughDiamond] Coupang 쿠키 만료',
+      text: `쿠팡 쿠키가 만료되었습니다. ${elapsedStr} yamyam 크롬 확장에서 쿠키를 갱신한 후 'npm run coupang:browser:start'를 다시 실행하세요.`,
+    });
+    process.exit(1);
+  }
+
+  const updatedAt = data.updatedAt ? new Date(data.updatedAt) : null;
+  if (updatedAt) {
+    const elapsedMs = Date.now() - updatedAt.getTime();
+    const h = Math.floor(elapsedMs / 3600000);
+    const m = Math.floor((elapsedMs % 3600000) / 60000);
+    console.log(`[BrowserManager] 쿠키 유효 확인 (수신 후 ${h}h ${m}m 경과)`);
+  }
+}
 
 playwrightChromium.use(StealthPlugin());
 
@@ -151,24 +189,20 @@ async function launch(options = {}) {
   });
 
   if (!skipWarming) {
+    await _assertCookieValid();
+
     const warmCtx = await getContext(browser);
-    let blocked = await _warmup(warmCtx);
+    const blocked = await _warmup(warmCtx);
 
     if (blocked) {
-      for (let attempt = 1; attempt <= RETRY_COUNT; attempt++) {
-        console.log(
-          `[BrowserManager] 블록 감지. ${RETRY_WAIT_MS / 60000}분 대기 (${attempt}/${RETRY_COUNT})...`
-        );
-        await wait(RETRY_WAIT_MS);
-        blocked = await _warmup(warmCtx);
-        if (!blocked) break;
-        if (attempt === RETRY_COUNT) {
-          await sendBlockAlertEmail();
-          await warmCtx.close();
-          await browser.close();
-          process.exit(1);
-        }
-      }
+      console.error('[BrowserManager] 블록 감지 — 이메일 발송 후 종료');
+      await sendBlockAlertEmail(null, {
+        subject: '[RoughDiamond] Coupang IP 블록 감지',
+        text: "IP 블록이 감지되었습니다. 공유기 재시작 후 'npm run coupang:browser:start'를 다시 실행하세요.",
+      });
+      await warmCtx.close();
+      await browser.close();
+      process.exit(1);
     }
 
     await warmCtx.close();
