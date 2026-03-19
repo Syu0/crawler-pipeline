@@ -608,9 +608,9 @@ async function main() {
     console.log(`Found ${dataRows.length} total rows`);
     
     // Count row categories
-    // CREATE: status=REGISTER_READY only (COLLECTED는 promote 후 수동 승인 필요)
-    // UPDATE: qoo10ItemId 있고 needsUpdate=YES
-    const unregisteredRows = dataRows.filter(r => r.status === 'REGISTER_READY');
+    // CREATE: status=REGISTER_READY + qoo10ItemId 없음 (신규 등록)
+    // UPDATE: qoo10ItemId 있고 needsUpdate=YES (기존 상품 업데이트, status 무관)
+    const unregisteredRows = dataRows.filter(r => r.status === 'REGISTER_READY' && !r.qoo10ItemId);
     const registeredNeedsUpdate = dataRows.filter(r => r.qoo10ItemId && r.needsUpdate === 'YES');
     const registeredNoUpdate = dataRows.filter(r => r.qoo10ItemId && r.needsUpdate !== 'YES');
 
