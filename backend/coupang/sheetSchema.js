@@ -62,4 +62,22 @@ const HEADER_GROUPS = [
   { label: '[SYS]',       start: 34, end: 36, color: { red: 0.98, green: 0.90, blue: 0.68 } }, // 연노랑
 ];
 
-module.exports = { COUPANG_DATA_HEADERS, HEADER_GROUPS };
+// 허용된 status ENUM 값 (파이프라인 전체 기준)
+const VALID_STATUSES = [
+  'DISCOVERED',
+  'COLLECTED',
+  'PENDING_APPROVAL',
+  'REGISTER_READY',
+  'REGISTERING',
+  'REGISTERED',
+  'VALIDATING',
+  'LIVE',
+  'OUT_OF_STOCK',
+  'DEACTIVATED',
+  'ERROR',
+];
+
+// 코드가 자동으로 덮어쓰지 않는 상태 (락 또는 수동 전용)
+const PROTECTED_STATUSES = ['REGISTERING', 'VALIDATING', 'DEACTIVATED'];
+
+module.exports = { COUPANG_DATA_HEADERS, HEADER_GROUPS, VALID_STATUSES, PROTECTED_STATUSES };

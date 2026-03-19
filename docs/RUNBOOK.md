@@ -38,6 +38,53 @@ Location: `/app/backend/.env`
 | `QOO10_TRACER` | No | `0` | Set to `1` for verbose API logging |
 | `COUPANG_COOKIE` | Yes | - | Playwright 수집기용 쿠팡 인증 쿠키 (yamyam으로 갱신) |
 
+## 자동 등록 파이프라인 운영
+
+### 수동 실행 (현재 방식)
+
+```bash
+# 1. COLLECTED 상품을 PENDING_APPROVAL로 올림 (하루 MAX_DAILY_REGISTER개 한도)
+npm run coupang:promote
+
+# 2. Google Sheets에서 등록할 상품의 status를 REGISTER_READY로 변경 (수동 승인)
+
+# 3. REGISTER_READY 상품 Qoo10 등록
+npm run qoo10:auto-register
+```
+
+dry-run으로 먼저 확인:
+```bash
+npm run coupang:promote:dry   # 변경 없이 슬롯 계산 및 대상 목록 확인
+npm run qoo10:auto-register:dry
+```
+
+### cron 자동화 (옵션)
+
+Mac Mini에서 매일 오전 9시에 promote를 자동 실행하려면:
+
+```bash
+crontab -e
+# 아래 줄 추가 (프로젝트 경로는 실제 경로로 변경)
+0 9 * * * cd /path/to/crawler-pipeline && npm run coupang:promote >> logs/promote.log 2>&1
+```
+
+promote 후 수동 승인 없이 자동 등록까지 원한다면:
+
+```bash
+0 9 * * * cd /path/to/crawler-pipeline && npm run coupang:promote && npm run qoo10:auto-register >> logs/auto-register.log 2>&1
+```
+
+> **주의:** 자동 등록 시 config 시트의 `MAX_DAILY_REGISTER` 설정 확인 필수.
+
+### config 키 초기화
+
+```bash
+npm run sheets:setup          # 누락된 키만 추가, 기존 값 유지
+npm run sheets:setup:force    # 모든 기본값 덮어쓰기 — 값 초기화 주의
+```
+
+---
+
 ## Common Failure Modes
 
 ### Qoo10 API Error -999

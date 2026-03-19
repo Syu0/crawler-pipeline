@@ -32,6 +32,7 @@
     "backend:start": "node backend/server.js",
     "docs:sync": "node scripts/update-context-packet.js",
     "sheets:setup": "node backend/scripts/setup-sheets.js",
+    "sheets:setup:force": "node backend/scripts/setup-sheets.js --force-defaults",
     "sheets:migrate": "node backend/scripts/migrate-coupang-datas-schema.js",
     "sheets:migrate:dry": "node backend/scripts/migrate-coupang-datas-schema.js --dry-run",
     "coupang:discover": "node backend/scripts/coupang-keyword-discover.js",
@@ -42,6 +43,8 @@
     "coupang:browser:status": "node backend/scripts/coupang-browser-status.js",
     "coupang:collect": "node backend/scripts/coupang-collect-discovered.js",
     "coupang:collect:dry": "node backend/scripts/coupang-collect-discovered.js --dry-run",
+    "coupang:promote": "node backend/scripts/coupang-promote-to-pending.js",
+    "coupang:promote:dry": "node backend/scripts/coupang-promote-to-pending.js --dry-run",
     "stock:check":      "node backend/scripts/coupang-stock-monitor.js",
     "stock:check:dry":  "node backend/scripts/coupang-stock-monitor.js --dry-run",
     "stock:check:test": "node backend/scripts/coupang-stock-monitor.js --dry-run --limit=3"

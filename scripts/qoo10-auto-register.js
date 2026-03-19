@@ -629,13 +629,13 @@ async function main() {
     console.log(`Found ${dataRows.length} total rows`);
     
     // Count row categories
-    // CREATE: status=COLLECTED or REGISTER_READY (수집 완료, 미등록)
-    // UPDATE: qoo10ItemId 있고 needsUpdate=YES
-    const unregisteredRows = dataRows.filter(r => r.status === 'COLLECTED' || r.status === 'REGISTER_READY');
+    // CREATE: status=REGISTER_READY + qoo10ItemId 없음 (신규 등록)
+    // UPDATE: qoo10ItemId 있고 needsUpdate=YES (기존 상품 업데이트, status 무관)
+    const unregisteredRows = dataRows.filter(r => r.status === 'REGISTER_READY' && !r.qoo10ItemId);
     const registeredNeedsUpdate = dataRows.filter(r => r.qoo10ItemId && r.needsUpdate === 'YES');
     const registeredNoUpdate = dataRows.filter(r => r.qoo10ItemId && r.needsUpdate !== 'YES');
 
-    console.log(`  COLLECTED (CREATE):  ${unregisteredRows.length}`);
+    console.log(`  REGISTER_READY (CREATE): ${unregisteredRows.length}`);
     console.log(`  Registered + needsUpdate=YES (UPDATE): ${registeredNeedsUpdate.length}`);
     console.log(`  Registered + no update: ${registeredNoUpdate.length} (will skip)`);
     
@@ -833,7 +833,7 @@ async function main() {
           try {
             await updateSheetRow(row._rowIndex, {
               ...categoryUpdate,
-              status: 'COLLECTED',   // release REGISTERING lock if it was set
+              status: 'REGISTER_READY',   // release REGISTERING lock if it was set
               qoo10SellingPrice: result.qoo10SellingPrice,
               qoo10SellerCode: result.sellerCode || '',
               registrationMode: 'DRY_RUN',
@@ -841,7 +841,7 @@ async function main() {
               registrationMessage: dryRunMessage,
               lastRegisteredAt: new Date().toISOString()
             });
-            console.log(`  ✓ Sheet updated (DRY-RUN, status reset to COLLECTED)`);
+            console.log(`  ✓ Sheet updated (DRY-RUN, status reset to REGISTER_READY)`);
           } catch (sheetErr) {
             console.log(`  ✗ Sheet update failed: ${sheetErr.message}`);
           }

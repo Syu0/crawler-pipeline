@@ -59,7 +59,28 @@ async function applyHeaderGroupColors(sheets, spreadsheetId, tabName, headerGrou
 
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 
+// config 시트에 추가할 기본값 목록 (누락된 키만 append)
+const CONFIG_DEFAULTS = [
+  {
+    key: 'FILTER_PRICE_KRW_MAX',
+    value: '150000',
+    memo: '관세 면제 기준 최대가 (KRW). 환율·배송비 기준 변경 시 수정',
+  },
+  {
+    key: 'EXCLUDED_CATEGORY_KEYWORDS',
+    value: '의약품,건강,건강식품,화장품,뷰티,미용,전자제품,디지털,가전',
+    memo: '쉼표 구분. 카테고리명에 포함 시 수집 제외',
+  },
+  {
+    key: 'MAX_DAILY_REGISTER',
+    value: '10',
+    memo: '1회 promote 실행당 PENDING_APPROVAL로 올릴 최대 상품 수',
+  },
+];
+
 async function main() {
+  const forceDefaults = process.argv.includes('--force-defaults');
+
   if (!SPREADSHEET_ID) {
     console.error('Error: GOOGLE_SHEET_ID not set in backend/.env');
     process.exit(1);
@@ -102,29 +123,71 @@ async function main() {
     const result = await ensureSheet(sheets, SPREADSHEET_ID, TITLE, HEADERS);
 
     if (result === 'created') {
+      // 신규 생성: 기본값 전체 삽입
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
         range: `${TITLE}!A:A`,
         valueInputOption: 'RAW',
         insertDataOption: 'INSERT_ROWS',
         requestBody: {
-          values: [
-            [
-              'FILTER_PRICE_KRW_MAX',
-              '150000',
-              '관세 면제 기준 최대가 (KRW). 환율·배송비 기준 변경 시 수정',
-            ],
-            [
-              'EXCLUDED_CATEGORY_KEYWORDS',
-              '의약품,건강,건강식품,화장품,뷰티,미용,전자제품,디지털,가전',
-              '쉼표 구분. 카테고리명에 포함 시 수집 제외',
-            ],
-          ],
+          values: CONFIG_DEFAULTS.map((d) => [d.key, d.value, d.memo]),
         },
       });
       console.log(`[${TITLE}] 시트 생성 및 초기값 삽입 완료`);
+    } else if (forceDefaults) {
+      // --force-defaults: 기존 키는 덮어쓰고, 없는 키는 append
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${TITLE}!A:C`,
+      });
+      const rows = res.data.values || [];
+      const existingKeys = rows.slice(1).map((r) => r[0]).filter(Boolean);
+
+      for (const def of CONFIG_DEFAULTS) {
+        const rowIdx = rows.findIndex((r, i) => i > 0 && r[0] === def.key);
+        if (rowIdx !== -1) {
+          // 시트 행 번호 = rowIdx + 1 (1-based)
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${TITLE}!A${rowIdx + 1}:C${rowIdx + 1}`,
+            valueInputOption: 'RAW',
+            requestBody: { values: [[def.key, def.value, def.memo]] },
+          });
+          console.log(`[${TITLE}] ${def.key} 덮어씀 (--force-defaults)`);
+        } else {
+          await sheets.spreadsheets.values.append({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${TITLE}!A:A`,
+            valueInputOption: 'RAW',
+            insertDataOption: 'INSERT_ROWS',
+            requestBody: { values: [[def.key, def.value, def.memo]] },
+          });
+          console.log(`[${TITLE}] ${def.key} 추가`);
+        }
+      }
+      void existingKeys; // suppress lint
     } else {
-      console.log(`[${TITLE}] 시트 이미 존재 — 건드리지 않음`);
+      // 기본: 누락된 키만 추가, 기존 값 유지
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${TITLE}!A:C`,
+      });
+      const rows = res.data.values || [];
+      const existingKeys = new Set(rows.slice(1).map((r) => r[0]).filter(Boolean));
+      const missing = CONFIG_DEFAULTS.filter((d) => !existingKeys.has(d.key));
+
+      if (missing.length > 0) {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${TITLE}!A:A`,
+          valueInputOption: 'RAW',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: { values: missing.map((d) => [d.key, d.value, d.memo]) },
+        });
+        console.log(`[${TITLE}] 누락 키 추가: ${missing.map((d) => d.key).join(', ')}`);
+      } else {
+        console.log(`[${TITLE}] 시트 이미 존재 — 모든 키 확인 완료`);
+      }
     }
   }
 
