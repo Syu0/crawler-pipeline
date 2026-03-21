@@ -197,7 +197,9 @@ async function main() {
   console.log('             npm run qoo10:auto-register 실행');
 }
 
-main().catch((err) => {
-  console.error('[promote] 치명적 오류:', err.message);
-  process.exit(1);
-});
+main()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('[promote] 치명적 오류:', err.message);
+    process.exit(1);
+  });

@@ -494,6 +494,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
         categoryResolution,
         mode: 'UPDATE',
         payload: updateResult.payload,
+        itemTitle: payload.ItemTitle,
         titleMethod
       };
     }
@@ -510,6 +511,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
         sellerCode: row.qoo10SellerCode || sellerCode,
         categoryResolution,
         mode: 'UPDATE',
+        itemTitle: payload.ItemTitle,
         titleMethod
       };
     } else {
@@ -549,6 +551,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
           sellerCode: result.sellerCodeUsed,
           categoryResolution,
           mode: 'CREATE',
+          itemTitle: payload.ItemTitle,
           titleMethod
         };
       }
@@ -712,7 +715,8 @@ async function main() {
       
       switch (result.status) {
         case 'SUCCESS':
-          console.log(`  ✓ SUCCESS [${result.mode || 'CREATE'}]: qoo10ItemId=${result.qoo10ItemId}, price=${result.qoo10SellingPrice}`);
+          console.log(`  ✓ SUCCESS [${result.mode || 'CREATE'}]: qoo10ItemId=${result.qoo10ItemId}, price=${result.qoo10SellingPrice}, jpCat=${result.categoryResolution?.jpCategoryId}`);
+          if (result.itemTitle) console.log(`    ItemTitle: ${result.itemTitle}`);
           if (result.fieldsUpdated && result.fieldsUpdated.length > 0) {
             console.log(`    Fields updated: [${result.fieldsUpdated.join(', ')}]`);
           }
@@ -825,6 +829,7 @@ async function main() {
             : `[titleMethod=${result.titleMethod || 'fallback'}] DRY-RUN completed`;
 
           console.log(`  → DRY-RUN [${result.mode || 'CREATE'}]: price=${result.qoo10SellingPrice}, jpCat=${result.categoryResolution?.jpCategoryId} (${result.categoryResolution?.matchType})`);
+          if (result.itemTitle) console.log(`    ItemTitle: ${result.itemTitle}`);
           results.dryRun.push(result);
 
           // ALWAYS write back category resolution even in DRY-RUN.
@@ -841,7 +846,7 @@ async function main() {
               registrationMessage: dryRunMessage,
               lastRegisteredAt: new Date().toISOString()
             });
-            console.log(`  ✓ Sheet updated (DRY-RUN, status reset to REGISTER_READY)`);
+            console.log(`  → Qoo10에 실제 변경 없음 (dry-run). 시트: 카테고리/가격 write-back만 수행`);
           } catch (sheetErr) {
             console.log(`  ✗ Sheet update failed: ${sheetErr.message}`);
           }
@@ -940,4 +945,9 @@ async function main() {
   }
 }
 
-main();
+main()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('\nFatal error:', err.message);
+    process.exit(1);
+  });

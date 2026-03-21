@@ -211,8 +211,10 @@ async function main() {
   if (!shutdown) console.log('  브라우저: 유지 중 (npm run coupang:browser:stop 으로 종료)');
 }
 
-main().catch((err) => {
-  console.error('\n✗ Error:', err.message);
-  if (TRACE) console.error(err.stack);
-  process.exit(1);
-});
+main()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('\n✗ Error:', err.message);
+    if (TRACE) console.error(err.stack);
+    process.exit(1);
+  });
