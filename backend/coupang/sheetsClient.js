@@ -457,7 +457,7 @@ async function upsertDiscoveredProducts(sheets, spreadsheetId, items) {
       case 'ProductURL':          return item.productUrl || '';
       case 'ItemTitle':           return item.itemTitle || '';
       case 'ItemPrice':           return item.itemPrice != null ? String(item.itemPrice) : '';
-      case 'StandardImage':       return item.thumbnailImage || '';
+      case 'StandardImage':       return (item.thumbnailImage || '').replace(/\/\d+x\d+ex\//g, '/800x800ex/');
       case 'ExtraImages':         return '';
       case 'WeightKg':            return '';
       case 'Options':             return '';

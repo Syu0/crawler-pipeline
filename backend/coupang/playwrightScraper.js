@@ -49,6 +49,8 @@ function parseProductUrl(urlString) {
 function normalizeImageUrl(url) {
   if (!url) return '';
   if (url.startsWith('//')) url = 'https:' + url;
+  // 크기 토큰(e.g. 320x320ex, 200x200ex)을 800x800ex 로 업스케일
+  url = url.replace(/\/\d+x\d+ex\//g, '/800x800ex/');
   const idx = url.indexOf('thumbnails/');
   if (idx !== -1) return url.substring(idx);
   const imgIdx = url.indexOf('image/');
