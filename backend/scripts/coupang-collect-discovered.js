@@ -46,6 +46,7 @@ const { randomDelay } = require('./delay');
 const { collectAllPhases } = require('../coupang/detailPageParser');
 const browserManager = require('../coupang/browserManager');
 const { wait, classifyError, withSoftBlockRetry, sendBlockAlertEmail } = require('../coupang/blockDetector');
+const { assertCollectSafe, setHardBlocked } = require('../coupang/blockStateManager');
 
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 const TAB = 'coupang_datas';
@@ -58,12 +59,17 @@ const PRESERVE_ON_ERROR = [
 
 // 상품 간 딜레이 (ms)
 // TODO: config 시트의 COLLECT_DELAY_MIN_MS / COLLECT_DELAY_MAX_MS 키로 런타임 로드
-const COLLECT_DELAY_MIN_MS = 3000;
-const COLLECT_DELAY_MAX_MS = 8000;
+const COLLECT_DELAY_MIN_MS = 4000;
+const COLLECT_DELAY_MAX_MS = 10000;
 
 // N개 상품마다 BrowserContext 재생성 (메모리 관리)
 // TODO: config 시트의 CONTEXT_REFRESH_INTERVAL 키로 런타임 로드
 const CONTEXT_REFRESH_INTERVAL = 10;
+
+// daemon 잔여시간 임계값 (ms)
+const DAEMON_MAX_MS     = 60 * 60 * 1000; // 60분 (browser:start 기본값)
+const DAEMON_WARN_MS    =  5 * 60 * 1000; // 5분 이하 → 경고
+const DAEMON_STOP_MS    =  2 * 60 * 1000; // 2분 이하 → Graceful Exit
 
 // ── CLI 파싱 ─────────────────────────────────────────────────────────────────
 function parseArgs() {
@@ -95,6 +101,7 @@ function parseArgs() {
 // ── 메인 ─────────────────────────────────────────────────────────────────────
 async function main() {
   await assertBrowserRunning();
+  assertCollectSafe(); // HARD_BLOCK 쿨다운 중이면 즉시 종료
   const { dryRun, limit, shutdown, phases } = parseArgs();
 
   // Phase 1은 playwrightScraper가 담당; Phase 2-5는 detailPageParser가 담당
@@ -143,10 +150,30 @@ async function main() {
   // 3. 행별 수집 루프
   const stats = { success: 0, rowError: 0, softBlock: 0, hardBlock: 0, total: products.length };
   let lastUrl = null;
+  let exitReason = null;
+
+  // 세션 내 수집 완료된 product_id 추적 (dedup용)
+  const collectedProductIds = new Set();
 
   try {
     for (let i = 0; i < products.length; i++) {
       const product = products[i];
+
+      // ── daemon 잔여시간 체크 ─────────────────────────────────────────────
+      const daemonStats = browserManager.getStats();
+      if (daemonStats && daemonStats.uptimeMs != null) {
+        const remainingMs = Math.max(0, DAEMON_MAX_MS - daemonStats.uptimeMs);
+        const remainingMin = Math.floor(remainingMs / 60000);
+        if (remainingMs <= DAEMON_STOP_MS) {
+          console.log(`\n⚠ [collect] 데몬 잔여시간 ${remainingMin}분 — Graceful Exit`);
+          console.log('  재개 방법: npm run coupang:browser:start → npm run coupang:collect');
+          exitReason = 'DAEMON_EXPIRING';
+          break;
+        }
+        if (remainingMs <= DAEMON_WARN_MS) {
+          console.log(`⚠ [collect] 데몬 잔여시간 ${remainingMin}분 남음 — 곧 종료됩니다`);
+        }
+      }
 
       // Context 재생성 (메모리 관리)
       if (contextUseCount > 0 && contextUseCount % CONTEXT_REFRESH_INTERVAL === 0) {
@@ -159,6 +186,35 @@ async function main() {
       console.log(`[${i + 1}/${products.length}] ${product.vendorItemId || product.itemId}`);
       console.log(`  URL: ${product.productUrl}`);
       lastUrl = product.productUrl;
+
+      // ── product_id 기준 dedup ────────────────────────────────────────────
+      const pid = product.coupang_product_id;
+      if (pid && collectedProductIds.has(pid)) {
+        console.log(`  ⏭ SKIP — 동일 product_id (${pid}), vendorItemId=${product.vendorItemId}`);
+        console.log('     → Playwright 접근 없이 status=COLLECTED 처리');
+        if (!dryRun) {
+          try {
+            await upsertRow(
+              SPREADSHEET_ID, TAB, HEADERS,
+              {
+                vendorItemId:        product.vendorItemId,
+                itemId:              product.itemId,
+                updatedAt:           new Date().toISOString(),
+                status:              'COLLECTED',
+                CollectedPhases:     phases.join(','),
+                registrationMessage: `[dedup: same product_id=${pid}]`,
+                errorMessage:        '',
+              },
+              'vendorItemId', 'itemId',
+              PRESERVE_ON_ERROR
+            );
+          } catch (writeErr) {
+            console.error(`  ✗ dedup COLLECTED 기록 실패: ${writeErr.message}`);
+          }
+        }
+        stats.success++;
+        continue;
+      }
 
       try {
         // ── withSoftBlockRetry로 Phase 1 + 2-5 스크래핑 감쌈 ────────────────
@@ -188,6 +244,7 @@ async function main() {
           // SOFT_BLOCK 재시도 소진 → 세션 전체 중단
           console.error('  ✗ SOFT_BLOCK_ESCALATED: 429 재시도 3회 소진 — 루프 중단');
           stats.hardBlock++;
+          setHardBlocked(); // 쿨다운 1시간 기록
           if (!dryRun) {
             try {
               await upsertRow(
@@ -262,6 +319,11 @@ async function main() {
         await upsertRow(SPREADSHEET_ID, TAB, HEADERS, data, 'vendorItemId', 'itemId');
         console.log(`  ✓ COLLECTED (phases: ${phases.join(',')})`);
 
+        // 수집 완료 → product_id dedup 추적
+        if (scraped.coupang_product_id) {
+          collectedProductIds.add(scraped.coupang_product_id);
+        }
+
         if (scraped.categoryId && scraped.breadcrumbTexts?.length) {
           try {
             await upsertCoupangCategory(sheets, SPREADSHEET_ID, {
@@ -283,6 +345,7 @@ async function main() {
         if (tier === 'HARD_BLOCK') {
           console.warn(`  ⚠ HARD_BLOCK: ${err.message.split('\n')[0]}`);
           stats.hardBlock++;
+          setHardBlocked(); // 쿨다운 1시간 기록
           if (!dryRun) {
             try {
               await upsertRow(
@@ -343,11 +406,13 @@ async function main() {
   }
 
   // 4. 완료 요약
+  const remaining = products.length - stats.success - stats.rowError - stats.hardBlock;
   console.log(`\n${'='.repeat(50)}`);
   console.log(
     `[collect] Done — success:${stats.success} rowError:${stats.rowError} ` +
     `softBlock:${stats.softBlock} hardBlock:${stats.hardBlock} total:${stats.total}`
   );
+  if (exitReason) console.log(`EXIT_REASON: ${exitReason}`);
   console.log('='.repeat(50));
   console.log(`  대상:       ${stats.total}개`);
   console.log(`  성공:       ${stats.success}개`);
@@ -355,6 +420,11 @@ async function main() {
   console.log(`  HARD_BLOCK: ${stats.hardBlock}개`);
   if (dryRun) console.log('  (DRY-RUN — 시트 write 없음)');
   if (!shutdown) console.log('  브라우저: 유지 중 (npm run coupang:browser:stop 으로 종료)');
+  if (exitReason === 'DAEMON_EXPIRING') {
+    const undoneCount = stats.total - stats.success - stats.rowError - stats.hardBlock;
+    console.log(`\n  남은 DISCOVERED 행: 약 ${Math.max(0, undoneCount)}개 → 재개 시 자동으로 이어서 처리됩니다`);
+    console.log('  재개 명령: npm run coupang:browser:start && npm run coupang:collect');
+  }
 
   // 이메일 알림 조건: HARD_BLOCK 발생 또는 ROW_ERROR 50% 초과
   const shouldAlert =

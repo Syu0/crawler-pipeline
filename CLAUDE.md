@@ -189,6 +189,16 @@ OPENCLAW_SESSION_ID
   새 Playwright 인스턴스 생성 = Akamai 블록 트리거.
 - 수집 스크립트의 상품 간 딜레이는 `delay.js`의 `randomDelay(4000, 10000)`을 사용한다.
   dry-run 모드에서는 500ms 고정.
+- 동일 `coupang_product_id`를 가진 vendorItemId 변형들은 세션 내에서 중복 Playwright 접근을 하지 않는다.
+  첫 번째 수집 후 나머지는 `registrationMessage=[dedup]` + status=COLLECTED 처리.
+- collect 스크립트는 행 처리 전마다 데몬 잔여시간을 체크한다.
+  잔여 2분 이하 시 Graceful Exit (EXIT_REASON=DAEMON_EXPIRING). 재개 시 DISCOVERED 행이 남아있으면 자동으로 이어서 처리.
+- daemon `running: true`는 프로세스 생존만을 의미한다. 수집 재개 가능 여부는 반드시
+  `collectSafe` 값으로 판단한다. HARD_BLOCK 발생 시 `collectSafe: false`가 설정되며
+  쿨다운(1시간) 이후 자동으로 `CLEAR`로 전환된다.
+- blockState는 `backend/.browser-block-state.json`에 저장된다 (Sheets 비저장).
+  collect 시작 전 pre-flight 체크 필수 (`blockStateManager.assertCollectSafe()`).
+- HARD_BLOCK 감지 시 `blockStateManager.setHardBlocked()`로 쿨다운 기록. 쿨다운 중 collect 실행 시 즉시 종료.
 
 ---
 
@@ -229,11 +239,13 @@ OPENCLAW_SESSION_ID
   - `getItemDetailInfo.js`: SecondSubCat 조회 (UpdateGoods 필수 전처리)
   - `updateGoods.js` → `updateGoodsTitle()`: ItemTitle 업데이트 전용 (SecondSubCat 자동 조회 포함)
   - `editGoodsContents.js`: 상세페이지 HTML 업데이트
-  - `qoo10-auto-register.js` UPDATE 흐름 교체: changeFlags 기반 분기 (TITLE_CHANGED / DESC_CHANGED / PRICE_UP / PRICE_DOWN)
-  > **changeFlags 허용값:**
-  > `PRICE_UP` | `PRICE_DOWN` | `TITLE_CHANGED` | `DESC_CHANGED` | `CATEGORY_CHANGED`
-  > 복수 플래그는 파이프(`|`)로 구분. 처리 완료 후 빈 문자열로 초기화.
-  > `CATEGORY_CHANGED`: UpdateGoods 필요. 현재 자동 처리 코드 없음 → 수동 트리거.
+  - `qoo10-auto-register.js` UPDATE 흐름: changeFlags 기반 분기 **미구현** — needsUpdate=YES이면 UpdateGoods 전체 실행. changeFlags는 단순히 처리 후 `''`로 클리어만 됨.
+  > **⚠️ changeFlags 분기 미구현 (추후 논의 필요)**
+  > 설계 의도: 플래그별로 호출 API를 분리 (TITLE_CHANGED → updateGoodsTitle, DESC_CHANGED → editGoodsContents, PRICE_UP/DOWN → SetGoodsPriceQty)
+  > 현재 실제 동작: 플래그 무관, UpdateGoods 전체 호출 후 changeFlags='' 클리어
+  > **허용값:** `PRICE_UP` | `PRICE_DOWN` | `TITLE_CHANGED` | `DESC_CHANGED` | `CATEGORY_CHANGED`
+  > 복수 플래그는 파이프(`|`)로 구분.
+  > `CATEGORY_CHANGED`: 현재 자동 처리 코드 없음 → 수동 트리거.
   > 전체 목록은 config 시트 `VALID_CHANGE_FLAGS` 키 참고.
 - [x] 인벤토리 관리 qoo10_inventory 시트 + 동기화/qty처리 스크립트 | 브랜치: oc/qoo10-inventory-mgmt
 
