@@ -14,6 +14,7 @@
 
 const { Router } = require('express');
 const { saveCookies, loadCookieData, isExpired, daysUntilExpiry } = require('../services/cookieStore');
+const { clearHardBlock } = require('../coupang/blockStateManager');
 
 const router = Router();
 
@@ -28,6 +29,8 @@ router.post('/coupang', (req, res) => {
   try {
     const data = saveCookies(cookies.trim(), updatedAt || undefined);
     console.log(`[cookie] 쿠팡 쿠키 저장됨 — expires: ${data.expiresAt}`);
+    // 쿠키 갱신 성공 → HARD_BLOCK 쿨다운 중이면 즉시 해제
+    clearHardBlock();
     return res.json({ success: true, expiresAt: data.expiresAt });
   } catch (err) {
     console.error('[cookie] 저장 실패:', err.message);

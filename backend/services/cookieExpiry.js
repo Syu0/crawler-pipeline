@@ -103,4 +103,16 @@ async function checkAndNotify() {
   }
 }
 
-module.exports = { checkAndNotify };
+/**
+ * 쿠키 만료가 임박(D-thresholdDays 이하)하거나 이미 만료된 경우 true 반환.
+ * @param {number} thresholdDays 기본값 1 (내일 만료 포함)
+ * @returns {boolean}
+ */
+function isCookieExpiredOrSoon(thresholdDays = 1) {
+  const data = loadCookieData();
+  if (!data) return true; // 쿠키 정보 없으면 갱신 필요로 간주
+  const daysLeft = daysUntilExpiry();
+  return daysLeft <= thresholdDays;
+}
+
+module.exports = { checkAndNotify, isCookieExpiredOrSoon };
