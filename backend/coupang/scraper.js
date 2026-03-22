@@ -56,12 +56,15 @@ function parseWeightToKg(text) {
  */
 function normalizeImageUrl(url) {
   if (!url) return '';
-  
+
   // Handle protocol-relative URLs
   if (url.startsWith('//')) {
     url = 'https:' + url;
   }
-  
+
+  // 크기 토큰(e.g. 320x320ex, 200x200ex)을 800x800ex 로 업스케일
+  url = url.replace(/\/\d+x\d+ex\//g, '/800x800ex/');
+
   // Extract path starting from "thumbnails/"
   const thumbnailsIndex = url.indexOf('thumbnails/');
   if (thumbnailsIndex !== -1) {
