@@ -399,11 +399,19 @@ async function scrapePage(context, productUrl) {
     // ── 추가 이미지 ──────────────────────────────────────────────────────────
     const extraImagesRaw = await page.evaluate(() => {
       const imgs = [];
+      // 구 셀렉터 시도
       document.querySelectorAll('.prod-image-list img, .thumb-list img').forEach((el) => {
         const src = el.src || el.dataset.src || '';
         if (src) imgs.push(src);
       });
-      return imgs.slice(0, 5);
+      // 구 셀렉터 미매칭 시 — coupangcdn 썸네일 img 전체에서 수집 (신 UI 대응)
+      if (imgs.length === 0) {
+        document.querySelectorAll('img').forEach((el) => {
+          const src = el.getAttribute('src') || el.dataset.src || '';
+          if (src && src.includes('thumbnail.coupangcdn.com')) imgs.push(src);
+        });
+      }
+      return imgs.slice(0, 8);
     }).catch(() => []);
 
     const seen = new Set();
