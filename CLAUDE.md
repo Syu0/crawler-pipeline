@@ -316,6 +316,7 @@ OPENCLAW_SESSION_ID
 
 - [ ] `getItemDetailInfo.js` 모듈 구현 — GetItemDetailInfo API 래퍼 (현재 미존재)
 - [ ] `editGoodsContents.js` 모듈 구현 — EditGoodsContents API 래퍼 (현재 미존재)
+  - 구현 시 주의: large payload(일본어 상세 HTML) 처리 + 인코딩 edge case 검증 필수
 - [ ] UpdateGoods / EditGoodsContents / GetItemDetailInfo 테스트 스크립트
 - [ ] **[운영 매뉴얼 작성 시]** 매일 시작 절차 문서화
   - 순서 중요. 아래 두 명령을 매일 출근 시 / PC 재시작 후 실행해야 함:
