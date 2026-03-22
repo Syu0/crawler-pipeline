@@ -27,6 +27,7 @@ const {
   isBlocked,
   sendBlockAlertEmail,
 } = require('./blockDetector');
+const { setHardBlocked } = require('./blockStateManager');
 
 // 쿠키 유효성 체크 — warming 전에 만료 시 즉시 종료
 async function _assertCookieValid() {
@@ -195,7 +196,8 @@ async function launch(options = {}) {
     const blocked = await _warmup(warmCtx);
 
     if (blocked) {
-      console.error('[BrowserManager] 블록 감지 — 이메일 발송 후 종료');
+      console.error('[BrowserManager] 블록 감지 — blockState 기록 후 이메일 발송 후 종료');
+      setHardBlocked();
       await sendBlockAlertEmail(null, {
         subject: '[RoughDiamond] Coupang IP 블록 감지',
         text: "IP 블록이 감지되었습니다. 공유기 재시작 후 'npm run coupang:browser:start'를 다시 실행하세요.",

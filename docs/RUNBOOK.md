@@ -140,6 +140,75 @@ npm run sheets:setup:force    # 모든 기본값 덮어쓰기 — 값 초기화 
 | qoo10-auto-register | stdout |
 | Qoo10 API traces | stdout (when `QOO10_TRACER=1`) |
 
+---
+
+## 데몬 타임아웃 후 수집 재개 절차
+
+### 자동 감지 시 (EXIT_REASON: DAEMON_EXPIRING)
+
+터미널에 아래 출력이 나타난 경우:
+```
+EXIT_REASON: DAEMON_EXPIRING
+재개 명령: npm run coupang:browser:start && npm run coupang:collect
+```
+
+1. **10분 쿨다운 대기** (Akamai 회피 — 연속 Playwright 실행 금지)
+2. `npm run coupang:browser:start`
+3. `npm run coupang:collect`
+   - DISCOVERED 상태인 행이 자동으로 이어서 처리됨
+   - 이미 COLLECTED된 행은 건너뜀
+
+### HARD_BLOCK 발생 시
+
+블록 감지 즉시 `backend/.browser-block-state.json`에 쿨다운(1시간)이 기록된다.
+쿨다운 중 `npm run coupang:collect` 실행 시 즉시 종료되며 잔여시간이 출력된다.
+
+1. **1시간 대기** (cooldownUntil 시각까지 — 쿨다운 완료 시 자동 CLEAR)
+2. yamyam 크롬 익스텐션에서 쿠키 재갱신
+3. `npm run coupang:browser:stop`
+4. `npm run coupang:browser:start`
+5. `npm run coupang:collect`
+
+강제 쿨다운 해제:
+```bash
+# backend/.browser-block-state.json 삭제
+rm backend/.browser-block-state.json
+```
+
+### daemon 상태 확인
+
+```bash
+npm run coupang:browser:status
+```
+
+출력 예시:
+```
+[BrowserStatus] 상태 확인 중...
+  상태:        ✓ ALIVE
+  collectSafe: ✓ 수집 가능
+  PID:         12345
+  Uptime:      12분 30초
+  잔여시간:    47분 30초
+  WS endpoint: http://localhost:9222
+```
+
+> `collectSafe: ✗` → HARD_BLOCK 쿨다운 중. 수집 재개 불가.
+> `collectSafe: ✓` → 수집 가능.
+
+### 매일 시작 절차 (순서 중요)
+
+```bash
+# 1. yamyam 쿠키 수신 서버 (먼저 실행)
+npm run backend:start
+
+# 2. Playwright 브라우저 데몬 (이후 실행)
+npm run coupang:browser:start
+```
+
+> **주의:** 2번을 먼저 실행하거나 1번 없이 실행하면 warming 단계에서 즉시 블록됨.
+
+---
+
 ## Health Checks
 
 ```bash
