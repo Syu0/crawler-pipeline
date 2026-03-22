@@ -48,7 +48,7 @@
 | Qoo10 연동 | QAPI (REST, form-encoded) |
 | 대시보드 | Next.js + Vercel 배포 (glassmorphism UI, mobile-first) |
 | 에이전트 | OpenClaw (메인 Dev Agent + Sub Agent 2개, 각 다른 LLM) |
-| 레포 | `crawler-pipeline` — 작업 브랜치: `emergent` |
+| 레포 | `crawler-pipeline` — 주 브랜치: `main` (작업 브랜치 `emergent`도 존재) |
 
 ---
 
@@ -236,17 +236,16 @@ OPENCLAW_SESSION_ID
   - API 실패 시에도 파이프라인 중단 없음 (fallback → 원본 타이틀 순)
   - `registrationMessage`에 `[titleMethod=api|fallback]` prefix 기록
 - [x] Qoo10 Update API 래퍼 완성 (브랜치: oc/update-api-wrappers)
-  - `getItemDetailInfo.js`: SecondSubCat 조회 (UpdateGoods 필수 전처리)
-  - `updateGoods.js` → `updateGoodsTitle()`: ItemTitle 업데이트 전용 (SecondSubCat 자동 조회 포함)
-  - `editGoodsContents.js`: 상세페이지 HTML 업데이트
+  - `updateGoods.js` → `updateExistingGoods()` / `buildUpdateGoodsParams()`: UpdateGoods 호출. SecondSubCat은 파라미터에서 직접 resolve (`jpCategoryIdUsed` 컬럼 사용), getItemDetailInfo 별도 조회 없음.
   - `qoo10-auto-register.js` UPDATE 흐름: changeFlags 기반 분기 **미구현** — needsUpdate=YES이면 UpdateGoods 전체 실행. changeFlags는 단순히 처리 후 `''`로 클리어만 됨.
   > **⚠️ changeFlags 분기 미구현 (추후 논의 필요)**
-  > 설계 의도: 플래그별로 호출 API를 분리 (TITLE_CHANGED → updateGoodsTitle, DESC_CHANGED → editGoodsContents, PRICE_UP/DOWN → SetGoodsPriceQty)
+  > 설계 의도: 플래그별로 호출 API를 분리 (TITLE_CHANGED → UpdateGoods, DESC_CHANGED → EditGoodsContents, PRICE_UP/DOWN → SetGoodsPriceQty)
   > 현재 실제 동작: 플래그 무관, UpdateGoods 전체 호출 후 changeFlags='' 클리어
   > **허용값:** `PRICE_UP` | `PRICE_DOWN` | `TITLE_CHANGED` | `DESC_CHANGED` | `CATEGORY_CHANGED`
   > 복수 플래그는 파이프(`|`)로 구분.
   > `CATEGORY_CHANGED`: 현재 자동 처리 코드 없음 → 수동 트리거.
   > 전체 목록은 config 시트 `VALID_CHANGE_FLAGS` 키 참고.
+  > **⚠️ 미구현 래퍼:** `getItemDetailInfo.js`, `editGoodsContents.js` 파일 없음. EditGoodsContents API 호출 경로 현재 없음.
 - [x] 인벤토리 관리 qoo10_inventory 시트 + 동기화/qty처리 스크립트 | 브랜치: oc/qoo10-inventory-mgmt
 
 ### 9-B. 현재 작업 순서 (2026-03-18 기준)
@@ -302,11 +301,16 @@ OPENCLAW_SESSION_ID
 
 ### 9-C. dashboard 작업
 
-- [ ] Chat 탭 OpenClaw 세션 연동 — `/api/openclaw/*` Vercel API Route 프록시
+- [x] `/api/openclaw/*` Vercel API Route 프록시 구현 완료
+  - `health`, `send`, `history`, `session-status`, `aegis-send`, `aegis-history` 6개 엔드포인트 존재
+  - 위치: `dashboard/src/app/api/openclaw/`
+- [ ] Chat 탭 프론트엔드 UI — OpenClaw 연동 UI 완성 여부 별도 확인 필요
 
 ### 9-D. 보류
 
-- [ ] UpdateGoods / EditGoodsContents / GetItemDetailInfo 테스트 스크립트 (3순위 작업 시 함께 진행)
+- [ ] `getItemDetailInfo.js` 모듈 구현 — GetItemDetailInfo API 래퍼 (현재 미존재)
+- [ ] `editGoodsContents.js` 모듈 구현 — EditGoodsContents API 래퍼 (현재 미존재)
+- [ ] UpdateGoods / EditGoodsContents / GetItemDetailInfo 테스트 스크립트
 - [ ] **[운영 매뉴얼 작성 시]** 매일 시작 절차 문서화
   - 순서 중요. 아래 두 명령을 매일 출근 시 / PC 재시작 후 실행해야 함:
     1. `npm run backend:start`          # yamyam 쿠키 수신 서버 (쿠키 주입 없으면 Akamai 블록)
@@ -321,18 +325,76 @@ OPENCLAW_SESSION_ID
 ```
 crawler-pipeline/
 ├── backend/
-│   └── scripts/
-│       └── qoo10.v2a.discovery.auto.js   # 자동 필드 탐색 시스템
+│   ├── coupang/
+│   │   ├── blockDetector.js          # IP 블록 감지 + 재시도 에스컬레이션
+│   │   ├── blockStateManager.js      # collectSafe / assertCollectSafe / setHardBlocked
+│   │   ├── browserManager.js         # Playwright 브라우저 데몬 관리
+│   │   ├── detailPageParser.js       # 상품 상세 HTML 파서
+│   │   ├── keywordSearch.js          # 키워드 검색 로직
+│   │   ├── playwrightScraper.js      # Playwright 수집 엔진
+│   │   ├── productFilters.js         # 필터 체인
+│   │   ├── scraper.js
+│   │   ├── sheetsClient.js
+│   │   ├── sheetSchema.js            # status ENUM + 컬럼 정의
+│   │   └── stockChecker.js           # 품절 셀렉터 파싱
+│   ├── qoo10/
+│   │   ├── client.js                 # QAPI HTTP 클라이언트
+│   │   ├── payloadGenerator.js       # SetNewGoods 파라미터 빌더
+│   │   ├── registerNewGoods.js       # SetNewGoods 래퍼
+│   │   ├── titleTranslator.js        # KR→JP 타이틀 변환 (Claude Haiku)
+│   │   └── updateGoods.js            # UpdateGoods 래퍼 (updateExistingGoods)
+│   │   # ⚠️ 미존재: getItemDetailInfo.js, editGoodsContents.js
+│   ├── category/
+│   │   ├── japanCategoriesSync.js
+│   │   ├── parser.js
+│   │   ├── resolver.js
+│   │   └── sheetClient.js
+│   ├── pricing/
+│   │   ├── priceDecision.js
+│   │   ├── pricingConstants.js
+│   │   └── shippingLookup.js
+│   ├── services/
+│   │   ├── cookieExpiry.js           # 쿠키 만료 이메일 알림
+│   │   └── cookieStore.js
+│   ├── routes/
+│   │   └── cookie.js
+│   ├── scripts/
+│   │   ├── browserGuard.js           # assertBrowserRunning()
+│   │   ├── delay.js                  # randomDelay(min, max)
+│   │   ├── coupang-browser-start.js  # Playwright 데몬 시작
+│   │   ├── coupang-browser-stop.js
+│   │   ├── coupang-browser-status.js
+│   │   ├── coupang-keyword-discover.js
+│   │   ├── coupang-collect-discovered.js
+│   │   ├── coupang-promote-to-pending.js
+│   │   ├── coupang-stock-monitor.js
+│   │   ├── setup-sheets.js
+│   │   └── qoo10.setGoodsPriceQty.js
+│   └── server.js                     # yamyam 쿠키 수신 서버
+├── scripts/                           # 루트 레벨 (레거시/유틸)
+│   ├── qoo10-auto-register.js         # 메인 등록 스크립트 (REGISTER_READY 처리)
+│   ├── qoo10-register-cli.js
+│   ├── qoo10-sync-japan-categories.js
+│   └── (기타 디버그/테스트 스크립트)
+├── dashboard/                         # Next.js 대시보드 (Vercel 배포)
+│   └── src/app/api/
+│       ├── openclaw/                  # OpenClaw 프록시 (6개 엔드포인트)
+│       ├── qoo10/
+│       ├── registration/
+│       ├── sheets/
+│       └── chat/
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── SHEET_SCHEMA.md
-│   └── RUNBOOK.md
-└── CLAUDE.md                              # 이 파일
+│   ├── RUNBOOK.md
+│   ├── CHANGELOG.md
+│   └── (기타 문서)
+└── CLAUDE.md                          # 이 파일
 ```
 
 ---
 
-*마지막 업데이트: 2026-03-19 | oc/auto-register-pipeline 머지 완료 — PENDING_APPROVAL 흐름 + CREATE 중복 버그 수정*
+*마지막 업데이트: 2026-03-22 | CLAUDE.md 감사 — 레포 구조 실반영, getItemDetailInfo/editGoodsContents 미구현 명시, dashboard OpenClaw API 완료 반영, 브랜치 main 반영*
 
 ---
 
