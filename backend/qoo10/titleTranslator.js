@@ -14,8 +14,6 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-const Anthropic = require('@anthropic-ai/sdk');
-
 const MAX_JP_TITLE_LEN = 100; // Qoo10 ItemTitle 최대 길이
 
 // ─── 1. Regex 메타데이터 추출 ──────────────────────────────────────────────
@@ -102,28 +100,14 @@ function buildFallbackTitle(categoryPath, meta) {
   return result.slice(0, MAX_JP_TITLE_LEN);
 }
 
-// ─── 3. Claude API 호출 ───────────────────────────────────────────────────
-
-let _client = null;
-function getClient() {
-  if (!_client) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set in backend/.env');
-    _client = new Anthropic({ apiKey });
-  }
-  return _client;
-}
+// ─── 3. OpenRouter API 호출 ───────────────────────────────────────────────
 
 /**
- * Claude API로 SEO 최적화 일본어 타이틀 생성.
- *
- * @param {string} krTitle - 원본 한국어 타이틀
- * @param {string|null} categoryPath - 쿠팡 카테고리 경로
- * @param {object} meta - extractMeta() 결과
- * @returns {Promise<string>} 일본어 타이틀
+ * OpenRouter API로 SEO 최적화 일본어 타이틀 생성.
  */
 async function callClaudeForTitle(krTitle, categoryPath, meta) {
-  const client = getClient();
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY not set in backend/.env');
 
   const metaHints = [];
   if (meta.brand) metaHints.push(`ブランド: ${meta.brand}`);
@@ -147,14 +131,25 @@ ${metaHints.length > 0 ? metaHints.join('\n') : ''}
 
 日本語SEOタイトル:`;
 
-  const message = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 200,
-    messages: [{ role: 'user', content: prompt }]
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'anthropic/claude-haiku-4-5',
+      max_tokens: 200,
+      messages: [{ role: 'user', content: prompt }],
+    }),
   });
 
-  const raw = message.content?.[0]?.text?.trim() || '';
-  // 따옴표 제거, 최대 길이 자르기
+  if (!response.ok) {
+    throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const raw = data.choices?.[0]?.message?.content?.trim() || '';
   return raw.replace(/^["「『]|["」』]$/g, '').trim().slice(0, MAX_JP_TITLE_LEN);
 }
 
@@ -175,7 +170,7 @@ async function translateTitle(krTitle, categoryPath = null) {
   const meta = extractMeta(krTitle.trim());
 
   // Claude API 시도
-  if (process.env.ANTHROPIC_API_KEY) {
+  if (process.env.OPENROUTER_API_KEY) {
     try {
       const jpTitle = await callClaudeForTitle(krTitle, categoryPath, meta);
       if (jpTitle && jpTitle.length >= 4) {
@@ -185,7 +180,7 @@ async function translateTitle(krTitle, categoryPath = null) {
       console.warn(`[titleTranslator] Claude API failed (${err.message}), using fallback`);
     }
   } else {
-    console.warn('[titleTranslator] ANTHROPIC_API_KEY not set, using fallback');
+    console.warn('[titleTranslator] OPENROUTER_API_KEY not set, using fallback');
   }
 
   // Fallback

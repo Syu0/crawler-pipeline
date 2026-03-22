@@ -17,6 +17,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 const browserManager = require('../coupang/browserManager');
+const { getEffectiveBlockState, clearBlockState } = require('../coupang/blockStateManager');
 
 async function main() {
   const timeoutIdx = process.argv.indexOf('--timeout-minutes');
@@ -27,6 +28,15 @@ async function main() {
   console.log('='.repeat(50));
   console.log(`자동 종료: ${timeoutMinutes}분 후`);
   console.log('');
+
+  // blockState 확인 — 데몬 시작은 허용, 쿨다운 정보만 출력
+  const blockState = getEffectiveBlockState();
+  if (blockState.blockState === 'HARD_BLOCKED') {
+    const min = Math.ceil(blockState.remainingMs / 60000);
+    console.warn(`⚠ [daemon] HARD_BLOCK 쿨다운 중`);
+    console.warn(`  수집 재개 가능까지: 약 ${min}분 (${blockState.cooldownUntil})`);
+    console.warn(`  데몬은 시작되지만, 쿨다운 전에 collect를 실행하면 즉시 차단됩니다.\n`);
+  }
 
   const browser = await browserManager.launch();
   const stats = browserManager.getStats();
