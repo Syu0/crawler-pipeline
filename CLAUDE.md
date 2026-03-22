@@ -5,6 +5,24 @@
 
 ---
 
+## 참조 문서 가이드
+
+> 이 파일(CLAUDE.md)은 매 세션 자동 로드되는 핵심 컨텍스트다.
+> 아래 상황별로 추가 문서를 참조하라. 해당 상황이 아니면 읽지 않아도 된다.
+
+| 상황 | 참조 문서 |
+|------|-----------|
+| 시스템 구조·기술스택·대시보드·에이전트 구성 파악 | `docs/ARCHITECTURE.md` |
+| Google Sheets 컬럼·스키마 확인 | `docs/SHEET_SCHEMA.md` |
+| Qoo10 API 필드별 엔드포인트 매핑 | `docs/QOO10_FIELD_API_MAP.md` |
+| 운영 중 오류 대응·데몬 재시작·cron 설정 | `docs/RUNBOOK.md` |
+| Mac Mini 신규 환경 세팅 (사람 전용) | `docs/USER_LOCAL_SETUP_STEPS.md` |
+
+> `USER_LOCAL_SETUP_STEPS.md`는 **사람이 "이 프로젝트 어떻게 세팅해?"라고 물을 때** 참고하는 파일이다.
+> 에이전트는 이 파일을 읽을 필요 없다.
+
+---
+
 ## 1. 프로젝트 목적
 
 쿠팡 로켓배송 상품을 **자동으로 수집 → Qoo10 Japan에 API로 등록 → 상태 모니터링 → 업데이트**하는 풀 자동화 파이프라인 구축.
@@ -40,15 +58,7 @@
 
 ## 3. 기술 스택
 
-| 구분 | 내용 |
-|------|------|
-| 언어 | Node.js |
-| 데이터 저장소 | Google Sheets (SSOT — DB 없음) |
-| 쿠팡 수집 | Playwright + stealth + yamyam 크롬 익스텐션 (쿠키 갱신) → 서버사이드 수집 |
-| Qoo10 연동 | QAPI (REST, form-encoded) |
-| 대시보드 | Next.js + Vercel 배포 (glassmorphism UI, mobile-first) |
-| 에이전트 | OpenClaw (메인 Dev Agent + Sub Agent 2개, 각 다른 LLM) |
-| 레포 | `crawler-pipeline` — 주 브랜치: `main` (작업 브랜치 `emergent`도 존재) |
+→ `docs/ARCHITECTURE.md` 참조.
 
 ---
 
@@ -133,45 +143,13 @@ write calls 쿼터: 10회/세션
 
 ## 6. 대시보드
 
-**URL:** Vercel 배포 (외부 접근 가능)
-**UI:** Glassmorphism + iPhone 스타일, **Mobile-first** (휴대폰에서 주로 확인함)
-
-### 탭 구성
-
-| 탭 | 내용 |
-|----|------|
-| Overview | Total Rows / Registered / Needs Update / Last Sync 카드 |
-| Qoo10 | 등록 실행, 상태 테이블, 실패 로그 |
-| Tasks | 작업 리스트 + 진행률 |
-| Logs & Alerts | 예외 발생 시 로그 + 팝업 알림 |
-| Chat | OpenClaw 현재 세션 연동 (프롬프트 주입 + 컨펌) |
-
-### 연동 환경변수 목록
-
-```
-VERCEL_TOKEN
-GOOGLE_SHEETS_CLIENT_EMAIL
-GOOGLE_SHEETS_PRIVATE_KEY
-GOOGLE_SHEETS_SPREADSHEET_ID
-OPENCLAW_BASE_URL          # Mac Mini → Tailscale Funnel URL
-OPENCLAW_API_TOKEN
-OPENCLAW_SESSION_ID
-```
-
-> `OPENCLAW_BASE_URL`은 Mac Mini에서 Tailscale Funnel로 노출한 주소.
-> Chat 탭은 클라이언트에서 직접 Tailscale URL 호출 금지 → `/api/openclaw/*` Vercel API Route 프록시로만 호출.
+→ `docs/ARCHITECTURE.md` §G Dashboard 참조.
 
 ---
 
-## 7. 에이전트 구성 (OpenClaw)
+## 7. 에이전트 구성
 
-| 에이전트 | 역할 |
-|---------|------|
-| Main Dev Agent | 핵심 로직 설계 및 구현, Qoo10 API 통합 |
-| Sub Agent A | 쿠팡 크롤링, 로켓배송 필터링, Sheets 업로드 |
-| Sub Agent B | 상태 모니터링, 재고 확인, Qoo10 재고 업데이트, 검수 |
-
-각 에이전트는 **서로 다른 LLM**을 사용. Task Unit 기반으로 분리 실행.
+→ `docs/ARCHITECTURE.md` §H Agent Configuration 참조.
 
 ---
 

@@ -1,5 +1,19 @@
 # Architecture
 
+## Tech Stack
+
+| 구분 | 내용 |
+|------|------|
+| 언어 | Node.js |
+| 데이터 저장소 | Google Sheets (SSOT — DB 없음) |
+| 쿠팡 수집 | Playwright + stealth + yamyam 크롬 익스텐션 (쿠키 갱신) → 서버사이드 수집 |
+| Qoo10 연동 | QAPI (REST, form-encoded) |
+| 대시보드 | Next.js + Vercel 배포 (glassmorphism UI, mobile-first) |
+| 에이전트 | OpenClaw (메인 Dev Agent + Sub Agent 2개, 각 다른 LLM) |
+| 레포 | `crawler-pipeline` — 주 브랜치: `main` |
+
+---
+
 ## Module Boundaries
 
 ### A) Coupang Collection (`backend/coupang/`)
@@ -135,6 +149,31 @@ API Routes (`dashboard/src/app/api/`):
 | `chat/history` | 채팅 이력 |
 | `chat/config` | 채팅 설정 |
 
+### 탭 구성
+
+| 탭 | 내용 |
+|----|------|
+| Overview | Total Rows / Registered / Needs Update / Last Sync 카드 |
+| Qoo10 | 등록 실행, 상태 테이블, 실패 로그 |
+| Tasks | 작업 리스트 + 진행률 |
+| Logs & Alerts | 예외 발생 시 로그 + 팝업 알림 |
+| Chat | OpenClaw 현재 세션 연동 (프롬프트 주입 + 컨펌) |
+
+### 환경변수 (Vercel)
+
+```
+VERCEL_TOKEN
+GOOGLE_SHEETS_CLIENT_EMAIL
+GOOGLE_SHEETS_PRIVATE_KEY
+GOOGLE_SHEETS_SPREADSHEET_ID
+OPENCLAW_BASE_URL          # Mac Mini → Tailscale Funnel URL
+OPENCLAW_API_TOKEN
+OPENCLAW_SESSION_ID
+```
+
+> `OPENCLAW_BASE_URL`은 Mac Mini에서 Tailscale Funnel로 노출한 주소.
+> Chat 탭은 `/api/openclaw/*` Vercel API Route 프록시로만 호출. 클라이언트 직접 호출 금지.
+
 ---
 
 ## Key Data Structures
@@ -216,3 +255,15 @@ ERROR            → 복구 가능한 실패
 | `keywords` | `keyword` | 수집 대상 키워드 (ACTIVE/PAUSED/PENDING) |
 | `config` | `key` | 필터 조건값 등 운영 설정 |
 | `Txlogis_standard` | (weight range) | 일본 배송비 구간 테이블 |
+
+---
+
+## H. Agent Configuration (OpenClaw)
+
+| 에이전트 | 역할 |
+|---------|------|
+| Main Dev Agent | 핵심 로직 설계 및 구현, Qoo10 API 통합 |
+| Sub Agent A | 쿠팡 크롤링, 로켓배송 필터링, Sheets 업로드 |
+| Sub Agent B | 상태 모니터링, 재고 확인, Qoo10 재고 업데이트, 검수 |
+
+각 에이전트는 서로 다른 LLM을 사용. Task Unit 기반으로 분리 실행.
