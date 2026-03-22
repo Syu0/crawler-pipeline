@@ -93,18 +93,19 @@ async function parsePage(page) {
       const itemTitle = titleEl ? titleEl.textContent.trim() : '';
 
       // ── 가격 ────────────────────────────────────────────────────────────
-      // del(취소선=정가)을 제외한 텍스트에서 숫자 추출 → 최솟값이 판매가
+      // del(취소선=정가)을 제외한 텍스트에서 첫 번째 숫자 블록 = 판매가
+      // Math.min 방식은 "(100g당 995원)" 같은 단위가격이 더 작으면 잘못 선택됨
       const priceArea = card.querySelector(sels.priceArea);
       let itemPrice = 0;
       if (priceArea) {
-        // del 태그 복제본 제거 후 숫자 추출
+        // del 태그 복제본 제거 후 첫 번째 숫자 블록 추출
         const clone = priceArea.cloneNode(true);
         clone.querySelectorAll('del').forEach((el) => el.remove());
-        const nums = (clone.textContent || '')
-          .match(/[\d,]+/g)
-          ?.map((n) => parseInt(n.replace(/,/g, ''), 10))
-          .filter((n) => n > 100) || [];
-        if (nums.length > 0) itemPrice = Math.min(...nums);
+        const match = (clone.textContent || '').match(/[\d,]+/);
+        if (match) {
+          const val = parseInt(match[0].replace(/,/g, ''), 10);
+          if (val > 100) itemPrice = val;
+        }
       }
 
       // ── 썸네일 ──────────────────────────────────────────────────────────
