@@ -2,151 +2,217 @@
 
 ## Module Boundaries
 
-### A) Coupang Collection (`/app/backend/coupang/`)
+### A) Coupang Collection (`backend/coupang/`)
 
-Collects product data from Coupang and writes to Google Sheets.
+쿠팡에서 상품 데이터를 수집하여 Google Sheets에 저장.
 
 | File | Purpose |
 |------|---------|
-| `sheetsClient.js` | Google Sheets API wrapper (read/write/upsert) |
-| `scraper.js` | HTTP-based Coupang page scraper |
-
-> `scripts/lib/sheetsClient.js`는 이 파일로 위임하는 shim이다 (하위 호환 유지용).
-> 실제 구현은 `backend/coupang/sheetsClient.js`에 있다.
-
-수집 방식: Playwright + stealth + Akamai 우회, yamyam 크롬 익스텐션으로 쿠키 갱신
+| `blockDetector.js` | IP 블록 감지 + SOFT_BLOCK → HARD_BLOCK 에스컬레이션 |
+| `blockStateManager.js` | blockState 파일 기반 영속화 (`collectSafe` / `assertCollectSafe` / `setHardBlocked`) |
+| `browserManager.js` | Playwright 브라우저 데몬 연결 관리 (CDP) |
+| `detailPageParser.js` | 상품 상세 페이지 HTML 파서 |
+| `keywordSearch.js` | 키워드 검색 결과 파싱 |
+| `playwrightScraper.js` | Playwright 기반 수집 엔진 (stealth + 쿠키 주입) |
+| `productFilters.js` | 필터 체인 (로켓배송 / 가격 상한 / 제외 카테고리) |
+| `scraper.js` | HTTP 기반 스크래퍼 (레거시) |
+| `sheetsClient.js` | Google Sheets API 래퍼 (read/write/upsert) |
+| `sheetSchema.js` | status ENUM + 컬럼 정의 |
+| `stockChecker.js` | 품절 셀렉터 파싱 |
 
 Entry points:
-- `scripts/coupang-playwright-scrape.js` - Playwright 서버사이드 수집기
-- `scripts/coupang-scrape-to-sheet.js` - HTTP 기반 스크래퍼 (레거시)
+- `backend/scripts/coupang-keyword-discover.js` — keywords 시트 → 쿠팡 검색 → DISCOVERED
+- `backend/scripts/coupang-collect-discovered.js` — DISCOVERED → COLLECTED
+- `backend/scripts/coupang-promote-to-pending.js` — COLLECTED → PENDING_APPROVAL
+- `backend/scripts/coupang-stock-monitor.js` — LIVE/REGISTERED 재고 모니터링
 
-### B) Qoo10 Registration (`/app/backend/qoo10/`)
+---
 
-Registers and updates products on Qoo10 via QAPI.
+### B) Qoo10 Registration (`backend/qoo10/`)
+
+Qoo10 QAPI를 통해 상품 등록/수정.
 
 | File | Purpose |
 |------|---------|
-| `client.js` | Qoo10 QAPI HTTP client |
-| `registerNewGoods.js` | SetNewGoods API (CREATE) |
-| `updateGoods.js` | UpdateGoods API (UPDATE) |
-| `payloadGenerator.js` | Payload building utilities |
+| `client.js` | Qoo10 QAPI HTTP 클라이언트 (form-encoded POST) |
+| `payloadGenerator.js` | SetNewGoods 파라미터 빌더 |
+| `registerNewGoods.js` | SetNewGoods API 래퍼 (CREATE) |
+| `titleTranslator.js` | KR→JP 타이틀 변환 (Claude Haiku API + 카테고리 템플릿 fallback) |
+| `updateGoods.js` | UpdateGoods API 래퍼 (UPDATE) — `updateExistingGoods()`, `buildUpdateGoodsParams()` |
+
+> ⚠️ **미존재:** `getItemDetailInfo.js` (GetItemDetailInfo 래퍼), `editGoodsContents.js` (EditGoodsContents 래퍼)
+> SecondSubCat은 시트 `jpCategoryIdUsed` 컬럼에서 직접 resolve. GetItemDetailInfo 조회 없음.
 
 Entry points:
-- `scripts/qoo10-auto-register.js` - Main executor
-- `scripts/qoo10-register-cli.js` - Single product CLI
+- `scripts/qoo10-auto-register.js` — 메인 등록/업데이트 실행기 (REGISTER_READY 처리)
+- `scripts/qoo10-register-cli.js` — 단일 상품 CLI 등록 (테스트용)
 
-### C) Category Resolution (`/app/backend/category/`)
+---
 
-Maps Coupang categories to Qoo10 Japan categories.
+### C) Category Resolution (`backend/category/`)
 
-| File | Purpose |
-|------|---------|
-| `parser.js` | Breadcrumb text parsing |
-| `sheetClient.js` | Category dictionary sheet operations |
-| `resolver.js` | KR→JP category mapping logic |
-| `japanCategoriesSync.js` | Qoo10 category list sync |
-
-Entry point:
-- `scripts/qoo10-sync-japan-categories.js` - Sync JP categories
-
-### D) CLI Executor (`/app/scripts/`)
-
-Orchestrates the pipeline.
+쿠팡 카테고리 → Qoo10 Japan 카테고리 매핑.
 
 | File | Purpose |
 |------|---------|
-| `qoo10-auto-register.js` | Main executor (reads sheet, calls B/C) |
+| `parser.js` | breadcrumb 텍스트 파싱 |
+| `sheetClient.js` | category_mapping 시트 조회 |
+| `resolver.js` | KR→JP 카테고리 매핑 로직 (MANUAL → AUTO/Jaccard → FALLBACK) |
+| `japanCategoriesSync.js` | Qoo10 카테고리 목록 동기화 |
+
+---
+
+### D) Pricing (`backend/pricing/`)
+
+쿠팡 KRW 원가 → Qoo10 JPY 판매가 계산.
+
+| File | Purpose |
+|------|---------|
+| `pricingConstants.js` | 환율/수수료/마진 상수 (하드코딩 — 추후 config 시트 이관 예정) |
+| `priceDecision.js` | 가격 계산 로직 (`decideItemPriceJpy`) |
+| `shippingLookup.js` | Txlogis_standard 시트에서 배송비 동적 조회 |
+
+가격 공식:
+```
+baseCostJpy   = (ItemPrice_KRW + DOMESTIC_SHIPPING_KRW) / FX_JPY_TO_KRW + japanShippingJpy
+requiredPrice = baseCostJpy / (1 - MARKET_COMMISSION_RATE - MIN_MARGIN_RATE)
+targetPrice   = baseCostJpy * (1 + TARGET_MARGIN_RATE)
+finalPrice    = Math.round(Math.max(requiredPrice, targetPrice))
+```
+
+---
+
+### E) Backend Server (`backend/server.js`, `backend/services/`, `backend/routes/`)
+
+yamyam 크롬 익스텐션이 전송하는 쿠키를 수신·저장하는 Express 서버.
+
+| File | Purpose |
+|------|---------|
+| `server.js` | Express 서버 (포트 4000) |
+| `services/cookieStore.js` | 쿠키 저장/조회 |
+| `services/cookieExpiry.js` | 쿠키 만료 이메일 알림 (D-3/D-0, nodemailer) |
+| `routes/cookie.js` | `/cookie` POST 엔드포인트 |
+
+---
+
+### F) CLI Scripts (`backend/scripts/`)
+
+파이프라인 스크립트 + 유틸리티.
+
+| File | Purpose |
+|------|---------|
+| `browserGuard.js` | `assertBrowserRunning()` — 데몬 미실행 시 즉시 종료 |
+| `delay.js` | `randomDelay(min, max)` — 상품 간 랜덤 딜레이 |
+| `coupang-browser-start.js` | Playwright 브라우저 데몬 시작 |
+| `coupang-browser-stop.js` | 데몬 종료 |
+| `coupang-browser-status.js` | 데몬 상태 확인 |
+| `setup-sheets.js` | 시트 스키마 초기화 (--force-defaults 옵션) |
+| `qoo10.setGoodsPriceQty.js` | 재고/가격 직접 업데이트 유틸 |
+| `fix-stuck-registering.js` | REGISTERING 락 상태 수동 해제 유틸 |
+| `migrate-coupang-datas-schema.js` | 스키마 마이그레이션 유틸 |
+
+---
+
+### G) Dashboard (`dashboard/`)
+
+Next.js + Vercel 배포. Glassmorphism UI, Mobile-first.
+
+API Routes (`dashboard/src/app/api/`):
+
+| 경로 | 용도 |
+|------|------|
+| `openclaw/health` | OpenClaw 연결 상태 확인 |
+| `openclaw/send` | OpenClaw 메시지 전송 프록시 |
+| `openclaw/history` | OpenClaw 대화 이력 조회 |
+| `openclaw/session-status` | 세션 상태 확인 |
+| `openclaw/aegis-send` | Aegis 에이전트 메시지 전송 |
+| `openclaw/aegis-history` | Aegis 대화 이력 |
+| `qoo10/diagnostics` | Qoo10 API 연결 진단 |
+| `registration/run` | 등록 스크립트 실행 트리거 |
+| `registration/status` | 등록 상태 조회 |
+| `sheets/summary` | 시트 요약 데이터 |
+| `chat/send` | 채팅 메시지 전송 |
+| `chat/history` | 채팅 이력 |
+| `chat/config` | 채팅 설정 |
+
+---
 
 ## Key Data Structures
 
 ### Product Row (coupang_datas sheet)
 
 ```
-# ── Playwright 수집기 write 필드 ─────────────────────────────────────
+# ── 수집 필드 ────────────────────────────────────────
 vendorItemId        # Primary key (URL 파라미터)
 itemId              # Fallback key (URL 파라미터)
 coupang_product_id  # Coupang 상품 ID (URL path)
-categoryId          # Coupang 카테고리 ID (URL 파라미터)
+categoryId          # Coupang 카테고리 ID
 ProductURL          # 원본 쿠팡 상품 URL
-ItemTitle           # 상품명
-ItemPrice           # 쿠팡 판매가 (KRW, 숫자 문자열)
-StandardImage       # 대표 이미지 (thumbnails/... 정규화 경로)
+ItemTitle           # 상품명 (한국어 원본 유지)
+ItemPrice           # 쿠팡 판매가 (KRW)
+StandardImage       # 대표 이미지 URL (800x800ex)
 ExtraImages         # 추가 이미지 배열 (JSON 문자열)
-WeightKg            # 무게 (하드코딩 '1')
-Options             # 옵션 (현재 null)
-ItemDescriptionText # 상세 설명 (없으면 ItemTitle로 fallback)
+WeightKg            # 무게 (Txlogis 배송비 조회 필수)
+ItemDescriptionText # 상세 설명
 updatedAt           # 수집 시각 (ISO 8601)
-status              # 파이프라인 상태 ENUM (수집 후 COLLECTED로 설정)
+status              # 파이프라인 상태 ENUM
 
-# ── Qoo10 등록 write-back 필드 ────────────────────────────────────────
-qoo10SellingPrice       # 계산된 판매가 (JPY)
+# ── Qoo10 등록 write-back 필드 ──────────────────────
+qoo10SellingPrice       # 계산된 판매가 (JPY, write-back)
 qoo10ItemId             # Qoo10 ItemCode (등록 성공 시)
 qoo10SellerCode         # 사용된 SellerCode
 jpCategoryIdUsed        # 사용된 Qoo10 카테고리 ID
 categoryMatchType       # MANUAL | AUTO | FALLBACK
 categoryMatchConfidence # 매핑 신뢰도 (AUTO only)
-coupangCategoryKeyUsed  # 카테고리 매핑에 사용된 key
+coupangCategoryKeyUsed  # 카테고리 매핑 key
 registrationMode        # DRY_RUN | REAL
-registrationStatus      # SUCCESS | WARNING | DRY_RUN | FAILED (API 결과 상세)
-registrationMessage     # 상태 메시지
+registrationStatus      # SUCCESS | WARNING | DRY_RUN | FAILED
+registrationMessage     # 상태 메시지 ([titleMethod=api|fallback] 포함)
 lastRegisteredAt        # 마지막 등록 시도 시각 (ISO 8601)
-needsUpdate             # YES | NO (UPDATE 트리거)
-changeFlags             # PRICE_UP | PRICE_DOWN | OPTIONS_CHANGED (UPDATE 완료 후 초기화)
+needsUpdate             # YES | NO
+changeFlags             # PRICE_UP | PRICE_DOWN | TITLE_CHANGED | DESC_CHANGED | CATEGORY_CHANGED
 ```
 
-### Category Mapping Row (category_mapping sheet)
+### Status ENUM
 
 ```
-coupangCategoryKey  # Normalized categoryPath3 (primary key)
-jpCategoryId        # Mapped Qoo10 category ID
-matchType           # MANUAL | AUTO | FALLBACK
-confidence          # Match confidence (0-1)
+DISCOVERED       → 검색결과에서 발견
+COLLECTED        → 쿠팡 상세 수집 완료
+PENDING_APPROVAL → 일일 한도 내 대기 (수동으로 REGISTER_READY 변경)
+REGISTER_READY   → 등록 필수값 충족, 등록 대기
+REGISTERING      → 등록 시도 중 (락)
+REGISTERED       → Qoo10 등록 성공
+VALIDATING       → 검수 진행 중 (락)
+LIVE             → 판매 유지 중
+OUT_OF_STOCK     → 쿠팡 품절 감지 → Qoo10 qty=0
+DEACTIVATED      → 삭제/복구 불가 (수동으로만 해제)
+ERROR            → 복구 가능한 실패
 ```
+
+---
 
 ## API Methods
 
 ### Qoo10 QAPI
 
-| Method | Version | Purpose |
-|--------|---------|---------|
-| `ItemsBasic.SetNewGoods` | 1.1 | Create new product |
-| `ItemsBasic.UpdateGoods` | 1.0 | Update existing product |
-| `ShippingBasic.GetSellerDeliveryGroupInfo` | 1.0 | Get shipping templates |
-| `CommonInfoLookup.GetCatagoryListAll` | 1.0 | Get JP category list |
+| Method | Purpose |
+|--------|---------|
+| `ItemsBasic.SetNewGoods` | 신규 상품 등록 |
+| `ItemsBasic.UpdateGoods` | 상품 수정 (Title 업데이트에만 안정적) |
+| `ItemsOrder.SetGoodsPriceQty` | 재고/가격 업데이트 |
+| `ItemsContents.EditGoodsContents` | 상세페이지 수정 (래퍼 미구현) |
+| `ItemsLookup.GetItemDetailInfo` | 상품 상세 조회 (래퍼 미구현) |
+| `ItemsLookup.GetAllGoodsInfo` | 전체 상품 목록 조회 |
 
-### SetNewGoods / UpdateGoods Payload
-
-Both use identical structure:
-
-```
-returnType          # application/json
-ItemCode            # (UpdateGoods only) Existing item ID
-SellerCode          # (SetNewGoods only) Generated seller code
-SecondSubCat        # Qoo10 category ID
-ItemTitle           # Product title
-ItemPrice           # Selling price (JPY)
-RetailPrice         # Retail price (default: 0)
-ItemQty             # Quantity (default: 100)
-AvailableDateType   # Availability type (default: 0)
-AvailableDateValue  # Availability value (default: 2)
-ShippingNo          # Shipping template ID (default: 471554)
-AdultYN             # Adult content flag (default: N)
-TaxRate             # Tax rate code (default: S)
-ExpireDate          # Expiration date (default: 2030-12-31)
-StandardImage       # Main image URL
-ItemDescription     # HTML description
-Weight              # Weight in grams (default: 500)
-ProductionPlaceType # 1=Japan, 2=Overseas, 3=Other (default: 2)
-ProductionPlace     # Country name (default: Overseas)
-```
+---
 
 ## Sheet Tabs
 
 | Tab | Primary Key | Purpose |
 |-----|-------------|---------|
-| `coupang_datas` | `vendorItemId` | Product data |
-| `coupang_categorys` | `coupangCategoryId` | Category dictionary |
-| `category_mapping` | `coupangCategoryKey` | KR→JP mappings |
-| `japan_categories` | `jpCategoryId` | JP category cache |
-| `keywords` | `keyword` | 수집 대상 키워드 관리 (ACTIVE/PAUSED/PENDING) |
-| `config` | `key` | 필터 조건값 등 운영 설정 (코드 외부 관리) |
+| `coupang_datas` | `vendorItemId` | 상품 데이터 (SSOT) |
+| `category_mapping` | `coupangCategoryKey` | KR→JP 카테고리 매핑 |
+| `japan_categories` | `jpCategoryId` | JP 카테고리 캐시 |
+| `keywords` | `keyword` | 수집 대상 키워드 (ACTIVE/PAUSED/PENDING) |
+| `config` | `key` | 필터 조건값 등 운영 설정 |
+| `Txlogis_standard` | (weight range) | 일본 배송비 구간 테이블 |
