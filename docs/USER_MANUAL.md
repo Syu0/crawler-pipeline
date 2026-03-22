@@ -2,23 +2,50 @@
 
 ## Step-by-Step Operator Instructions
 
+### 0. 매일 시작 절차 (순서 중요)
+
+> ⚠️ 매일 출근 시 또는 PC 재시작 후 반드시 아래 순서대로 실행한다.
+> 순서가 바뀌거나 1번 없이 2번 실행하면 warming 단계에서 Akamai 블록 발생.
+
+```bash
+# 1번 먼저: yamyam 쿠키 수신 서버
+npm run backend:start
+
+# 2번: Playwright 브라우저 데몬
+npm run coupang:browser:start
+```
+
+운영 환경: **Mac Mini** (Tailscale Funnel로 대시보드와 연결됨)
+
+---
+
 ### 1. 쿠팡 데이터 수집
 
 #### Step 1-a: 쿠키 갱신 (필요 시)
 
 1. Chrome에서 쿠팡 로그인
 2. yamyam 익스텐션 아이콘 클릭 → "Copy Cookie"
-3. `.env`의 `COUPANG_COOKIE`에 붙여넣기
-4. 쿠키 만료 알림 이메일(D-3/D-0) 수신 시 반드시 갱신
+3. 쿠키 만료 알림 이메일(D-3/D-0) 수신 시 반드시 갱신
+   - 쿠키는 서버(`backend:start`)가 수신하여 자동 저장 (`cookieStore.js`)
 
-#### Step 1-b: Playwright 수집 실행
+#### Step 1-b: 키워드 탐색 실행
 
 ```bash
-# dry-run (수집만, Sheets 미저장)
-npm run coupang:pw:dry:trace
+# dry-run (Sheets 미저장)
+npm run coupang:discover:dry
 
-# 실제 수집 + Sheets 저장
-npm run coupang:pw:run
+# 실제 탐색 + Sheets DISCOVERED 저장
+npm run coupang:discover
+```
+
+#### Step 1-c: DISCOVERED → COLLECTED 수집
+
+```bash
+# dry-run
+npm run coupang:collect:dry
+
+# 실제 수집
+npm run coupang:collect
 ```
 
 ### 2. Check coupang_datas Sheet Fields
@@ -36,48 +63,69 @@ After scraping, verify these columns are populated:
 | `categoryPath3` | Last 3 breadcrumb segments | For category mapping |
 | `qoo10SellingPrice` | KRW input for JPY computation | **REQUIRED** |
 
-### Pricing: qoo10SellingPrice (KRW) → ItemPrice (JPY)
+### Pricing: ItemPrice (KRW) → qoo10SellingPrice (JPY)
 
-The system reads `qoo10SellingPrice` as KRW input and computes the Qoo10 selling price (JPY):
+시트의 `ItemPrice`(KRW)를 읽어 Qoo10 판매가(JPY)를 자동 계산한다.
+계산 로직은 `backend/pricing/priceDecision.js`에 있으며 상수는 `backend/pricing/pricingConstants.js`에 정의된다.
+
+**가격 계산 공식:**
 
 ```
-ItemPrice (JPY) = floor(qoo10SellingPrice / 10)
+baseCostJpy   = (ItemPrice_KRW + DOMESTIC_SHIPPING_KRW) / FX_JPY_TO_KRW + japanShippingJpy
+requiredPrice = baseCostJpy / (1 - MARKET_COMMISSION_RATE - MIN_MARGIN_RATE)
+targetPrice   = baseCostJpy * (1 + TARGET_MARGIN_RATE)
+finalPrice    = Math.round(Math.max(requiredPrice, targetPrice))
 ```
 
-**Fixed FX Rate:** 1 JPY = 10 KRW
+**현재 상수값 (`pricingConstants.js`):**
 
-| qoo10SellingPrice (KRW) | ItemPrice (JPY) |
-|-------------------------|-----------------|
-| 5800 | 580 |
-| 12500 | 1250 |
-| 999 | 99 |
+| 상수 | 값 | 설명 |
+|------|-----|------|
+| `FX_JPY_TO_KRW` | `10` | 환율 (1 JPY = 10 KRW, 고정) |
+| `DOMESTIC_SHIPPING_KRW` | `3000` | 국내 배송비 (KRW, 고정) |
+| `MARKET_COMMISSION_RATE` | `0.10` | Qoo10 수수료율 (10%) |
+| `TARGET_MARGIN_RATE` | `0.20` | 목표 마진율 (20%) |
+| `MIN_MARGIN_RATE` | `0.25` | 최소 마진율 (25%) |
 
-**STRICT REQUIREMENT:** `qoo10SellingPrice` is **REQUIRED**.
-- If `qoo10SellingPrice` is empty, null, invalid, or <= 0:
-  - The row **FAILS** immediately
-  - No Qoo10 API call is made
-  - `registrationStatus` = `FAILED`
-  - `registrationMessage` = `qoo10SellingPrice missing or invalid`
+**`japanShippingJpy`:** `WeightKg` 컬럼 기준으로 `Txlogis_standard` 시트에서 동적 조회.
 
-**Price Write-back:** The computed JPY is written back to `qoo10SellingPrice` column **before** the API call, regardless of API success.
+**STRICT REQUIREMENT:** `ItemPrice`(KRW)와 `WeightKg` 둘 다 필수.
+- 둘 중 하나라도 없거나 `<= 0`이면 해당 행은 즉시 FAIL — API 호출 없음.
+- 계산된 JPY는 `qoo10SellingPrice` 컬럼에 write-back됨 (API 성공 여부 무관).
+- CREATE(SetNewGoods)와 UPDATE(UpdateGoods) 양쪽 모두 이 공식 적용.
 
-This pricing applies to **both** CREATE (SetNewGoods) and UPDATE (UpdateGoods) operations.
+> ⚠️ **상수 하드코딩 주의:** 환율/마진/수수료 변경 시 `pricingConstants.js`를 직접 수정해야 한다.
+> 추후 `config` 시트 이관 예정 (CLAUDE.md §9-B 참조).
 
 ### 3. Trigger CREATE vs UPDATE
+
+#### COLLECTED → PENDING_APPROVAL → REGISTER_READY
+
+```bash
+# COLLECTED 행을 일일 한도(MAX_DAILY_REGISTER) 내에서 PENDING_APPROVAL로 전환
+npm run coupang:promote
+
+# 시트에서 PENDING_APPROVAL → REGISTER_READY 수동 변경 후 등록 실행
+```
 
 #### CREATE Mode (New Products)
 
 Products are created when:
+- `status` = `REGISTER_READY`
 - `qoo10ItemId` column is **empty**
-- Row passes validation (has required fields)
 
 Run:
 ```bash
-node scripts/qoo10-auto-register.js --limit 5
+# dry-run
+npm run qoo10:register:dry
+
+# 실제 등록 (QOO10_ALLOW_REAL_REG=1 필요)
+npm run qoo10:register
 ```
 
 After successful CREATE:
 - `qoo10ItemId` is populated with the new Qoo10 item ID
+- `status` → `REGISTERED`
 - `registrationStatus` shows `SUCCESS` or `WARNING`
 
 #### UPDATE Mode (Existing Products)
@@ -90,11 +138,12 @@ To trigger an update:
 1. Set `needsUpdate` to `YES` in the sheet
 2. Run:
    ```bash
-   node scripts/qoo10-auto-register.js
+   npm run qoo10:register
    ```
 
 After successful UPDATE:
 - `needsUpdate` is reset to `NO`
+- `changeFlags` is cleared to `''`
 - `registrationStatus` shows result
 
 ### 4. Interpret Result Columns
@@ -136,18 +185,27 @@ To add a manual mapping:
 ### 6. Common Commands
 
 ```bash
-# Step 1: Playwright 수집 (dry-run)
-npm run coupang:pw:dry:trace
+# 브라우저 상태 확인
+npm run coupang:browser:status
 
-# Dry-run registration (preview only)
-npm run qoo10:auto-register:dry
+# 키워드 탐색 (dry-run)
+npm run coupang:discover:dry
 
-# Real registration
-QOO10_ALLOW_REAL_REG=1 npm run qoo10:auto-register
+# 수집 (dry-run)
+npm run coupang:collect:dry
 
-# Sync Japan categories
-npm run qoo10:sync:japan-categories
+# promote: COLLECTED → PENDING_APPROVAL (dry-run)
+npm run coupang:promote:dry
 
-# Check environment
+# 재고 모니터링 (dry-run, 3건 제한)
+npm run stock:check:test
+
+# 등록 (dry-run)
+npm run qoo10:register:dry
+
+# 환경변수 확인
 npm run qoo10:env
+
+# Google Sheets 스키마 초기화
+npm run sheets:setup
 ```

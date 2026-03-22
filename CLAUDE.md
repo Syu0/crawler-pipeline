@@ -283,6 +283,12 @@ OPENCLAW_SESSION_ID
   - false 시 출력: `[promote] 비활성화 상태입니다 (AUTO_REGISTER_ENABLED=false). config 시트에서 true로 변경하면 재개됩니다.`
   - setup-sheets.js 기본값에도 추가
 
+- [ ] **[추후 작업] 가격 상수 config 시트 이관**
+  - 현재: `backend/pricing/pricingConstants.js`에 하드코딩
+    (`MARKET_COMMISSION_RATE=0.10`, `TARGET_MARGIN_RATE=0.20`, `MIN_MARGIN_RATE=0.25`, `FX_JPY_TO_KRW=10`)
+  - 목표: `config` 시트에서 런타임 로드 — 코드 수정 없이 수수료율·환율·마진 조정 가능
+  - 착수 조건: 운영 안정화 후
+
 - [ ] **[전략] 일본어 상세페이지 콘텐츠 생성**
   - 착수 조건: 6순위 자동 연결 완료 후
   - 구현 위치: `backend/qoo10/contentStrategy.js`
