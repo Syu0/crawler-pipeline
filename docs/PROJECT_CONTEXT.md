@@ -1,26 +1,86 @@
-# PROJECT_CONTEXT
+# PROJECT_CONTEXT.md — RoughDiamond 운영 컨텍스트
 
-## 목적
-- 구매대행 비즈니스 워크플로우 자동화 개발.
+> 대상: OpenClaw 에이전트 쥬디
+> 역할: 쿠팡→Qoo10 자동화 파이프라인 운영 보조
+> 코드 수정이 필요한 작업은 반드시 `CLAUDE.md`를 추가로 읽고 진행할 것.
 
-## 운영 규칙 (최우선)
-- 이 레포를 Single Source of Truth로 사용.
-- 작업 전: main 최신화 + 커밋 해시 확인.
-- 작업 시작 전 아키텍처/환경 체크리스트 갱신.
-- 브랜치 규칙: `oc/<short-task-name>`.
-- 작은 커밋 + 명확한 메시지.
-- PR에 반드시 `(planning)` / `(implementation)` 기재.
-- Architect가 계획해도 코드 수정/테스트 실행은 Coding Agent가 수행.
-- 명시 요청 없이는 신규 외부 유료 API 추가 금지.
-- 제품 동작 변경 시 before/after + 근거 기록.
-- 현재 세션 컨텍스트가 50%를 초과하면 세션 리셋을 수행.
-- 리셋 직후 첫 지시는 반드시 다음 문장으로 고정: `Read docs/PROJECT_CONTEXT.md and docs/CURRENT_TASK.md first.`
+---
 
-## 에이전트 정책
-- Agent A (Coding / NVIDIA NIM): 소규모 수정, lint/format, minor fix, simple tests.
-- Agent B (Architect / OpenRouter Claude Sonnet 4.6): 장문맥 이해, 설계, 복잡 디버깅, 리스크 분석.
+## 파이프라인 요약
 
-## 레포 구조 정책
-- `src/`: 실제 코드(목표 구조)
-- `docs/`: 운영/설계/실행 문서
-- `docs/PROMPTS/`: 시스템/에이전트 프롬프트
+```
+쿠팡 키워드 탐색 → DISCOVERED → COLLECTED → PENDING_APPROVAL
+→ (수동승인) REGISTER_READY → Qoo10 등록 → REGISTERED → LIVE
+→ 재고 모니터링 → OUT_OF_STOCK (qty=0) / LIVE 복구
+```
+
+운영 환경: Mac Mini / Google Sheets SSOT / Vercel 대시보드
+
+---
+
+## 상품 상태 (status ENUM)
+
+```
+DISCOVERED       → 키워드 검색 발견
+COLLECTED        → 쿠팡 상세 수집 완료
+PENDING_APPROVAL → 일일 한도 대기 중 (시트에서 REGISTER_READY로 수동 변경)
+REGISTER_READY   → 등록 승인 완료
+REGISTERING      → 등록 중 (락 — 중복 실행 금지)
+REGISTERED       → Qoo10 등록 성공
+LIVE             → 판매 중
+OUT_OF_STOCK     → 쿠팡 품절 감지 → Qoo10 qty=0
+DEACTIVATED      → 수동으로만 해제 가능 (코드 자동 해제 금지)
+ERROR            → 복구 가능한 실패
+```
+
+---
+
+## 주요 운영 명령어
+
+```bash
+npm run backend:start           # 매일 1번째 실행 (yamyam 쿠키 수신)
+npm run coupang:browser:start   # 매일 2번째 실행 (Playwright 데몬)
+npm run coupang:browser:status  # 데몬 상태 확인
+
+npm run coupang:discover        # 키워드 탐색
+npm run coupang:collect         # DISCOVERED → COLLECTED
+npm run coupang:promote         # COLLECTED → PENDING_APPROVAL
+
+npm run qoo10:register          # REGISTER_READY → Qoo10 등록
+npm run stock:check             # 재고 모니터링
+
+# dry-run은 각 명령어에 :dry 또는 :test 접미어
+```
+
+오류 대응 절차 상세: `docs/RUNBOOK.md` 참조
+
+---
+
+## 현재 대기 중인 작업
+
+→ `docs/CURRENT_TASK.md` 참조
+
+---
+
+## 핵심 제약사항 (운영 시 반드시 준수)
+
+- `REGISTERING` / `VALIDATING` 상태 행에 중복 작업 절대 금지
+- `DEACTIVATED` 상태는 코드로 자동 해제하지 않는다
+- 브라우저 스크립트 실행 전 반드시 데몬 상태 확인 (`coupang:browser:status`)
+- HARD_BLOCK 발생 시 1시간 쿨다운 후 재시작 (강제 재시작 금지)
+- 쿠키 만료 이메일(D-3/D-0) 수신 시 즉시 yamyam으로 갱신
+
+---
+
+## Qoo10 테스트 안전장치
+
+```
+QOO10_TEST_ITEMCODE=1194045329   # 테스트 전용 상품
+QOO10_ALLOW_REAL_REG=1           # 없으면 dry-run
+```
+
+---
+
+## 코드 수정이 필요한 경우
+
+`CLAUDE.md`를 읽고 §8 개발 규칙을 반드시 준수한 뒤 작업한다.
