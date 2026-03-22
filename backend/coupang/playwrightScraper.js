@@ -338,32 +338,34 @@ async function scrapePage(context, productUrl) {
     // ── 가격 — 크롬 확장과 동일한 셀렉터 우선 적용 ──────────────────────────
     // 가격 요소가 렌더링될 때까지 최대 10초 대기
     await page.waitForSelector(
-      '.final-price-amount, .total-price strong, .prod-sale-price .value',
+      '.total-price strong, .final-price-amount, .prod-sale-price .value',
       { timeout: 10000 }
     ).catch(() => trace('Price selector timeout — extracting anyway'));
 
     const itemPrice = await page.evaluate(() => {
-      // 크롬 확장 1순위 셀렉터
-      const priceEl = document.querySelector('.final-price-amount');
-      if (priceEl) {
-        const text = priceEl.textContent || '';
-        const parsed = parseInt(text.replace(/,/g, '').replace(/원/g, '').trim(), 10);
-        if (!isNaN(parsed) && parsed > 0) return String(parsed);
+      // 첫 번째 숫자 블록만 추출 — "8,950원 (100g당 895원)" → 8950
+      function parseFirstNumber(text) {
+        const match = (text || '').match(/[\d,]+/);
+        if (!match) return null;
+        const val = parseInt(match[0].replace(/,/g, ''), 10);
+        return (!isNaN(val) && val > 0) ? val : null;
       }
 
-      // 기존 셀렉터 폴백
-      const selectors = [
+      const PRICE_SELECTORS = [
         '.total-price strong',
+        '.final-price-amount',
+        '[data-testid="product-price"]',
+        '.prod-price .total-price',
         '.prod-sale-price .value',
         '[class*="salePrice"]',
         '[class*="totalPrice"]',
       ];
-      for (const s of selectors) {
+
+      for (const s of PRICE_SELECTORS) {
         const el = document.querySelector(s);
-        if (el && el.innerText.trim()) {
-          const val = el.innerText.replace(/[^0-9]/g, '');
-          if (val && val !== '0') return val;
-        }
+        if (!el) continue;
+        const val = parseFirstNumber(el.textContent);
+        if (val) return String(val);
       }
 
       // JSON-LD 폴백
