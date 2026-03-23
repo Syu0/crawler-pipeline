@@ -26,7 +26,7 @@ const { clearHardBlock } = require('../coupang/blockStateManager');
 
 const FORCE   = process.argv.includes('--force');
 const DRY_RUN = process.argv.includes('--dry-run');
-const CDP_URL = process.env.PLAYWRIGHT_CDP_URL || `http://localhost:${process.env.BROWSER_CDP_PORT || '9222'}`;
+const CDP_URL = process.env.COUPANG_CHROME_CDP_URL || 'http://localhost:9223';
 const COUPANG_DOMAIN = 'https://www.coupang.com';
 
 async function main() {
