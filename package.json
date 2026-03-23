@@ -49,7 +49,9 @@
     "stock:check:dry": "node backend/scripts/coupang-stock-monitor.js --dry-run",
     "stock:check:test": "node backend/scripts/coupang-stock-monitor.js --dry-run --limit=3",
     "email:test": "node backend/scripts/test-email-alert.js",
-    "coupang:collect:resume": "node backend/scripts/coupang-collect-discovered.js"
+    "coupang:collect:resume": "node backend/scripts/coupang-collect-discovered.js",
+    "cookie:refresh": "node backend/scripts/coupang-cookie-refresh.js",
+    "cookie:refresh:force": "node backend/scripts/coupang-cookie-refresh.js --force"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

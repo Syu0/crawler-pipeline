@@ -62,6 +62,18 @@ function clearBlockState() {
 }
 
 /**
+ * blockState를 CLEAR로 초기화 (쿠키 갱신 성공 후 쿨다운 해제용).
+ * 이미 CLEAR이면 아무 작업도 하지 않는다 (idempotent).
+ */
+function clearHardBlock() {
+  const state = readBlockState();
+  if (state.blockState !== 'CLEAR') {
+    writeBlockState({ blockState: 'CLEAR', clearedAt: new Date().toISOString() });
+    console.log('[blockStateManager] 쿨다운 해제 — CLEAR 전환');
+  }
+}
+
+/**
  * 쿨다운이 완료되었으면 자동 CLEAR 후 CLEAR 반환.
  * 아직 쿨다운 중이면 현재 상태 그대로 반환.
  *
@@ -118,6 +130,7 @@ module.exports = {
   writeBlockState,
   setHardBlocked,
   clearBlockState,
+  clearHardBlock,
   getEffectiveBlockState,
   assertCollectSafe,
   getStatusSummary,
