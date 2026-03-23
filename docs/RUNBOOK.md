@@ -195,6 +195,17 @@ npm run coupang:browser:status
 > `collectSafe: ✗` → HARD_BLOCK 쿨다운 중. 수집 재개 불가.
 > `collectSafe: ✓` → 수집 가능.
 
+## Mac Mini 재세팅 시 수동 작업
+
+> Mac Mini를 새로 설치하거나 환경을 재구성할 때 아래 항목을 수동으로 등록해야 한다.
+
+- **Chrome launchd 등록** (부팅 시 CDP Chrome 자동 실행)
+- **crontab 등록** (매일 쿠키 자동 갱신)
+
+→ `docs/coupang-cookie-refresh-v2.md` 지침 참고
+
+---
+
 ### 매일 시작 절차 (순서 중요)
 
 ```bash
