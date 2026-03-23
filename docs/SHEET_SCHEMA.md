@@ -19,10 +19,52 @@ The Google Sheet serves as the central data store between:
 | Tab Name | Purpose |
 |----------|---------|
 | `coupang_datas` | Product data storage |
+| `config` | 런타임 설정값 (코드 수정 없이 시트에서 변경) |
+| `keywords` | 탐색 키워드 목록 |
 | `coupang_categorys` | Category dictionary for future mapping |
 | `japan_categories` | Full JP category list from Qoo10 API |
 | `category_mapping` | KR→JP category mapping (manual + auto) |
 | `Txlogis_standard` | Japan shipping fee by weight range |
+
+---
+
+## Tab: `config`
+
+런타임 설정값 저장. 코드 수정 없이 시트에서 변경 가능. `setup-sheets.js`로 누락 키 자동 추가.
+
+| Column | Header | Description |
+|--------|--------|-------------|
+| A | `key` | 설정 키 이름 |
+| B | `value` | 설정값 (문자열) |
+| C | `memo` | 설명 |
+
+### 현재 키 목록
+
+| Key | 기본값 | 설명 |
+|-----|--------|------|
+| `FILTER_PRICE_KRW_MAX` | `150000` | 관세 면제 기준 최대가 (KRW). 이 값 초과 상품은 수집 제외 |
+| `EXCLUDED_CATEGORY_KEYWORDS` | `의약품,건강,...` | 쉼표 구분. 카테고리명에 포함 시 수집 제외 |
+| `MAX_DAILY_REGISTER` | `10` | 1회 promote 실행당 PENDING_APPROVAL로 올릴 최대 상품 수 |
+| `MAX_DISCOVER_PAGES` | `1` | 키워드 탐색 시 쿠팡 검색 페이지 수 (최대 5) |
+
+**초기화 명령어:**
+```bash
+npm run sheets:setup           # 누락된 키만 추가, 기존 값 유지
+npm run sheets:setup:force     # 모든 기본값 덮어쓰기
+```
+
+---
+
+## Tab: `keywords`
+
+탐색 대상 키워드 목록. `ACTIVE` 상태인 키워드만 수집 시 사용됨.
+
+| Column | Header | Description |
+|--------|--------|-------------|
+| A | `keyword` | 검색 키워드 |
+| B | `status` | `ACTIVE` \| `INACTIVE` |
+| C | `lastRunAt` | 마지막 탐색 실행 시각 (ISO datetime) |
+| D | `memo` | 메모 |
 
 ---
 
