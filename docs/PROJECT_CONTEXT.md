@@ -10,7 +10,7 @@
 
 ```
 쿠팡 키워드 탐색 → DISCOVERED → COLLECTED → PENDING_APPROVAL
-→ (수동승인) REGISTER_READY → Qoo10 등록 → REGISTERED → LIVE
+→ (approve) REGISTER_READY → Qoo10 등록 → REGISTERED → LIVE
 → 재고 모니터링 → OUT_OF_STOCK (qty=0) / LIVE 복구
 ```
 
@@ -23,7 +23,7 @@
 ```
 DISCOVERED       → 키워드 검색 발견
 COLLECTED        → 쿠팡 상세 수집 완료
-PENDING_APPROVAL → 일일 한도 대기 중 (시트에서 REGISTER_READY로 수동 변경)
+PENDING_APPROVAL → 일일 한도 대기 중 (approve 명령으로 일괄 REGISTER_READY 전이)
 REGISTER_READY   → 등록 승인 완료
 REGISTERING      → 등록 중 (락 — 중복 실행 금지)
 REGISTERED       → Qoo10 등록 성공
@@ -37,22 +37,27 @@ ERROR            → 복구 가능한 실패
 
 ## 주요 운영 명령어
 
+> 전체 실행 순서 및 상세 절차 → `docs/RUNBOOK.md` 참조. 파이프라인 작업 전 반드시 읽어라.
+
+핵심 명령어 요약:
+
 ```bash
 npm run backend:start           # 매일 1번째 실행 (yamyam 쿠키 수신)
 npm run coupang:browser:start   # 매일 2번째 실행 (Playwright 데몬)
 npm run coupang:browser:status  # 데몬 상태 확인
 
+# 파이프라인 (순서대로)
 npm run coupang:discover        # 키워드 탐색
 npm run coupang:collect         # DISCOVERED → COLLECTED
 npm run coupang:promote         # COLLECTED → PENDING_APPROVAL
-
-npm run qoo10:register          # REGISTER_READY → Qoo10 등록
+npm run coupang:approve         # PENDING_APPROVAL → REGISTER_READY
+npm run qoo10:auto-register     # REGISTER_READY → Qoo10 등록
 npm run stock:check             # 재고 모니터링
 
-# dry-run은 각 명령어에 :dry 또는 :test 접미어
+# dry-run은 각 명령어에 :dry 접미어
 ```
 
-오류 대응 절차 상세: `docs/RUNBOOK.md` 참조
+쿠키 갱신: 매일 아침 cron 자동 실행 (결과 텔레그램 수신). 실패 시 수동 갱신 → RUNBOOK.md 참조.
 
 ---
 

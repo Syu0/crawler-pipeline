@@ -40,21 +40,36 @@ Location: `/app/backend/.env`
 
 ## 자동 등록 파이프라인 운영
 
+### 전체 파이프라인 실행 순서
+
+각 단계: dry-run 확인 후 real 실행.
+
+| 단계 | 명령어 | 성공 기준 |
+|------|--------|-----------|
+| 1. 키워드 탐색 | `npm run coupang:discover` | DISCOVERED 행 생성 |
+| 2. 상세 수집 | `npm run coupang:collect` | COLLECTED 전이 |
+| 3. 등록 대기열 | `npm run coupang:promote` | PENDING_APPROVAL 전이 |
+| 4. 일괄 승인 | `npm run coupang:approve` | REGISTER_READY 전이 |
+| 5. Qoo10 등록 | `npm run qoo10:auto-register` | REGISTERED + qoo10ItemId |
+| 6. 재고 모니터링 | `npm run stock:check` | LIVE 전이 |
+
 ### 수동 실행 (현재 방식)
 
 ```bash
-# 1. COLLECTED 상품을 PENDING_APPROVAL로 올림 (하루 MAX_DAILY_REGISTER개 한도)
+# 1. COLLECTED → PENDING_APPROVAL
 npm run coupang:promote
 
-# 2. Google Sheets에서 등록할 상품의 status를 REGISTER_READY로 변경 (수동 승인)
+# 2. PENDING_APPROVAL → REGISTER_READY (일괄 승인)
+npm run coupang:approve
 
-# 3. REGISTER_READY 상품 Qoo10 등록
+# 3. REGISTER_READY → Qoo10 등록
 npm run qoo10:auto-register
 ```
 
-dry-run으로 먼저 확인:
+dry-run 확인:
 ```bash
-npm run coupang:promote:dry   # 변경 없이 슬롯 계산 및 대상 목록 확인
+npm run coupang:promote:dry
+npm run coupang:approve:dry
 npm run qoo10:auto-register:dry
 ```
 
@@ -128,9 +143,16 @@ npm run sheets:setup:force    # 모든 기본값 덮어쓰기 — 값 초기화 
 **Cause:** 쿠팡 인증 쿠키 만료 (Akamai 차단)
 
 **Resolution:**
-1. yamyam 크롬 익스텐션으로 쿠키 갱신
-2. `.env`의 `COUPANG_COOKIE` 업데이트
-3. 만료 D-3/D-0 이메일 알림 확인 (meaningful.jy@gmail.com)
+
+자동 갱신 (정상 운영 시):
+- 매일 아침 cron이 OpenClaw Browser Relay를 통해 자동 추출 → POST /cookie
+- 결과는 텔레그램으로 수신
+  - ✅ 성공: "쿠키 갱신 완료" → 파이프라인 자동 시작
+  - ❌ 실패: "쿠키 갱신 실패" → 아래 수동 절차 진행
+
+수동 갱신 (자동 갱신 실패 시):
+1. yamyam 크롬 익스텐션으로 쿠키 수동 갱신
+2. 만료 D-3/D-0 이메일 알림 확인 (meaningful.jy@gmail.com)
 
 ## Log Locations
 
