@@ -21,6 +21,7 @@
 const { chromium: playwrightChromium } = require('playwright-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const cookieStore = require('../services/cookieStore');
+const { humanPause, humanScroll, randomDelay } = require('../scripts/delay');
 
 playwrightChromium.use(StealthPlugin());
 
@@ -284,6 +285,17 @@ async function scrapePage(context, productUrl) {
     await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() =>
       trace('networkidle timeout — proceeding')
     );
+
+    const isDryRun =
+      process.env.COUPANG_SCRAPE_DRY_RUN === '1' ||
+      process.env.COUPANG_SCRAPE_DRY_RUN === 'true';
+
+    if (isDryRun) {
+      await randomDelay(500, 500);
+    } else {
+      await humanScroll(page);
+      await humanPause(false);
+    }
 
     // 챌린지 페이지 감지
     const pageTitle = await page.title().catch(() => '');

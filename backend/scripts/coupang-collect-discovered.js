@@ -38,6 +38,7 @@ const {
   ensureHeaders,
   upsertRow,
   upsertCoupangCategory,
+  getConfig,
 } = require('../coupang/sheetsClient');
 const { COUPANG_DATA_HEADERS } = require('../coupang/sheetSchema');
 const { scrapeCoupangProductPlaywright } = require('../coupang/playwrightScraper');
@@ -130,6 +131,10 @@ async function main() {
     console.log('수집 대상 없음 (DISCOVERED 행이 없습니다).');
     return;
   }
+
+  const config = await getConfig(sheets, SPREADSHEET_ID);
+  const maxPerSession = parseInt(config.MAX_COLLECT_PER_SESSION ?? '30', 10) || 30;
+  let sessionCount = 0;
 
   if (limit && limit > 0) {
     products = products.slice(0, limit);
@@ -388,6 +393,13 @@ async function main() {
             console.error(`  ✗ 시트 ERROR 기록 실패: ${writeErr.message}`);
           }
         }
+      }
+
+      sessionCount++;
+      if (sessionCount >= maxPerSession) {
+        console.log(`[collect] 세션 배치 한도 도달 (${maxPerSession}개). 종료.`);
+        console.log('재개 명령: npm run coupang:collect');
+        break;
       }
 
       // 마지막 항목이 아니면 딜레이

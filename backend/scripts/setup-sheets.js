@@ -81,6 +81,11 @@ const CONFIG_DEFAULTS = [
     value: '1',
     memo: '키워드 탐색 시 쿠팡 검색 페이지 수 (기본 1, 최대 5)',
   },
+  {
+    key: 'MAX_COLLECT_PER_SESSION',
+    value: '10',
+    memo: '1회 수집 세션당 최대 처리 상품 수. Akamai 점수 누적 방지.',
+  },
 ];
 
 async function main() {
