@@ -411,9 +411,9 @@ _마지막 업데이트: 2026-03-12_
   - 현재: `config` 시트 `EXCLUDED_CATEGORY_KEYWORDS` 값으로 이름 키워드 매칭
   - 이상적: categoryId 기반 정확한 매핑 테이블 구축
 
-- [ ] **검색결과 페이지 수 (maxPages) 운영 기준**
-  - 현재: 기본값 2페이지 (listSize=60 → 최대 120개 후보)
-  - 검토 필요: 키워드별 페이지 수 설정 or `config` 시트 관리
+- [x] **검색결과 페이지 수 (maxPages) config 시트 이관 완료**
+  - config 시트 `MAX_DISCOVER_PAGES` 키로 관리 (기본값 1)
+  - 코드 수정 없이 시트에서 변경 가능
 
 ### 에이전트 위임 시 고려사항
 

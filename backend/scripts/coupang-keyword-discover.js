@@ -95,8 +95,10 @@ async function main() {
   // 1. config 로드
   console.log('[1/2] config 시트 로드...');
   const config = await getConfig(sheets, SPREADSHEET_ID);
+  const maxPages = parseInt(config['MAX_DISCOVER_PAGES'] || '1', 10) || 1;
   console.log(`  FILTER_PRICE_KRW_MAX:       ${config.FILTER_PRICE_KRW_MAX?.toLocaleString()} KRW`);
-  console.log(`  EXCLUDED_CATEGORY_KEYWORDS: ${(config.EXCLUDED_CATEGORY_KEYWORDS || []).join(', ')}\n`);
+  console.log(`  EXCLUDED_CATEGORY_KEYWORDS: ${(config.EXCLUDED_CATEGORY_KEYWORDS || []).join(', ')}`);
+  console.log(`  MAX_DISCOVER_PAGES:         ${maxPages}\n`);
 
   // 2. 키워드 목록
   let keywords;
@@ -133,7 +135,7 @@ async function main() {
       let items;
       try {
         items = await searchCoupangByKeyword(kw.keyword, context, {
-          maxPages: 2,
+          maxPages,
           delayMin: config.COLLECT_DELAY_MIN_MS,
           delayMax: config.COLLECT_DELAY_MAX_MS,
         });

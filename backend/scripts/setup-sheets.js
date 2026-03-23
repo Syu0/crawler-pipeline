@@ -76,6 +76,11 @@ const CONFIG_DEFAULTS = [
     value: '10',
     memo: '1회 promote 실행당 PENDING_APPROVAL로 올릴 최대 상품 수',
   },
+  {
+    key: 'MAX_DISCOVER_PAGES',
+    value: '1',
+    memo: '키워드 탐색 시 쿠팡 검색 페이지 수 (기본 1, 최대 5)',
+  },
 ];
 
 async function main() {
