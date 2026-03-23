@@ -37,14 +37,13 @@ ERROR            → 복구 가능한 실패
 
 ## 주요 운영 명령어
 
-> 전체 실행 순서 및 상세 절차 → `docs/RUNBOOK.md` 참조. 파이프라인 작업 전 반드시 읽어라.
-
-핵심 명령어 요약:
+> 전체 실행 순서 및 dry-run 정책 → `docs/RUNBOOK.md` 참조. 파이프라인 작업 전 반드시 읽어라.
 
 ```bash
-npm run backend:start           # 매일 1번째 실행 (yamyam 쿠키 수신)
+npm run backend:start           # 매일 1번째 실행 (쿠키 수신 서버)
 npm run coupang:browser:start   # 매일 2번째 실행 (Playwright 데몬)
 npm run coupang:browser:status  # 데몬 상태 확인
+npm run cookie:refresh          # 쿠키 수동 갱신 (자동 갱신 실패 시)
 
 # 파이프라인 (순서대로)
 npm run coupang:discover        # 키워드 탐색
@@ -54,10 +53,10 @@ npm run coupang:approve         # PENDING_APPROVAL → REGISTER_READY
 npm run qoo10:auto-register     # REGISTER_READY → Qoo10 등록
 npm run stock:check             # 재고 모니터링
 
-# dry-run은 각 명령어에 :dry 접미어
+# dry-run은 각 명령어에 :dry 접미어 (Playwright 단계는 생략 — RUNBOOK 참조)
 ```
 
-쿠키 갱신: 매일 아침 cron 자동 실행 (결과 텔레그램 수신). 실패 시 수동 갱신 → RUNBOOK.md 참조.
+쿠키 갱신: 매일 아침 cron 자동 실행 (결과 텔레그램 수신). 실패 시 `npm run cookie:refresh`.
 
 ---
 
@@ -73,7 +72,7 @@ npm run stock:check             # 재고 모니터링
 - `DEACTIVATED` 상태는 코드로 자동 해제하지 않는다
 - 브라우저 스크립트 실행 전 반드시 데몬 상태 확인 (`coupang:browser:status`)
 - HARD_BLOCK 발생 시 1시간 쿨다운 후 재시작 (강제 재시작 금지)
-- 쿠키 만료 이메일(D-3/D-0) 수신 시 즉시 yamyam으로 갱신
+- 쿠키 만료 텔레그램 알림 수신 시 즉시 `npm run cookie:refresh` 실행
 
 ---
 

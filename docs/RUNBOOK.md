@@ -36,41 +36,37 @@ Location: `/app/backend/.env`
 | `QOO10_SAK` | Yes* | - | Qoo10 Seller Auth Key (*required for REAL mode) |
 | `QOO10_ALLOW_REAL_REG` | No | `0` | Set to `1` to enable real API calls |
 | `QOO10_TRACER` | No | `0` | Set to `1` for verbose API logging |
-| `COUPANG_COOKIE` | Yes | - | Playwright 수집기용 쿠팡 인증 쿠키 (yamyam으로 갱신) |
+| `COUPANG_COOKIE` | Yes | - | Playwright 수집기용 쿠팡 인증 쿠키 (`npm run cookie:refresh`로 갱신) |
 
 ## 자동 등록 파이프라인 운영
 
 ### 전체 파이프라인 실행 순서
 
-각 단계: dry-run 확인 후 real 실행.
+Playwright를 사용하는 단계(1·2·6)는 dry-run 생략. 시트/API를 사용하는 단계(3·4·5)는 dry-run 먼저.
 
-| 단계 | 명령어 | 성공 기준 |
-|------|--------|-----------|
-| 1. 키워드 탐색 | `npm run coupang:discover` | DISCOVERED 행 생성 |
-| 2. 상세 수집 | `npm run coupang:collect` | COLLECTED 전이 |
-| 3. 등록 대기열 | `npm run coupang:promote` | PENDING_APPROVAL 전이 |
-| 4. 일괄 승인 | `npm run coupang:approve` | REGISTER_READY 전이 |
-| 5. Qoo10 등록 | `npm run qoo10:auto-register` | REGISTERED + qoo10ItemId |
-| 6. 재고 모니터링 | `npm run stock:check` | LIVE 전이 |
+| 단계 | 명령어 | dry-run | 이유 |
+|------|--------|---------|------|
+| 1. 키워드 탐색 | `npm run coupang:discover` | ❌ 생략 | Playwright 실행 = 블록 위험 |
+| 2. 상세 수집 | `npm run coupang:collect` | ❌ 생략 | 동일 |
+| 3. 등록 대기열 | `npm run coupang:promote` | ✅ 먼저 | 시트 읽기/쓰기만, 대상 수 확인 |
+| 4. 일괄 승인 | `npm run coupang:approve` | ✅ 먼저 | 승인 대상 확인 |
+| 5. Qoo10 등록 | `npm run qoo10:auto-register` | ✅✅ 필수 | JPY 가격·카테고리 확인 필수 |
+| 6. 재고 모니터링 | `npm run stock:check` | ❌ 생략 | Playwright 실행 = 블록 위험 |
 
 ### 수동 실행 (현재 방식)
 
 ```bash
 # 1. COLLECTED → PENDING_APPROVAL
+npm run coupang:promote:dry
 npm run coupang:promote
 
 # 2. PENDING_APPROVAL → REGISTER_READY (일괄 승인)
+npm run coupang:approve:dry
 npm run coupang:approve
 
 # 3. REGISTER_READY → Qoo10 등록
-npm run qoo10:auto-register
-```
-
-dry-run 확인:
-```bash
-npm run coupang:promote:dry
-npm run coupang:approve:dry
 npm run qoo10:auto-register:dry
+npm run qoo10:auto-register
 ```
 
 ### cron 자동화 (옵션)
@@ -145,14 +141,17 @@ npm run sheets:setup:force    # 모든 기본값 덮어쓰기 — 값 초기화 
 **Resolution:**
 
 자동 갱신 (정상 운영 시):
-- 매일 아침 cron이 OpenClaw Browser Relay를 통해 자동 추출 → POST /cookie
+- 매일 아침 cron이 `npm run cookie:refresh` 자동 실행
 - 결과는 텔레그램으로 수신
   - ✅ 성공: "쿠키 갱신 완료" → 파이프라인 자동 시작
   - ❌ 실패: "쿠키 갱신 실패" → 아래 수동 절차 진행
 
 수동 갱신 (자동 갱신 실패 시):
-1. yamyam 크롬 익스텐션으로 쿠키 수동 갱신
-2. 만료 D-3/D-0 이메일 알림 확인 (meaningful.jy@gmail.com)
+```bash
+npm run cookie:refresh
+# 또는 강제 갱신:
+npm run cookie:refresh:force
+```
 
 ## Log Locations
 
@@ -186,10 +185,8 @@ EXIT_REASON: DAEMON_EXPIRING
 쿨다운 중 `npm run coupang:collect` 실행 시 즉시 종료되며 잔여시간이 출력된다.
 
 1. **1시간 대기** (cooldownUntil 시각까지 — 쿨다운 완료 시 자동 CLEAR)
-2. 텔레그램에서 쿠키 갱신 결과 확인
-   - 자동 갱신 성공 시: 그대로 진행
-   - 자동 갱신 실패 시: OpenClaw Browser Relay로 수동 트리거
-     `openclaw: 쿠팡 탭 쿠키 재추출 후 POST /cookie`
+2. `npm run cookie:refresh`
+   - 실패 시: `npm run cookie:refresh:force`
 3. `npm run coupang:browser:stop`
 4. `npm run coupang:browser:start`
 5. `npm run coupang:collect`
@@ -234,11 +231,14 @@ npm run coupang:browser:status
 ### 매일 시작 절차 (순서 중요)
 
 ```bash
-# 1. yamyam 쿠키 수신 서버 (먼저 실행)
+# 1. 쿠키 수신 서버 (먼저 실행)
 npm run backend:start
 
 # 2. Playwright 브라우저 데몬 (이후 실행)
 npm run coupang:browser:start
+
+# 3. 쿠키 갱신 (만료 시에만 실행, 유효하면 자동 skip)
+npm run cookie:refresh
 ```
 
 > **주의:** 2번을 먼저 실행하거나 1번 없이 실행하면 warming 단계에서 즉시 블록됨.
