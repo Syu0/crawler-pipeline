@@ -45,6 +45,8 @@
     "coupang:collect:dry": "node backend/scripts/coupang-collect-discovered.js --dry-run",
     "coupang:promote": "node backend/scripts/coupang-promote-to-pending.js",
     "coupang:promote:dry": "node backend/scripts/coupang-promote-to-pending.js --dry-run",
+    "coupang:approve": "node backend/scripts/coupang-approve-pending.js",
+    "coupang:approve:dry": "node backend/scripts/coupang-approve-pending.js --dry-run",
     "stock:check": "node backend/scripts/coupang-stock-monitor.js",
     "stock:check:dry": "node backend/scripts/coupang-stock-monitor.js --dry-run",
     "stock:check:test": "node backend/scripts/coupang-stock-monitor.js --dry-run --limit=3",

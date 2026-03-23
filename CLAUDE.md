@@ -179,6 +179,9 @@ write calls 쿼터: 10회/세션
 - blockState는 `backend/.browser-block-state.json`에 저장된다 (Sheets 비저장).
   collect 시작 전 pre-flight 체크 필수 (`blockStateManager.assertCollectSafe()`).
 - HARD_BLOCK 감지 시 `blockStateManager.setHardBlocked()`로 쿨다운 기록. 쿨다운 중 collect 실행 시 즉시 종료.
+- Playwright를 사용하는 스크립트(discover / collect / stock:check)는 dry-run을 생략한다.
+  dry-run도 Playwright를 실제로 실행하므로 Akamai 블록 위험이 real과 동일.
+  시트/API만 사용하는 스크립트(promote / approve / auto-register)는 dry-run 먼저 실행.
 
 ---
 
@@ -249,6 +252,10 @@ write calls 쿼터: 10회/세션
 - [x] **선행②** 재고 모니터 실검증
   - IN_STOCK 유지 정상 확인. OUT_OF_STOCK 전이 경로는 dry-run 검증 완료.
   - 추가 발견: 1195611873 카테고리 미스매치 (category_mapping 시트 MANUAL 수정 필요)
+- [x] **PENDING_APPROVAL 승인 자동화** (`coupang-approve-pending.js`)
+  - PENDING_APPROVAL → REGISTER_READY 일괄 전이
+  - `npm run coupang:approve` / `npm run coupang:approve:dry`
+  - `--limit=N` 옵션 지원
 - [x] **6순위** COLLECTED → Qoo10 등록 파이프라인 자동 연결 | 브랜치: oc/auto-register-pipeline (머지 완료)
   - `coupang-promote-to-pending.js`: COLLECTED → PENDING_APPROVAL (MAX_DAILY_REGISTER 한도)
   - `qoo10-auto-register.js`: REGISTER_READY만 처리 (COLLECTED 건너뜀)
@@ -256,11 +263,6 @@ write calls 쿼터: 10회/세션
   - fix: qoo10ItemId 있는 행이 CREATE 큐에 중복 진입하던 버그 수정
 
 #### 🔄 대기 중
-
-- [ ] **[추후 연동]** PENDING_APPROVAL 승인 자동화
-  - 현재: 시트에서 수동으로 REGISTER_READY 변경
-  - 검토: 대시보드 승인 버튼 or Slack 액션 연동
-  - 착수 조건: 대시보드 개발 단계 또는 운영 자동화 필요 시점
 
 - [ ] **[cron 붙일 때]** AUTO_REGISTER_ENABLED 플래그 추가
   - config 시트에 `AUTO_REGISTER_ENABLED` 키 추가 (true/false)
@@ -362,6 +364,7 @@ crawler-pipeline/
 │   │   ├── coupang-keyword-discover.js
 │   │   ├── coupang-collect-discovered.js
 │   │   ├── coupang-promote-to-pending.js
+│   │   ├── coupang-approve-pending.js  # PENDING_APPROVAL → REGISTER_READY 일괄 승인
 │   │   ├── coupang-stock-monitor.js
 │   │   ├── setup-sheets.js
 │   │   └── qoo10.setGoodsPriceQty.js
