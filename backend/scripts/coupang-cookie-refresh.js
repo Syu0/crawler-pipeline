@@ -23,6 +23,7 @@ const { chromium } = require('playwright');
 const { saveCookies } = require('../services/cookieStore');
 const { isCookieExpiredOrSoon } = require('../services/cookieExpiry');
 const { clearHardBlock } = require('../coupang/blockStateManager');
+const { sendTelegram } = require('../services/telegramNotifier');
 
 const FORCE   = process.argv.includes('--force');
 const DRY_RUN = process.argv.includes('--dry-run');
@@ -77,6 +78,19 @@ async function main() {
     }
 
     console.log(`[cookie-refresh] 쿠키 ${cookies.length}개 추출 완료`);
+
+    const hasSid = cookies.some(c => c.name === 'sid');
+    if (!hasSid) {
+      const msg = [
+        '⚠️ <b>[RoughDiamond] 쿠팡 로그인 만료</b>',
+        '',
+        'Chrome에서 coupang.com 재로그인이 필요합니다.',
+        'Mac Mini → Chrome → coupang.com → 로그인',
+      ].join('\n');
+      await sendTelegram(msg);
+      console.error('[cookie-refresh] sid 쿠키 없음 — 로그인 만료. 텔레그램 알림 발송.');
+      process.exit(1);
+    }
 
     if (DRY_RUN) {
       console.log('[cookie-refresh] --dry-run 모드 — 저장 생략. 종료.');
