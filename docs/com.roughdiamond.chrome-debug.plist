@@ -12,6 +12,7 @@
     <string>--remote-debugging-port=9223</string>
     <string>--no-first-run</string>
     <string>--no-default-browser-check</string>
+    <string>--user-data-dir=/Users/judy/Library/Application Support/Google/Chrome/RoughDiamond</string>
     <string>https://www.coupang.com</string>
   </array>
 
