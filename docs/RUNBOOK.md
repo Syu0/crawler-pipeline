@@ -186,7 +186,10 @@ EXIT_REASON: DAEMON_EXPIRING
 쿨다운 중 `npm run coupang:collect` 실행 시 즉시 종료되며 잔여시간이 출력된다.
 
 1. **1시간 대기** (cooldownUntil 시각까지 — 쿨다운 완료 시 자동 CLEAR)
-2. yamyam 크롬 익스텐션에서 쿠키 재갱신
+2. 텔레그램에서 쿠키 갱신 결과 확인
+   - 자동 갱신 성공 시: 그대로 진행
+   - 자동 갱신 실패 시: OpenClaw Browser Relay로 수동 트리거
+     `openclaw: 쿠팡 탭 쿠키 재추출 후 POST /cookie`
 3. `npm run coupang:browser:stop`
 4. `npm run coupang:browser:start`
 5. `npm run coupang:collect`
