@@ -109,6 +109,7 @@ async function main() {
   try {
     saveCookies(cookieString);
     console.log('[cookie-refresh] 쿠키 저장 완료');
+    await sendTelegram('✅ <b>[RoughDiamond] 쿠팡 쿠키 갱신 완료</b>\n\n수집 파이프라인이 정상 재개됩니다.');
   } catch (err) {
     console.error('[cookie-refresh] 쿠키 저장 실패:', err.message);
     process.exit(1);
