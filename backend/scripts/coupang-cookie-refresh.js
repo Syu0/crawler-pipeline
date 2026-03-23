@@ -23,6 +23,7 @@ const { chromium } = require('playwright');
 const { saveCookies } = require('../services/cookieStore');
 const { isCookieExpiredOrSoon } = require('../services/cookieExpiry');
 const { clearHardBlock } = require('../coupang/blockStateManager');
+const { sendTelegram } = require('../services/telegramNotifier');
 
 const FORCE   = process.argv.includes('--force');
 const DRY_RUN = process.argv.includes('--dry-run');
@@ -78,6 +79,19 @@ async function main() {
 
     console.log(`[cookie-refresh] 쿠키 ${cookies.length}개 추출 완료`);
 
+    const hasSid = cookies.some(c => c.name === 'sid');
+    if (!hasSid) {
+      const msg = [
+        '⚠️ <b>[RoughDiamond] 쿠팡 로그인 만료</b>',
+        '',
+        'Chrome에서 coupang.com 재로그인이 필요합니다.',
+        'Mac Mini → Chrome → coupang.com → 로그인',
+      ].join('\n');
+      await sendTelegram(msg);
+      console.error('[cookie-refresh] sid 쿠키 없음 — 로그인 만료. 텔레그램 알림 발송.');
+      process.exit(1);
+    }
+
     if (DRY_RUN) {
       console.log('[cookie-refresh] --dry-run 모드 — 저장 생략. 종료.');
       console.log('추출된 쿠키 이름:', cookies.map(c => c.name).join(', '));
@@ -95,6 +109,7 @@ async function main() {
   try {
     saveCookies(cookieString);
     console.log('[cookie-refresh] 쿠키 저장 완료');
+    await sendTelegram('✅ <b>[RoughDiamond] 쿠팡 쿠키 갱신 완료</b>\n\n수집 파이프라인이 정상 재개됩니다.');
   } catch (err) {
     console.error('[cookie-refresh] 쿠키 저장 실패:', err.message);
     process.exit(1);
