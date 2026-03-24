@@ -20,6 +20,7 @@ const net = require('net');
 const path = require('path');
 
 const { chromium: playwrightChromium } = require('playwright-extra');
+const { patch } = require('rebrowser-patches');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 
 const cookieStore = require('../services/cookieStore');
@@ -71,6 +72,7 @@ async function _assertCookieValid() {
 }
 
 playwrightChromium.use(StealthPlugin());
+patch(playwrightChromium);
 
 // ── CDP 포트 (env 오버라이드 가능) ────────────────────────────────────────────
 const CDP_PORT = parseInt(process.env.BROWSER_CDP_PORT || '9222', 10);
