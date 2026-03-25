@@ -71,6 +71,41 @@ const PRESERVE_ON_ERROR = [
 const COLLECT_DELAY_MIN_MS = 30_000;
 const COLLECT_DELAY_MAX_MS = 120_000;
 
+// ── 일일 한도 헬퍼 ───────────────────────────────────────────────────────────
+
+/** 현재 KST 날짜를 "YYYY-MM-DD" 형식으로 반환 */
+function getTodayKST() {
+  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 10);
+}
+
+/**
+ * 오늘(KST) 수집된 COLLECTED 행 수를 반환한다.
+ * updatedAt 컬럼이 오늘 날짜("YYYY-MM-DD")로 시작하는 COLLECTED 행만 카운트.
+ */
+async function countTodayCollected(sheets) {
+  const today = getTodayKST();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${TAB}!A:ZZ`,
+  });
+  const rows = res.data.values || [];
+  if (rows.length < 2) return 0;
+
+  const hdrs       = rows[0];
+  const statusIdx  = hdrs.indexOf('status');
+  const updatedIdx = hdrs.indexOf('updatedAt');
+
+  let count = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const status    = row[statusIdx]  || '';
+    const updatedAt = row[updatedIdx] || '';
+    if (status === 'COLLECTED' && updatedAt.startsWith(today)) count++;
+  }
+  return count;
+}
+
 // ── CLI 파싱 ─────────────────────────────────────────────────────────────────
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -115,11 +150,34 @@ async function main() {
 
   const config = await getConfig(sheets, SPREADSHEET_ID);
   const maxPerSession = parseInt(config.MAX_COLLECT_PER_SESSION ?? '30', 10) || 30;
+  const maxPerDay     = parseInt(config.MAX_COLLECT_PER_DAY    ?? '10', 10) || 10;
 
-  if (limit && limit > 0) {
-    products = products.slice(0, limit);
+  // ── 일일 한도 체크 ──────────────────────────────────────────────────────────
+  const todayCollected = await countTodayCollected(sheets);
+  console.log(`  오늘 수집 현황: ${todayCollected}/${maxPerDay} (MAX_COLLECT_PER_DAY)`);
+
+  if (todayCollected >= maxPerDay) {
+    console.log(
+      `[collect] 오늘 일일 한도 도달 (${todayCollected}/${maxPerDay}). 내일 다시 실행하세요.`
+    );
+    return;
   }
-  console.log(`  대상: ${products.length}개\n`);
+
+  const remainingToday = maxPerDay - todayCollected;
+
+  // --limit 과 오늘 잔여량 중 작은 값으로 최종 한도 결정
+  let effectiveLimit = remainingToday;
+  if (limit && limit > 0) {
+    if (limit > maxPerDay) {
+      console.log(
+        `[collect] --limit이 일일 한도(${maxPerDay})를 초과하여 ${maxPerDay}로 제한됩니다.`
+      );
+    }
+    effectiveLimit = Math.min(limit, remainingToday);
+  }
+
+  products = products.slice(0, effectiveLimit);
+  console.log(`  대상: ${products.length}개 (오늘 잔여: ${remainingToday}개)\n`);
 
   // 헤더 보장
   if (!dryRun) {

@@ -53,14 +53,13 @@ function browserEvaluate(fn) {
 // ── URL 정규화 ────────────────────────────────────────────────────────────────
 
 /**
- * 이미지 URL을 thumbnails/remote/origin/... 상대 경로로 정규화.
- * e.g. "https://thumbnail.coupangcdn.com/thumbnails/remote/492x492/..." → "thumbnails/remote/origin/..."
+ * 이미지 URL을 풀 HTTPS URL로 정규화.
+ * protocol-relative("//...") → "https://..." 변환만 수행.
+ * CDN size 세그먼트는 그대로 유지 ("origin"은 CDN 미지원 → 404 확인됨).
  */
 function normalizeImageUrl(url) {
   if (!url) return null;
-  const m = url.match(/thumbnails\/remote\/[^/]+\/(.*)/);
-  if (m) return `thumbnails/remote/origin/${m[1]}`;
-  return url;
+  return url.startsWith('//') ? `https:${url}` : url;
 }
 
 // ── evaluate 함수 빌더 ────────────────────────────────────────────────────────
@@ -123,7 +122,7 @@ function buildReviewFn(productId) {
  *   CollectedPhases: string
  * }>}
  */
-async function collectProductData(productId, vendorItemId, itemId) {
+async function collectProductData(productId, vendorItemId, _itemId) {
   const successfulSteps = [];
 
   let StandardImage = null;

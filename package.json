@@ -43,6 +43,7 @@
     "coupang:browser:status": "node backend/scripts/coupang-browser-status.js",
     "coupang:collect": "node backend/scripts/coupang-collect-discovered.js",
     "coupang:collect:dry": "node backend/scripts/coupang-collect-discovered.js --dry-run",
+    "coupang:collect:one": "node backend/scripts/coupang-collect-one.js",
     "coupang:promote": "node backend/scripts/coupang-promote-to-pending.js",
     "coupang:promote:dry": "node backend/scripts/coupang-promote-to-pending.js --dry-run",
     "coupang:approve": "node backend/scripts/coupang-approve-pending.js",

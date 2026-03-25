@@ -245,6 +245,23 @@ npm run cookie:refresh
 
 ---
 
+## 단일 상품 강제 재수집
+
+특정 vendorItemId 행을 status 무관 강제 재수집할 때 사용한다.
+Browser Relay attach 상태에서 실행.
+
+```bash
+npm run coupang:collect:one -- --vendorItemId=<vendorItemId>
+# 예:
+npm run coupang:collect:one -- --vendorItemId=86533289539
+```
+
+- 시트에서 해당 행을 찾아 `collectProductData` 실행
+- 성공 시 status → `COLLECTED`, 수집 필드 전체 업데이트
+- HARD_BLOCK 감지 시 `setHardBlocked()` + 이메일 알림 후 종료
+
+---
+
 ## Health Checks
 
 ```bash

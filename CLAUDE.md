@@ -239,6 +239,12 @@ write calls 쿼터: 10회/세션
   > 전체 목록은 config 시트 `VALID_CHANGE_FLAGS` 키 참고.
   > **⚠️ 미구현 래퍼:** `getItemDetailInfo.js`, `editGoodsContents.js` 파일 없음. EditGoodsContents API 호출 경로 현재 없음.
 - [x] 인벤토리 관리 qoo10_inventory 시트 + 동기화/qty처리 스크립트 | 브랜치: oc/qoo10-inventory-mgmt
+- [x] 수집기 Browser Relay 방식 전환 | 브랜치: oc/api-collector (머지 완료)
+  - Playwright headless 상세 페이지 접근 → Browser Relay `evaluate(fetch())` 로 교체
+  - `next-api/products/quantity-info`: ItemTitle·ItemPrice·StockStatus
+  - `next-api/review`: ReviewCount·ReviewAvgRating
+  - DOM 파싱: StandardImage·ExtraImages
+  - HARD_BLOCK 0, 3/3 연속 수집 성공 검증 완료
 
 ### 9-B. 현재 작업 순서 (2026-03-18 기준)
 

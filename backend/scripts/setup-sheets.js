@@ -86,6 +86,11 @@ const CONFIG_DEFAULTS = [
     value: '10',
     memo: '1회 수집 세션당 최대 처리 상품 수. Akamai 점수 누적 방지.',
   },
+  {
+    key: 'MAX_COLLECT_PER_DAY',
+    value: '10',
+    memo: '하루 최대 수집 상품 수 (안전장치 — 이 값 초과 불가)',
+  },
 ];
 
 async function main() {
