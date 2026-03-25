@@ -182,6 +182,10 @@ write calls 쿼터: 10회/세션
 - Playwright를 사용하는 스크립트(discover / collect / stock:check)는 dry-run을 생략한다.
   dry-run도 Playwright를 실제로 실행하므로 Akamai 블록 위험이 real과 동일.
   시트/API만 사용하는 스크립트(promote / approve / auto-register)는 dry-run 먼저 실행.
+- 수집 스크립트는 Browser Relay (`openclaw browser evaluate`) 방식을 사용한다.
+  headless Playwright로 상세 페이지 직접 접근 금지 — Akamai TLS 핑거프린트 차단 확인됨.
+- 수집 전 Chrome에서 쿠팡 로그인 탭 열고 Browser Relay attach 필요 (하루 1회 수동).
+- 사용 API: `next-api/products/quantity-info`, `next-api/review`. 구 API(`other-seller-info`, `btf`) 폐기됨.
 
 ---
 

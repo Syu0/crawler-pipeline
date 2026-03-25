@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check backend/scripts/coupang-collect-discovered.js)",
+      "Bash(node --check backend/coupang/coupangApiClient.js)",
+      "Bash(node -e \":*)",
+      "Bash(npm install:*)",
+      "Bash(node -e \"require\\(''got-scraping''\\); console.log\\(''ok''\\)\")"
+    ]
+  }
+}
