@@ -216,8 +216,8 @@ async function main() {
         break; // 세션 전체 중단
       }
 
-      const successApis = collected.successfulApis.join(',');
-      console.log(`  APIs 성공: [${successApis || '없음'}]`);
+      const successApis = collected.CollectedPhases || '';
+      console.log(`  CollectedPhases: [${successApis || '없음'}]`);
       console.log(`  ItemTitle:      ${collected.ItemTitle?.substring(0, 50) ?? '(없음)'}`);
       console.log(`  ItemPrice:      ${collected.ItemPrice ?? '(없음)'}`);
       console.log(`  StandardImage:  ${collected.StandardImage ? 'OK' : '없음'}`);
