@@ -29,7 +29,7 @@ const BASE_URL = 'https://www.coupang.com';
  */
 function browserNavigate(url) {
   const escaped = url.replace(/"/g, '\\"');
-  execSync(`openclaw browser navigate "${escaped}" --profile chrome`, {
+  execSync(`openclaw browser --browser-profile chrome navigate "${escaped}"`, {
     encoding: 'utf8',
     timeout: 30_000,
   });
@@ -44,7 +44,7 @@ function browserNavigate(url) {
 function browserEvaluate(fn) {
   const escaped = fn.replace(/'/g, "'\\''");
   const stdout = execSync(
-    `openclaw browser evaluate --fn '${escaped}' --profile chrome`,
+    `openclaw browser --browser-profile chrome evaluate --fn '${escaped}'`,
     { encoding: 'utf8', timeout: 15_000 }
   );
   return JSON.parse(stdout);
