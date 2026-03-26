@@ -189,8 +189,9 @@ async function main() {
   let lastUrl = null;
   let sessionCount = 0;
 
-  // 세션 내 수집 완료된 product_id 추적 (dedup용)
+  // 세션 내 수집 완료된 product_id 추적 (dedup용) — data 객체도 함께 보관
   const collectedProductIds = new Set();
+  const collectedDataByProductId = new Map(); // productId → data 객체
 
   for (let i = 0; i < products.length; i++) {
     const product = products[i];
@@ -207,6 +208,22 @@ async function main() {
       console.log('     → API 호출 없이 status=COLLECTED 처리');
       if (!dryRun) {
         try {
+          const firstData = collectedDataByProductId.get(pid);
+          const dedupFields = firstData
+            ? {
+                ItemTitle:         firstData.ItemTitle,
+                ItemPrice:         firstData.ItemPrice,
+                StandardImage:     firstData.StandardImage,
+                ExtraImages:       firstData.ExtraImages,
+                StockStatus:       firstData.StockStatus,
+                StockQty:          firstData.StockQty,
+                ReviewCount:       firstData.ReviewCount,
+                ReviewAvgRating:   firstData.ReviewAvgRating,
+                DetailImages:      firstData.DetailImages,
+                ProductAttributes: firstData.ProductAttributes,
+                WeightKg:          firstData.WeightKg,
+              }
+            : {};
           await upsertRow(
             SPREADSHEET_ID, TAB, HEADERS,
             {
@@ -217,6 +234,7 @@ async function main() {
               CollectedPhases:     '1,2,3,4',
               registrationMessage: `[dedup: same product_id=${pid}]`,
               errorMessage:        '',
+              ...dedupFields,
             },
             'vendorItemId', 'itemId',
             PRESERVE_ON_ERROR
@@ -305,6 +323,7 @@ async function main() {
         ItemPrice:           collected.ItemPrice    != null ? String(collected.ItemPrice)    : '',
         StandardImage:       collected.StandardImage        ?? '',
         ExtraImages,
+        WeightKg:            '1',
         OptionType:          collected.OptionType           ?? '',
         Options:             collected.Options              ?? '',
         StockStatus:         collected.StockStatus          ?? '',
@@ -324,7 +343,10 @@ async function main() {
       await upsertRow(SPREADSHEET_ID, TAB, HEADERS, data, 'vendorItemId', 'itemId');
       console.log(`  ✓ COLLECTED (APIs: ${successApis})`);
 
-      if (productId) collectedProductIds.add(productId);
+      if (productId) {
+        collectedProductIds.add(productId);
+        collectedDataByProductId.set(productId, data);
+      }
 
       stats.success++;
 
