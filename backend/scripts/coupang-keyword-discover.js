@@ -91,7 +91,7 @@ function buildSearchParseFn() {
                        cardText.includes('로켓배송') ||
                        card.outerHTML.includes('CCEDFD');
       const priceText = card.querySelector('[class*=price]')?.textContent || '';
-      const price = parseInt(priceText.replace(/[^0-9]/g, '')) || 0;
+      const price = parseInt((priceText.match(/[\d,]+/) || ['0'])[0].replace(/,/g, '')) || 0;
       const title = card.querySelector('[class*=name], [class*=title]')?.textContent?.trim() || '';
       const img = card.querySelector('img')?.src || '';
       return { vendorItemId, productId, itemId, isRocket, price, title, href, img };
