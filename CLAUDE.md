@@ -197,7 +197,7 @@ write calls 쿼터: 10회/세션
 - [x] 브라우저 데몬 가드 (`browserGuard.js`) — 데몬 미실행 시 즉시 종료 + 안내
 - [x] 블록 감지 즉시 이메일 발송 + 종료 (재시도 2회 제거)
 - [x] 쿠키 유효성 자동 체크 — 만료 시 이메일 알림 + 수집 중단 (`browserManager.launch()` warming 전)
-- [x] 수집 랜덤 딜레이 (`delay.js`) — 상품 간 4~10초, dry-run 500ms 고정
+- [x] 수집 랜덤 딜레이 (`delay.js`) — 상품 간 30~120초, dry-run 500ms 고정
 - [x] 쿠팡 서버사이드 수집 기반 구축
   - Playwright + stealth + cookieStore 쿠키 주입으로 Akamai 우회 성공
   - 가격 셀렉터 타이밍 이슈 수정 완료 (`.final-price-amount` + `waitForSelector`)
@@ -318,8 +318,9 @@ write calls 쿼터: 10회/세션
 - [ ] **[운영 매뉴얼 작성 시]** 매일 시작 절차 문서화
   - 순서 중요. 아래 명령을 매일 출근 시 / PC 재시작 후 실행해야 함:
     1. `npm run backend:start`              # yamyam 쿠키 수신 서버 (쿠키 주입 없으면 Akamai 블록)
-    2. `npm run coupang:browser:start`      # Playwright 브라우저 데몬
+    2. `npm run coupang:browser:start`      # Playwright 브라우저 데몬 (stock:check 사용 시에만 필요 — collect는 불필요)
     3. `npm run cookie:refresh`             # 쿠키 만료 시 자동 갱신 (만료 아니면 skip)
+  - 수집(coupang:collect) 전: Chrome에서 쿠팡 로그인 탭 열고 Browser Relay attach 필요 (하루 1회)
   - 3번은 OpenClaw가 수집 시작 전에도 자동 실행 가능 (위임 가능 단계)
   - sid 없음(로그인 만료) 시 텔레그램 알림 → Chrome에서 수동 재로그인 후 `cookie:refresh:force`
   - 운영 매뉴얼(RUNBOOK.md 또는 별도 OPERATIONS.md)에 정식 절차로 포함할 것
@@ -337,7 +338,8 @@ crawler-pipeline/
 │   │   ├── browserManager.js         # Playwright 브라우저 데몬 관리
 │   │   ├── detailPageParser.js       # 상품 상세 HTML 파서
 │   │   ├── keywordSearch.js          # 키워드 검색 로직
-│   │   ├── playwrightScraper.js      # Playwright 수집 엔진
+│   │   ├── playwrightScraper.js      # Playwright 수집 엔진 (레거시 — stock-monitor 전용)
+│   │   ├── coupangApiClient.js       # Browser Relay evaluate(fetch()) 수집 엔진
 │   │   ├── productFilters.js         # 필터 체인
 │   │   ├── scraper.js
 │   │   ├── sheetsClient.js
@@ -375,6 +377,7 @@ crawler-pipeline/
 │   │   ├── coupang-collect-discovered.js
 │   │   ├── coupang-promote-to-pending.js
 │   │   ├── coupang-approve-pending.js  # PENDING_APPROVAL → REGISTER_READY 일괄 승인
+│   │   ├── coupang-collect-one.js    # vendorItemId 지정 단일 상품 강제 재수집
 │   │   ├── coupang-stock-monitor.js
 │   │   ├── setup-sheets.js
 │   │   └── qoo10.setGoodsPriceQty.js
@@ -402,7 +405,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-03-23 | coupang-cookie-refresh.js 반영 — yamyam 확장 → 스크립트 기반 갱신 교체, 레포 구조·개발 규칙·운영 매뉴얼 절차 업데이트*
+*마지막 업데이트: 2026-03-26 | Browser Relay 수집기 전환 — next-api 기반, Playwright 상세 접근 제거, MAX_COLLECT_PER_DAY 안전장치, coupang-collect-one 추가*
 
 ---
 
