@@ -27,7 +27,8 @@
 | `browserManager.js` | Playwright 브라우저 데몬 연결 관리 (CDP) |
 | `detailPageParser.js` | 상품 상세 페이지 HTML 파서 |
 | `keywordSearch.js` | 키워드 검색 결과 파싱 |
-| `playwrightScraper.js` | Playwright 기반 수집 엔진 (stealth + 쿠키 주입) |
+| `playwrightScraper.js` | Playwright 기반 수집 엔진 (레거시 — stock-monitor 전용으로만 잔존) |
+| `coupangApiClient.js` | Browser Relay evaluate(fetch()) 기반 수집 엔진 (next-api + DOM 파싱) |
 | `productFilters.js` | 필터 체인 (로켓배송 / 가격 상한 / 제외 카테고리) |
 | `scraper.js` | HTTP 기반 스크래퍼 (레거시) |
 | `sheetsClient.js` | Google Sheets API 래퍼 (read/write/upsert) |
@@ -39,6 +40,20 @@ Entry points:
 - `backend/scripts/coupang-collect-discovered.js` — DISCOVERED → COLLECTED
 - `backend/scripts/coupang-promote-to-pending.js` — COLLECTED → PENDING_APPROVAL
 - `backend/scripts/coupang-stock-monitor.js` — LIVE/REGISTERED 재고 모니터링
+- `backend/scripts/coupang-collect-one.js` — vendorItemId 지정 단일 상품 강제 재수집
+
+> ⚠️ **수집 방식 변경 (2026-03-26)**
+> Playwright headless 상세 페이지 접근 → Browser Relay evaluate(fetch()) 방식으로 교체.
+> Akamai TLS 핑거프린트 차단 확인으로 인한 구조적 변경.
+>
+> 사용 API:
+> - `next-api/products/quantity-info` — ItemTitle·ItemPrice·StockStatus
+> - `next-api/review` — ReviewCount·ReviewAvgRating
+> - DOM 파싱 (Browser Relay) — StandardImage·ExtraImages
+>
+> 폐기된 API: `other-seller-info`, `btf`, `vp/products/*/quantity-info` (모두 404)
+>
+> 운영 전제: 하루 1회 사람이 Chrome 쿠팡 로그인 탭에서 Browser Relay attach 필요.
 
 ---
 
@@ -189,8 +204,8 @@ categoryId          # Coupang 카테고리 ID
 ProductURL          # 원본 쿠팡 상품 URL
 ItemTitle           # 상품명 (한국어 원본 유지)
 ItemPrice           # 쿠팡 판매가 (KRW)
-StandardImage       # 대표 이미지 URL (800x800ex)
-ExtraImages         # 추가 이미지 배열 (JSON 문자열)
+StandardImage       # 대표 이미지 URL (800x800ex) # 풀 URL 저장 (https://thumbnail.coupangcdn.com/...)
+ExtraImages         # 추가 이미지 배열 (JSON 문자열) # 풀 URL 저장 (https://thumbnail.coupangcdn.com/...)
 WeightKg            # 무게 (Txlogis 배송비 조회 필수)
 ItemDescriptionText # 상세 설명
 updatedAt           # 수집 시각 (ISO 8601)

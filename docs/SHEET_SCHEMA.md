@@ -46,6 +46,7 @@ The Google Sheet serves as the central data store between:
 | `EXCLUDED_CATEGORY_KEYWORDS` | `의약품,건강,...` | 쉼표 구분. 카테고리명에 포함 시 수집 제외 |
 | `MAX_DAILY_REGISTER` | `10` | 1회 promote 실행당 PENDING_APPROVAL로 올릴 최대 상품 수 |
 | `MAX_DISCOVER_PAGES` | `1` | 키워드 탐색 시 쿠팡 검색 페이지 수 (최대 5) |
+| `MAX_COLLECT_PER_DAY` | `10` | 하루 최대 수집 상품 수 (안전장치 — 이 값 초과 불가) |
 
 **초기화 명령어:**
 ```bash
@@ -243,21 +244,15 @@ These fields are written back during Qoo10 registration:
 
 ---
 
-## StandardImage Normalization Rule
+## StandardImage / ExtraImages URL 규칙
 
-Coupang CDN URLs are normalized to a relative path:
+풀 URL을 그대로 저장한다.
 
-**Before** (full URL):
-```
-https://thumbnail.coupangcdn.com/thumbnails/remote/492x492ex/image/retail/images/92227177321273-59c263de-60eb-4a36-b7fa-e490c36d45d0.jpg
-```
+- `https://thumbnail.coupangcdn.com/...` → 그대로 저장
+- `//thumbnail.coupangcdn.com/...` → `https://thumbnail.coupangcdn.com/...` 으로 변환 후 저장
 
-**After** (stored value):
-```
-thumbnails/remote/492x492ex/image/retail/images/92227177321273-59c263de-60eb-4a36-b7fa-e490c36d45d0.jpg
-```
-
-This allows flexible reconstruction with different CDN prefixes for Qoo10.
+> 이전 방식(thumbnails/... 상대경로 저장)은 폐기됨.
+> Qoo10 payload 빌드 시 URL 변환이 필요하면 payloadGenerator.js에서 처리한다.
 
 ---
 
