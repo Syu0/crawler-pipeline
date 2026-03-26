@@ -86,6 +86,7 @@ function buildSearchParseFn() {
         href.match(/vendorItemId=(\d+)/)?.[1] || null;
       const productId = href.match(/\/products\/(\d+)/)?.[1] || null;
       const itemId = href.match(/itemId=(\d+)/)?.[1] || null;
+      const categoryId = href.match(/categoryId=(\d+)/)?.[1] || null;
       const cardText = card.textContent;
       const isRocket = cardText.includes('무료반품') ||
                        cardText.includes('로켓배송') ||
@@ -94,7 +95,7 @@ function buildSearchParseFn() {
       const price = parseInt((priceText.match(/[\d,]+/) || ['0'])[0].replace(/,/g, '')) || 0;
       const title = card.querySelector('[class*=name], [class*=title]')?.textContent?.trim() || '';
       const img = card.querySelector('img')?.src || '';
-      return { vendorItemId, productId, itemId, isRocket, price, title, href, img };
+      return { vendorItemId, productId, itemId, categoryId, isRocket, price, title, href, img };
     });
   }`;
 }
@@ -110,7 +111,7 @@ function normalizeCard(card) {
     itemPrice:      card.price || 0,
     isRocket:       card.isRocket === true,
     categoryName:   null,
-    categoryId:     null,
+    categoryId:     card.categoryId || null,
     productUrl:     card.href || '',
     thumbnailImage: card.img || '',
   };
