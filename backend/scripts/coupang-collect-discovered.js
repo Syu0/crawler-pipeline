@@ -191,6 +191,8 @@ async function main() {
 
   // 세션 내 수집 완료된 product_id 추적 (dedup용)
   const collectedProductIds = new Set();
+  // 세션 내 수집 완료된 data 추적 (dedup 분기 필드 복사용)
+  const collectedDataByProductId = new Map();
 
   for (let i = 0; i < products.length; i++) {
     const product = products[i];
@@ -207,6 +209,16 @@ async function main() {
       console.log('     → API 호출 없이 status=COLLECTED 처리');
       if (!dryRun) {
         try {
+          const sourceData = collectedDataByProductId.get(pid) || {};
+          const copyFields = [
+            'StandardImage', 'ExtraImages', 'ItemTitle', 'ItemPrice',
+            'DetailImages', 'ReviewCount', 'ReviewAvgRating',
+            'ProductAttributes', 'StockStatus', 'StockQty', 'WeightKg',
+          ];
+          const copied = {};
+          for (const f of copyFields) {
+            if (sourceData[f] != null && sourceData[f] !== '') copied[f] = sourceData[f];
+          }
           await upsertRow(
             SPREADSHEET_ID, TAB, HEADERS,
             {
@@ -217,6 +229,7 @@ async function main() {
               CollectedPhases:     '1,2,3,4',
               registrationMessage: `[dedup: same product_id=${pid}]`,
               errorMessage:        '',
+              ...copied,
             },
             'vendorItemId', 'itemId',
             PRESERVE_ON_ERROR
@@ -313,6 +326,7 @@ async function main() {
         ReviewAvgRating:     collected.ReviewAvgRating != null
                                ? String(collected.ReviewAvgRating)
                                : '',
+        WeightKg:            collected.WeightKg              || '1',
         DetailImages:        collected.DetailImages         ?? JSON.stringify([]),
         ProductAttributes:   collected.ProductAttributes    ?? JSON.stringify({}),
         CollectedPhases:     successApis,
@@ -324,7 +338,10 @@ async function main() {
       await upsertRow(SPREADSHEET_ID, TAB, HEADERS, data, 'vendorItemId', 'itemId');
       console.log(`  ✓ COLLECTED (APIs: ${successApis})`);
 
-      if (productId) collectedProductIds.add(productId);
+      if (productId) {
+        collectedProductIds.add(productId);
+        collectedDataByProductId.set(productId, data);
+      }
 
       stats.success++;
 
