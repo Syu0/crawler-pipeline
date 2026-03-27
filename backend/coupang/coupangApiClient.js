@@ -228,4 +228,101 @@ async function collectProductData(productId, vendorItemId, _itemId) {
   };
 }
 
-module.exports = { collectProductData };
+/**
+ * dedup 행 전용: navigate + quantity-info + review 만 수집 (이미지 제외).
+ * 동일 product_id의 다른 옵션(vendorItemId)에 대해 가격·재고·리뷰만 가져온다.
+ *
+ * @returns {Promise<{
+ *   blocked?: boolean, error?: string,
+ *   ItemTitle?: string, ItemPrice?: number,
+ *   StockStatus?: string, StockQty?: number,
+ *   ReviewCount?: number, ReviewAvgRating?: number,
+ *   CollectedPhases: string
+ * }>}
+ */
+async function collectPriceStockReview(productId, vendorItemId) {
+  const successfulSteps = [];
+
+  let ItemTitle = null;
+  let ItemPrice = null;
+  let StockStatus = null;
+  let StockQty = null;
+  let ReviewCount = null;
+  let ReviewAvgRating = null;
+
+  // Step 1: navigate
+  try {
+    const url = `${BASE_URL}/vp/products/${productId}?vendorItemId=${vendorItemId}`;
+    browserNavigate(url);
+    await new Promise((resolve) => setTimeout(resolve, 6_000));
+    successfulSteps.push(1);
+  } catch (e) {
+    return { error: 'NAVIGATE_ERROR', message: e.message };
+  }
+
+  // Step 3: quantity-info
+  try {
+    const result = browserEvaluate(buildQuantityInfoFn(productId, vendorItemId));
+    if (result.status === 403 || result.status === 429) {
+      return { blocked: true, httpStatus: result.status };
+    }
+    const data = result.body;
+    if (data) {
+      const moduleData = data?.[0]?.moduleData;
+      if (Array.isArray(moduleData)) {
+        const infoModule = moduleData.find(
+          (m) => m.viewType === 'PRODUCT_DETAIL_PRODUCT_INFO'
+        );
+        ItemTitle = infoModule?.title || null;
+      }
+      const rawPrice = data?.[0]?.price?.i18nSalePrice?.amount;
+      if (rawPrice != null) {
+        ItemPrice = parseInt(String(rawPrice).replace(/[^0-9]/g, ''), 10) || null;
+      }
+      const qty = data?.[0]?.quantity;
+      if (qty != null) {
+        StockQty = qty;
+        StockStatus = qty > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK';
+      } else {
+        StockStatus = 'IN_STOCK';
+      }
+      successfulSteps.push(3);
+    }
+  } catch (e) {
+    console.warn(`  [step3/quantity-info] ${e.message.split('\n')[0]}`);
+  }
+
+  // Step 4: review
+  try {
+    const result = browserEvaluate(buildReviewFn(productId));
+    if (result.status === 403 || result.status === 429) {
+      return { blocked: true, httpStatus: result.status };
+    }
+    const rData = result.body?.rData;
+    if (rData) {
+      ReviewCount =
+        rData.reviewTotalCount != null
+          ? parseInt(rData.reviewTotalCount, 10)
+          : null;
+      ReviewAvgRating =
+        rData.ratingSummaryTotal?.ratingAverage != null
+          ? parseFloat(rData.ratingSummaryTotal.ratingAverage)
+          : null;
+      successfulSteps.push(4);
+    }
+  } catch (e) {
+    console.warn(`  [step4/review] ${e.message.split('\n')[0]}`);
+  }
+
+  return {
+    ItemTitle,
+    ItemPrice,
+    StockStatus,
+    StockQty,
+    ReviewCount,
+    ReviewAvgRating,
+    CollectedPhases: successfulSteps.join(','),
+  };
+}
+
+module.exports = { collectProductData, collectPriceStockReview };
