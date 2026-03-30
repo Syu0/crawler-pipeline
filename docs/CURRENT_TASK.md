@@ -2,7 +2,7 @@
 
 ## 현재 상태
 - 2026-03-30 업데이트
-- `main` 브랜치 — 6개 추가 등록 완료 (누적 9개 REGISTERED)
+- `main` 브랜치 — 10개 REGISTERED (그래놀라 1개 추가)
 
 ---
 
@@ -38,48 +38,69 @@
 
 ### 🔴 우선순위 높음
 
-#### 1. 타이틀 번역 401 수정 (누적 — 3/27부터 미해결)
-- **증상:** `[titleTranslator] Claude API failed (OpenRouter API error: 401 Unauthorized)`
-- **원인 추정:** OpenRouter 잔액 부족 또는 키 만료
-- **확인:** OpenRouter 대시보드 → 크레딧 잔액 확인
-- **영향:** 오늘 등록 6개 + 3/27 등록 3개 = 총 9개 타이틀이 fallback(`韓国商品`)으로 등록됨
-- **해결 후:** 9개 needsUpdate=YES + changeFlags=TITLE_CHANGED 설정 후 `npm run qoo10:auto-register` 실행
+#### ~~1. collect 후 Chrome 탭 로딩 스피너 멈춤 수정~~ ✅ 완료 (2026-03-30)
+- 수집 완료 후 `about:blank` navigate로 pending request 정리
+- Chrome 탭이 about:blank로 이동 (쿠키 유지 — 다음 수집 정상 동작)
+- PR #11 머지, 브랜치 `oc/fix-chrome-tab-cleanup`
 
-#### 2. category_mapping 매핑 추가 (519992)
-- **증상:** `coupangApiClient.js` 브레드크럼에서 categoryId=519992 수집됨, 하지만 category_mapping 시트에 매핑 없음 → FALLBACK jpCategoryId=320002604 사용
-- **해결:** `category_mapping` 시트에서 coupangCategoryId=519992 행에 적절한 jpCategoryId 수동 입력
-  - 519992 = 시리얼/그래놀라 카테고리로 추정
-  - Qoo10 Japan 카테고리 트리에서 적합한 jpCategoryId 확인 후 MANUAL 입력
+#### ~~2. 이미지 미반영 버그 (StandardImage / ExtraImages)~~ ✅ 완료 (2026-03-30)
+- **원인:** ExtraImages는 SetNewGoods만으로는 업로드 불가 — 등록 후 `EditGoodsMultiImage` 별도 호출 필요
+- **해결:**
+  - `backend/qoo10/editGoodsMultiImage.js` 신규 구현 (`ItemsContents.EditGoodsMultiImage` 래퍼)
+  - `scripts/qoo10-auto-register.js` — CREATE/UPDATE 성공 후 `editGoodsMultiImage` 호출 추가
+  - `backend/qoo10/payloadGenerator.js` — `normalizeImageUrl` `//` 프로토콜 상대 URL 처리 추가
+- **검증:** Qoo10 상품 상세페이지에서 ExtraImages 정상 표시 확인
 
 ### 🟡 우선순위 보통
 
-#### 3. COLLECTED 대기 중인 5개 (내일 자동 promote 대상)
-| vendorItemId | ItemTitle | categoryId |
-|---|---|---|
-| 85321289776 | 마켓오네이처 오 그래놀라 다이제 시리얼 250g, 2개 | 433958 |
-| 85296814940 | 마켓오네이처 오 그래놀라 다이제 시리얼 250g, 3개 | 433958 |
-| 86533289539 | 마켓오네이처 오 그래놀라 다이제 시리얼 300g, 4개 | 433958 |
-| 91816835421 | 마켓오네이처 오 그래놀라 저당 통보리 시리얼 360g, 2개 | 519992 |
-| 91428368907 | 원더너츠 수제 그래놀라 시리얼 플레인 | 519992 |
+#### 3. 상세페이지 일본어 콘텐츠 생성 + Qoo10 반영
+- **배경:** 쿠팡 수집 상세페이지는 한국어 이미지 위주. 일본 소비자가 이해할 수 있는 일본어 설명 필요
+- **생성 방식 (검토 옵션):**
+  - 옵션 A — 코드 구현: DetailImages를 Claude API에 vision으로 전달 → 한국어 읽기 → 일본어 설명 생성
+  - 옵션 B — OpenClaw 위임: OpenClaw의 이미지 이해 스킬로 이미지 보고 직접 일본어 설명 생성
+    → 코드 파이프라인 없이도 가능. 두 옵션 병행 검토.
+- **출력 구조:**
+  - `DetailImages` 있음 → `[일본어 설명 텍스트]` + `[DetailImages]`
+  - `DetailImages` 없음 → `[일본어 설명 텍스트]` + `[ExtraImages]`
+- **적용 API:** `EditGoodsContents` (현재 래퍼 미구현 — `editGoodsContents.js` 신규 구현 필요)
+- **선행 조건:** 2번(이미지 미반영) 해결 후 착수
 
-- categoryId 수집됨, 내일 promote 시 자동 처리 예정
-- 단, category_mapping 매핑이 없으면 FALLBACK으로 등록됨
+#### 4. titleTranslator 401 수정 + 9개 타이틀 패치
+- **증상:** `[titleTranslator] Claude API failed (OpenRouter API error: 401 Unauthorized)`
+- **원인:** OpenRouter 잔액 부족 또는 키 만료
+- **해결:** `backend/qoo10/titleTranslator.js` — OpenRouter 호출 제거, Anthropic API 직접 호출로 교체
+  (`ANTHROPIC_API_KEY` + `@anthropic-ai/sdk` 사용, 이미 의존성 설치됨)
+- **패치 대상:** 총 9개 (3/27 3개 + 오늘 6개) — 수정 후 needsUpdate=YES + changeFlags=TITLE_CHANGED 설정 → `npm run qoo10:auto-register`
 
-#### 4. COLLECTED 대기 중인 나머지 ~12개 (이후 날짜 promote 대상)
-- MAX_DAILY_REGISTER=6 기준 순차 처리
+### 🟢 우선순위 낮음
 
-### 🟢 우선순위 낮음 (보류)
+#### 5. category_mapping 519992 추가
+- **해결:** `category_mapping` 시트에서 coupangCategoryId=519992 행에 jpCategoryId 수동 입력
+  - 519992 = 시리얼/그래놀라 카테고리로 추정
+  - Qoo10 Japan 카테고리 트리에서 적합한 jpCategoryId 확인 후 matchType=MANUAL 입력
+
+---
+
+## 보류 (운영 안정화 후)
 
 - [ ] **AUTO_REGISTER_ENABLED 플래그 추가** — cron 붙일 때
 - [ ] **1195611873 카테고리 수동 재분류** — category_mapping 시트 MANUAL 수정
 - [ ] **가격 상수 config 시트 이관** — pricingConstants.js 하드코딩 → 런타임 로드
-- [ ] 일본어 상세페이지 콘텐츠 생성 (`contentStrategy.js`)
 - [ ] Qoo10 시장 가격 경쟁성 스크래핑
-- [ ] `getItemDetailInfo.js` / `editGoodsContents.js` 모듈 구현
+- [ ] `getItemDetailInfo.js` 모듈 구현
 
 ---
 
 ## 현재 시트 상태 요약
-- REGISTERED: 9개 (3/27 3개 + 오늘 6개)
+- REGISTERED: 10개 (3/27 3개 + 3/30 6개 + 3/30 그래놀라 1개)
 - COLLECTED: ~17개 (내일 이후 promote 대상)
 - MAX_DAILY_REGISTER: 6
+
+### COLLECTED 대기 중인 4개 (다음 promote 대상)
+| vendorItemId | ItemTitle | categoryId |
+|---|---|---|
+| 85296814940 | 마켓오네이처 오 그래놀라 다이제 시리얼 250g, 3개 | 433958 |
+| 86533289539 | 마켓오네이처 오 그래놀라 다이제 시리얼 300g, 4개 | 433958 |
+| 91816835421 | 마켓오네이처 오 그래놀라 저당 통보리 시리얼 360g, 2개 | 519992 |
+| 91428368907 | 원더너츠 수제 그래놀라 시리얼 플레인 | 519992 |
+- 519992 카테고리 매핑 미완료 시 FALLBACK으로 등록됨 (5번 작업 선행 권장)

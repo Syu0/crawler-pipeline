@@ -34,12 +34,16 @@ function calculateSellingPrice(basePrice) {
  */
 function normalizeImageUrl(url) {
   if (!url || typeof url !== 'string') return '';
-  
+
+  if (url.startsWith('//')) {
+    return `https:${url}`;
+  }
+
   // If already normalized (starts with thumbnails/), prepend CDN
   if (url.startsWith('thumbnails/')) {
     return `https://thumbnail.coupangcdn.com/${url}`;
   }
-  
+
   return url;
 }
 
@@ -120,8 +124,8 @@ function parseExtraImages(extraImagesField) {
       if (extraImagesField.startsWith('[')) {
         images = JSON.parse(extraImagesField);
       } else {
-        // Already a single URL or pipe-separated
-        return extraImagesField;
+        // single URL or pipe-separated
+        images = extraImagesField.split('|').map(u => u.trim()).filter(u => u);
       }
     }
     

@@ -18,6 +18,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend'
 const { getSheetsClient } = require('./lib/sheetsClient');
 const { registerNewGoods } = require('../backend/qoo10/registerNewGoods');
 const { updateExistingGoods } = require('../backend/qoo10/updateGoods');
+const { editGoodsMultiImage } = require('../backend/qoo10/editGoodsMultiImage');
 const { calculateSellingPrice } = require('./lib/qoo10PayloadGenerator');
 const { resolveJpCategoryId } = require('./lib/categoryResolver');
 const { decideItemPriceJpy } = require('../backend/pricing/priceDecision');
@@ -206,11 +207,15 @@ function validateRow(row, isUpdateMode = false) {
  */
 function normalizeImageUrl(url) {
   if (!url || typeof url !== 'string') return '';
-  
+
+  if (url.startsWith('//')) {
+    return `https:${url}`;
+  }
+
   if (url.startsWith('thumbnails/')) {
     return `https://thumbnail.coupangcdn.com/${url}`;
   }
-  
+
   return url;
 }
 
@@ -219,11 +224,16 @@ function normalizeImageUrl(url) {
  */
 function parseExtraImages(extraImages) {
   if (!extraImages) return [];
-  
+
   try {
-    if (typeof extraImages === 'string' && extraImages.startsWith('[')) {
-      return JSON.parse(extraImages);
+    if (typeof extraImages === 'string') {
+      if (extraImages.startsWith('[')) {
+        return JSON.parse(extraImages);
+      }
+      // pipe-separated or single URL
+      return extraImages.split('|').map(u => u.trim()).filter(u => u);
     }
+    if (Array.isArray(extraImages)) return extraImages;
     return [];
   } catch (e) {
     return [];
@@ -500,6 +510,14 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
     }
 
     if (updateResult.success) {
+      // Upload extra images
+      if (payload.ExtraImages && payload.ExtraImages.length > 0) {
+        const multiImageResult = await editGoodsMultiImage(existingQoo10ItemId, payload.ExtraImages);
+        if (!multiImageResult.success && !multiImageResult.dryRun) {
+          console.warn(`[Registration] MultiImage upload failed: ${multiImageResult.resultMsg}`);
+        }
+      }
+
       // Determine status based on category match type
       const registrationStatus = categoryResolution.matchType === 'FALLBACK' ? 'WARNING' : 'SUCCESS';
 
@@ -539,6 +557,14 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
       const result = await registerNewGoods(payload);
       
       if (result.success && result.createdItemId) {
+        // Upload extra images after successful registration
+        if (payload.ExtraImages && payload.ExtraImages.length > 0) {
+          const multiImageResult = await editGoodsMultiImage(result.createdItemId, payload.ExtraImages);
+          if (!multiImageResult.success && !multiImageResult.dryRun) {
+            console.warn(`[Registration] MultiImage upload failed: ${multiImageResult.resultMsg}`);
+          }
+        }
+
         // Determine registration status based on matchType
         // FALLBACK = WARNING even if API succeeds
         const registrationStatus = categoryResolution.matchType === 'FALLBACK' ? 'WARNING' : 'SUCCESS';
