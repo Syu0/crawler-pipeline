@@ -80,7 +80,18 @@ function buildImageExtractFn() {
       ...document.querySelectorAll('[class*="detail-image"] img'),
     ].map(el => el.src || el.dataset?.src).filter(Boolean);
 
-    return { main, extra: [...new Set(extra)] };
+    // 브레드크럼에서 categoryId 추출
+    const breadcrumbLinks = Array.from(
+      document.querySelectorAll('ul.breadcrumb li a[href*="/np/categories/"]')
+    );
+    let categoryId = null;
+    if (breadcrumbLinks.length > 0) {
+      const lastHref = breadcrumbLinks[breadcrumbLinks.length - 1].href;
+      const match = lastHref.match(/\\/np\\/categories\\/(\\d+)/);
+      categoryId = match ? match[1] : null;
+    }
+
+    return { main, extra: [...new Set(extra)], categoryId };
   }`;
 }
 
@@ -133,6 +144,7 @@ async function collectProductData(productId, vendorItemId, _itemId) {
   let StockQty = null;
   let ReviewCount = null;
   let ReviewAvgRating = null;
+  let categoryId = null;
 
   // ── Step 1: navigate ────────────────────────────────────────────────────────
   try {
@@ -145,11 +157,12 @@ async function collectProductData(productId, vendorItemId, _itemId) {
     return { error: 'NAVIGATE_ERROR', message: e.message };
   }
 
-  // ── Step 2: DOM 이미지 추출 ─────────────────────────────────────────────────
+  // ── Step 2: DOM 이미지 + categoryId 추출 ──────────────────────────────────
   try {
     const result = browserEvaluate(buildImageExtractFn());
     StandardImage = normalizeImageUrl(result.main);
     ExtraImages = (result.extra || []).map(normalizeImageUrl).filter(Boolean);
+    categoryId = result.categoryId || null;
     successfulSteps.push(2);
   } catch (e) {
     console.warn(`  [step2/images] ${e.message.split('\n')[0]}`);
@@ -224,6 +237,7 @@ async function collectProductData(productId, vendorItemId, _itemId) {
     StockQty,
     ReviewCount,
     ReviewAvgRating,
+    categoryId,
     CollectedPhases: successfulSteps.join(','),
   };
 }

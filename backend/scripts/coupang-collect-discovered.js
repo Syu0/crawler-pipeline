@@ -389,6 +389,7 @@ async function main() {
         vendorItemId:        product.vendorItemId,
         itemId:              product.itemId,
         coupang_product_id:  productId,
+        categoryId:          collected.categoryId           ?? '',
         ProductURL:          product.productUrl || '',
         ItemTitle:           collected.ItemTitle           ?? '',
         ItemPrice:           collected.ItemPrice    != null ? String(collected.ItemPrice)    : '',

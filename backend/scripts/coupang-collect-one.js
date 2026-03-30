@@ -160,6 +160,7 @@ async function main() {
   console.log(`  CollectedPhases: [${collected.CollectedPhases || '없음'}]`);
   console.log(`  ItemTitle:       ${collected.ItemTitle?.substring(0, 50) ?? '(없음)'}`);
   console.log(`  ItemPrice:       ${collected.ItemPrice ?? '(없음)'}`);
+  console.log(`  categoryId:      ${collected.categoryId ?? '(없음)'}`);
   console.log(`  StandardImage:   ${collected.StandardImage ? '✓' : '없음'}`);
   console.log(`  ExtraImages:     ${(collected.ExtraImages || []).length}개`);
   console.log(`  StockStatus:     ${collected.StockStatus ?? '(없음)'}`);
@@ -177,6 +178,7 @@ async function main() {
     vendorItemId:       product.vendorItemId,
     itemId:             product.itemId,
     coupang_product_id: productId,
+    categoryId:         collected.categoryId                                      ?? '',
     ProductURL:         product.productUrl                                        || '',
     ItemTitle:          collected.ItemTitle                                       ?? '',
     ItemPrice:          collected.ItemPrice    != null ? String(collected.ItemPrice)    : '',
