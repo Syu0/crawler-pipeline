@@ -36,6 +36,19 @@ function browserNavigate(url) {
 }
 
 /**
+ * 수집 완료 후 Chrome 탭을 about:blank로 이동하여 pending request 정리.
+ * 실패해도 수집 결과에 영향 없음.
+ */
+function browserCleanupTab() {
+  try {
+    execSync(`openclaw browser --browser-profile chrome navigate "about:blank"`, {
+      encoding: 'utf8',
+      timeout: 5_000,
+    });
+  } catch (_) { /* ignore */ }
+}
+
+/**
  * Browser Relay evaluate: Chrome 컨텍스트에서 JS 함수를 실행하고 결과를 반환.
  * @param {string} fn  실행할 JS 함수 문자열 (function() {...} 또는 async () => {...})
  * @returns {*} JSON.parse(CLI stdout)
@@ -172,6 +185,7 @@ async function collectProductData(productId, vendorItemId, _itemId) {
   try {
     const result = browserEvaluate(buildQuantityInfoFn(productId, vendorItemId));
     if (result.status === 403 || result.status === 429) {
+      browserCleanupTab();
       return { blocked: true, httpStatus: result.status };
     }
     const data = result.body;
@@ -210,6 +224,7 @@ async function collectProductData(productId, vendorItemId, _itemId) {
   try {
     const result = browserEvaluate(buildReviewFn(productId));
     if (result.status === 403 || result.status === 429) {
+      browserCleanupTab();
       return { blocked: true, httpStatus: result.status };
     }
     const rData = result.body?.rData;
@@ -227,6 +242,8 @@ async function collectProductData(productId, vendorItemId, _itemId) {
   } catch (e) {
     console.warn(`  [step4/review] ${e.message.split('\n')[0]}`);
   }
+
+  browserCleanupTab();
 
   return {
     ItemTitle,
@@ -278,6 +295,7 @@ async function collectPriceStockReview(productId, vendorItemId) {
   try {
     const result = browserEvaluate(buildQuantityInfoFn(productId, vendorItemId));
     if (result.status === 403 || result.status === 429) {
+      browserCleanupTab();
       return { blocked: true, httpStatus: result.status };
     }
     const data = result.body;
@@ -310,6 +328,7 @@ async function collectPriceStockReview(productId, vendorItemId) {
   try {
     const result = browserEvaluate(buildReviewFn(productId));
     if (result.status === 403 || result.status === 429) {
+      browserCleanupTab();
       return { blocked: true, httpStatus: result.status };
     }
     const rData = result.body?.rData;
@@ -327,6 +346,8 @@ async function collectPriceStockReview(productId, vendorItemId) {
   } catch (e) {
     console.warn(`  [step4/review] ${e.message.split('\n')[0]}`);
   }
+
+  browserCleanupTab();
 
   return {
     ItemTitle,
