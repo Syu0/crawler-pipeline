@@ -245,6 +245,10 @@ write calls 쿼터: 10회/세션
   - `next-api/review`: ReviewCount·ReviewAvgRating
   - DOM 파싱: StandardImage·ExtraImages
   - HARD_BLOCK 0, 3/3 연속 수집 성공 검증 완료
+- [x] discover Browser Relay 방식 전환 | 브랜치: oc/browser-relay-discover (머지 완료)
+  - Playwright 데몬 → Browser Relay `evaluate()` 로 교체
+  - 검색 페이지 navigate + `li[data-id]` 카드 파싱 → productFilters 체인 → DISCOVERED upsert
+  - 56개 발견, 31개 DISCOVERED 저장 검증 완료
 
 ### 9-B. 현재 작업 순서 (2026-03-18 기준)
 
@@ -405,7 +409,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-03-26 | Browser Relay 수집기 전환 — next-api 기반, Playwright 상세 접근 제거, MAX_COLLECT_PER_DAY 안전장치, coupang-collect-one 추가*
+*마지막 업데이트: 2026-03-26 | discover Browser Relay 전환 — Playwright 데몬 제거, li[data-id] 카드 파싱, 56개 발견 / 31개 DISCOVERED 저장 검증 완료*
 
 ---
 

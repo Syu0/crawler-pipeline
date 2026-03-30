@@ -29,7 +29,7 @@ const BASE_URL = 'https://www.coupang.com';
  */
 function browserNavigate(url) {
   const escaped = url.replace(/"/g, '\\"');
-  execSync(`openclaw browser navigate "${escaped}" --profile chrome`, {
+  execSync(`openclaw browser --browser-profile chrome navigate "${escaped}"`, {
     encoding: 'utf8',
     timeout: 30_000,
   });
@@ -44,7 +44,7 @@ function browserNavigate(url) {
 function browserEvaluate(fn) {
   const escaped = fn.replace(/'/g, "'\\''");
   const stdout = execSync(
-    `openclaw browser evaluate --fn '${escaped}' --profile chrome`,
+    `openclaw browser --browser-profile chrome evaluate --fn '${escaped}'`,
     { encoding: 'utf8', timeout: 15_000 }
   );
   return JSON.parse(stdout);
@@ -80,7 +80,18 @@ function buildImageExtractFn() {
       ...document.querySelectorAll('[class*="detail-image"] img'),
     ].map(el => el.src || el.dataset?.src).filter(Boolean);
 
-    return { main, extra: [...new Set(extra)] };
+    // 브레드크럼에서 categoryId 추출
+    const breadcrumbLinks = Array.from(
+      document.querySelectorAll('ul.breadcrumb li a[href*="/np/categories/"]')
+    );
+    let categoryId = null;
+    if (breadcrumbLinks.length > 0) {
+      const lastHref = breadcrumbLinks[breadcrumbLinks.length - 1].href;
+      const match = lastHref.match(/\\/np\\/categories\\/(\\d+)/);
+      categoryId = match ? match[1] : null;
+    }
+
+    return { main, extra: [...new Set(extra)], categoryId };
   }`;
 }
 
@@ -133,6 +144,7 @@ async function collectProductData(productId, vendorItemId, _itemId) {
   let StockQty = null;
   let ReviewCount = null;
   let ReviewAvgRating = null;
+  let categoryId = null;
 
   // ── Step 1: navigate ────────────────────────────────────────────────────────
   try {
@@ -145,11 +157,12 @@ async function collectProductData(productId, vendorItemId, _itemId) {
     return { error: 'NAVIGATE_ERROR', message: e.message };
   }
 
-  // ── Step 2: DOM 이미지 추출 ─────────────────────────────────────────────────
+  // ── Step 2: DOM 이미지 + categoryId 추출 ──────────────────────────────────
   try {
     const result = browserEvaluate(buildImageExtractFn());
     StandardImage = normalizeImageUrl(result.main);
     ExtraImages = (result.extra || []).map(normalizeImageUrl).filter(Boolean);
+    categoryId = result.categoryId || null;
     successfulSteps.push(2);
   } catch (e) {
     console.warn(`  [step2/images] ${e.message.split('\n')[0]}`);
@@ -224,8 +237,106 @@ async function collectProductData(productId, vendorItemId, _itemId) {
     StockQty,
     ReviewCount,
     ReviewAvgRating,
+    categoryId,
     CollectedPhases: successfulSteps.join(','),
   };
 }
 
-module.exports = { collectProductData };
+/**
+ * dedup 행 전용: navigate + quantity-info + review 만 수집 (이미지 제외).
+ * 동일 product_id의 다른 옵션(vendorItemId)에 대해 가격·재고·리뷰만 가져온다.
+ *
+ * @returns {Promise<{
+ *   blocked?: boolean, error?: string,
+ *   ItemTitle?: string, ItemPrice?: number,
+ *   StockStatus?: string, StockQty?: number,
+ *   ReviewCount?: number, ReviewAvgRating?: number,
+ *   CollectedPhases: string
+ * }>}
+ */
+async function collectPriceStockReview(productId, vendorItemId) {
+  const successfulSteps = [];
+
+  let ItemTitle = null;
+  let ItemPrice = null;
+  let StockStatus = null;
+  let StockQty = null;
+  let ReviewCount = null;
+  let ReviewAvgRating = null;
+
+  // Step 1: navigate
+  try {
+    const url = `${BASE_URL}/vp/products/${productId}?vendorItemId=${vendorItemId}`;
+    browserNavigate(url);
+    await new Promise((resolve) => setTimeout(resolve, 6_000));
+    successfulSteps.push(1);
+  } catch (e) {
+    return { error: 'NAVIGATE_ERROR', message: e.message };
+  }
+
+  // Step 3: quantity-info
+  try {
+    const result = browserEvaluate(buildQuantityInfoFn(productId, vendorItemId));
+    if (result.status === 403 || result.status === 429) {
+      return { blocked: true, httpStatus: result.status };
+    }
+    const data = result.body;
+    if (data) {
+      const moduleData = data?.[0]?.moduleData;
+      if (Array.isArray(moduleData)) {
+        const infoModule = moduleData.find(
+          (m) => m.viewType === 'PRODUCT_DETAIL_PRODUCT_INFO'
+        );
+        ItemTitle = infoModule?.title || null;
+      }
+      const rawPrice = data?.[0]?.price?.i18nSalePrice?.amount;
+      if (rawPrice != null) {
+        ItemPrice = parseInt(String(rawPrice).replace(/[^0-9]/g, ''), 10) || null;
+      }
+      const qty = data?.[0]?.quantity;
+      if (qty != null) {
+        StockQty = qty;
+        StockStatus = qty > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK';
+      } else {
+        StockStatus = 'IN_STOCK';
+      }
+      successfulSteps.push(3);
+    }
+  } catch (e) {
+    console.warn(`  [step3/quantity-info] ${e.message.split('\n')[0]}`);
+  }
+
+  // Step 4: review
+  try {
+    const result = browserEvaluate(buildReviewFn(productId));
+    if (result.status === 403 || result.status === 429) {
+      return { blocked: true, httpStatus: result.status };
+    }
+    const rData = result.body?.rData;
+    if (rData) {
+      ReviewCount =
+        rData.reviewTotalCount != null
+          ? parseInt(rData.reviewTotalCount, 10)
+          : null;
+      ReviewAvgRating =
+        rData.ratingSummaryTotal?.ratingAverage != null
+          ? parseFloat(rData.ratingSummaryTotal.ratingAverage)
+          : null;
+      successfulSteps.push(4);
+    }
+  } catch (e) {
+    console.warn(`  [step4/review] ${e.message.split('\n')[0]}`);
+  }
+
+  return {
+    ItemTitle,
+    ItemPrice,
+    StockStatus,
+    StockQty,
+    ReviewCount,
+    ReviewAvgRating,
+    CollectedPhases: successfulSteps.join(','),
+  };
+}
+
+module.exports = { collectProductData, collectPriceStockReview };

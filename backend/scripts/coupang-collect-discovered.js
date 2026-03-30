@@ -36,7 +36,7 @@ const {
   getConfig,
 } = require('../coupang/sheetsClient');
 const { COUPANG_DATA_HEADERS } = require('../coupang/sheetSchema');
-const { collectProductData } = require('../coupang/coupangApiClient');
+const { collectProductData, collectPriceStockReview } = require('../coupang/coupangApiClient');
 const { randomDelay } = require('./delay');
 const { sendBlockAlertEmail } = require('../coupang/blockDetector');
 const { setHardBlocked } = require('../coupang/blockStateManager');
@@ -191,7 +191,8 @@ async function main() {
 
   // 세션 내 수집 완료된 product_id 추적 (dedup용) — data 객체도 함께 보관
   const collectedProductIds = new Set();
-  const collectedDataByProductId = new Map(); // productId → data 객체
+  // 세션 내 수집 완료된 data 추적 (dedup 분기 필드 복사용)
+  const collectedDataByProductId = new Map();
 
   for (let i = 0; i < products.length; i++) {
     const product = products[i];
@@ -204,26 +205,58 @@ async function main() {
 
     // ── product_id 기준 dedup ───────────────────────────────────────────────
     if (pid && collectedProductIds.has(pid)) {
-      console.log(`  ⏭ SKIP — 동일 product_id (${pid}), vendorItemId=${product.vendorItemId}`);
-      console.log('     → API 호출 없이 status=COLLECTED 처리');
-      if (!dryRun) {
-        try {
-          const firstData = collectedDataByProductId.get(pid);
-          const dedupFields = firstData
-            ? {
-                ItemTitle:         firstData.ItemTitle,
-                ItemPrice:         firstData.ItemPrice,
-                StandardImage:     firstData.StandardImage,
-                ExtraImages:       firstData.ExtraImages,
-                StockStatus:       firstData.StockStatus,
-                StockQty:          firstData.StockQty,
-                ReviewCount:       firstData.ReviewCount,
-                ReviewAvgRating:   firstData.ReviewAvgRating,
-                DetailImages:      firstData.DetailImages,
-                ProductAttributes: firstData.ProductAttributes,
-                WeightKg:          firstData.WeightKg,
-              }
-            : {};
+      console.log(`  ⏭ DEDUP — 동일 product_id (${pid}), vendorItemId=${product.vendorItemId}`);
+      console.log('     → 이미지만 복사, 가격/재고/리뷰는 개별 API 호출');
+
+      // 이미지 필드만 첫 번째 상품에서 복사
+      const sourceData = collectedDataByProductId.get(pid) || {};
+      const imageCopyFields = ['StandardImage', 'ExtraImages', 'DetailImages', 'ProductAttributes'];
+      const copied = {};
+      for (const f of imageCopyFields) {
+        if (sourceData[f] != null && sourceData[f] !== '') copied[f] = sourceData[f];
+      }
+
+      try {
+        let { vendorItemId, itemId } = product;
+        if (!vendorItemId || !itemId) {
+          const fromUrl = extractParamsFromUrl(product.productUrl);
+          vendorItemId = vendorItemId || fromUrl.vendorItemId;
+          itemId = itemId || fromUrl.itemId;
+        }
+
+        const fetched = await collectPriceStockReview(pid, vendorItemId);
+
+        if (fetched.blocked) {
+          console.warn(`  ⚠ HARD_BLOCK (dedup): HTTP ${fetched.httpStatus} — 수집 루프 중단`);
+          stats.hardBlock++;
+          if (!dryRun) {
+            setHardBlocked();
+            try {
+              await upsertRow(
+                SPREADSHEET_ID, TAB, HEADERS,
+                {
+                  vendorItemId: product.vendorItemId,
+                  itemId:       product.itemId,
+                  updatedAt:    new Date().toISOString(),
+                  status:       'ERROR',
+                  errorMessage: `HARD_BLOCK: HTTP ${fetched.httpStatus}`,
+                },
+                'vendorItemId', 'itemId',
+                PRESERVE_ON_ERROR
+              );
+            } catch (writeErr) {
+              console.error(`  ✗ 시트 ERROR 기록 실패: ${writeErr.message}`);
+            }
+          }
+          break;
+        }
+
+        console.log(`  CollectedPhases: [${fetched.CollectedPhases || '없음'}]`);
+        console.log(`  ItemTitle:      ${fetched.ItemTitle?.substring(0, 50) ?? '(없음)'}`);
+        console.log(`  ItemPrice:      ${fetched.ItemPrice ?? '(없음)'}`);
+        console.log(`  StockStatus:    ${fetched.StockStatus ?? '(없음)'}`);
+
+        if (!dryRun) {
           await upsertRow(
             SPREADSHEET_ID, TAB, HEADERS,
             {
@@ -231,19 +264,57 @@ async function main() {
               itemId:              product.itemId,
               updatedAt:           new Date().toISOString(),
               status:              'COLLECTED',
-              CollectedPhases:     '1,2,3,4',
+              CollectedPhases:     fetched.CollectedPhases,
               registrationMessage: `[dedup: same product_id=${pid}]`,
               errorMessage:        '',
-              ...dedupFields,
+              ItemTitle:           fetched.ItemTitle           ?? '',
+              ItemPrice:           fetched.ItemPrice    != null ? String(fetched.ItemPrice)    : '',
+              StockStatus:         fetched.StockStatus          ?? '',
+              StockQty:            fetched.StockQty     != null ? String(fetched.StockQty)     : '',
+              ReviewCount:         fetched.ReviewCount  != null ? String(fetched.ReviewCount)  : '',
+              ReviewAvgRating:     fetched.ReviewAvgRating != null
+                                     ? String(fetched.ReviewAvgRating)
+                                     : '',
+              ...copied,
             },
             'vendorItemId', 'itemId',
             PRESERVE_ON_ERROR
           );
-        } catch (writeErr) {
-          console.error(`  ✗ dedup COLLECTED 기록 실패: ${writeErr.message}`);
+          console.log(`  ✓ COLLECTED [dedup] (APIs: ${fetched.CollectedPhases})`);
+        } else {
+          console.log('  [DRY-RUN] 시트 write 생략');
+        }
+
+        stats.success++;
+      } catch (err) {
+        console.error(`  ✗ DEDUP_ROW_ERROR: ${err.message.split('\n')[0]}`);
+        stats.rowError++;
+        if (!dryRun) {
+          try {
+            await upsertRow(
+              SPREADSHEET_ID, TAB, HEADERS,
+              {
+                vendorItemId: product.vendorItemId,
+                itemId:       product.itemId,
+                updatedAt:    new Date().toISOString(),
+                status:       'ERROR',
+                errorMessage: ('DEDUP_ROW_ERROR: ' + err.message).substring(0, 500),
+              },
+              'vendorItemId', 'itemId',
+              PRESERVE_ON_ERROR
+            );
+          } catch (writeErr) {
+            console.error(`  ✗ 시트 ERROR 기록 실패: ${writeErr.message}`);
+          }
         }
       }
-      stats.success++;
+
+      // dedup 행도 API 호출 후 딜레이 적용
+      if (i < products.length - 1) {
+        const minMs = dryRun ? 500 : COLLECT_DELAY_MIN_MS;
+        const maxMs = dryRun ? 500 : COLLECT_DELAY_MAX_MS;
+        await randomDelay(minMs, maxMs);
+      }
       continue;
     }
 
@@ -318,6 +389,7 @@ async function main() {
         vendorItemId:        product.vendorItemId,
         itemId:              product.itemId,
         coupang_product_id:  productId,
+        categoryId:          collected.categoryId           ?? '',
         ProductURL:          product.productUrl || '',
         ItemTitle:           collected.ItemTitle           ?? '',
         ItemPrice:           collected.ItemPrice    != null ? String(collected.ItemPrice)    : '',
@@ -332,6 +404,7 @@ async function main() {
         ReviewAvgRating:     collected.ReviewAvgRating != null
                                ? String(collected.ReviewAvgRating)
                                : '',
+        WeightKg:            collected.WeightKg              || '1',
         DetailImages:        collected.DetailImages         ?? JSON.stringify([]),
         ProductAttributes:   collected.ProductAttributes    ?? JSON.stringify({}),
         CollectedPhases:     successApis,
