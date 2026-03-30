@@ -191,6 +191,7 @@ async function main() {
     ReviewCount:        collected.ReviewCount  != null ? String(collected.ReviewCount)  : '',
     ReviewAvgRating:    collected.ReviewAvgRating != null
                           ? String(collected.ReviewAvgRating) : '',
+    WeightKg:           collected.WeightKg                                        || '1',
     DetailImages:       collected.DetailImages                                    ?? JSON.stringify([]),
     ProductAttributes:  collected.ProductAttributes                               ?? JSON.stringify({}),
     CollectedPhases:    collected.CollectedPhases                                 || '',
