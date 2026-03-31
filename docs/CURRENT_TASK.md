@@ -8,6 +8,15 @@
 
 ## 오늘 완료된 작업 (2026-03-31)
 
+### 5. CATEGORY_CHANGED 플래그 카테고리 재resolve 버그 수정 ✅ 완료
+
+- **원인:** UPDATE 흐름에서 `changeFlags=CATEGORY_CHANGED`를 무시하고 기존 `jpCategoryIdUsed` 그대로 UpdateGoods 호출 — resolver 재실행 로직 없음
+- **해결:** `scripts/qoo10-auto-register.js` UPDATE 블록에 CATEGORY_CHANGED 분기 추가 → `CategoryResolver` 재실행 후 새 jpCategoryId로 payload 구성
+- **부가 발견:** `coupang_categorys` 시트에 categoryId=519992 행이 없어 resolver가 path를 조회 불가. 원인은 해당 상품이 브레드크럼 자동 기록 기능(2026-03-30) 추가 이전에 수집된 레거시 행이었기 때문. `식품 > 견과류・시리얼 > 시리얼` 행을 수동으로 추가하여 해결.
+- **결과:** FALLBACK 등록 6개 상품 중 519992 카테고리 상품 정상 재분류 확인 (jpCategoryId=300000546)
+
+---
+
 ### 4. 기등록 7개 상품 타이틀 패치 ✅ 완료
 
 - **원인:** OpenRouter 잔액 소진으로 `[titleMethod=fallback]` 으로 등록됨 (`韓国商品 300g 1개` 형식)
@@ -61,14 +70,6 @@
 
 ### 🟡 우선순위 보통
 
-#### 1. CATEGORY_CHANGED 플래그로 카테고리 재패치 미동작 버그
-- **증상:** `needsUpdate=YES` + `changeFlags=CATEGORY_CHANGED` 설정 후 `npm run qoo10:auto-register` 실행해도 카테고리가 업데이트되지 않음
-- **원인:** CLAUDE.md §9-A에 기록된 대로 changeFlags 분기 미구현 — 현재 UpdateGoods는 changeFlags 무관하게 실행되나 카테고리 재resolve 로직이 없는 것으로 추정
-- **영향 대상:** FALLBACK 카테고리로 등록된 6개 상품 (jpCategoryId=320002604)
-- **해결 방향:** `qoo10-auto-register.js` UPDATE 흐름에서 `CATEGORY_CHANGED` 플래그 시 CategoryResolver 재실행 후 새 jpCategoryId로 UpdateGoods 호출하도록 구현 필요
-
----
-
 ## 보류 (운영 안정화 후)
 
 - [ ] **AUTO_REGISTER_ENABLED 플래그 추가** — cron 붙일 때
@@ -81,6 +82,7 @@
   현재 `EditGoodsMultiImage` 동작 미검증. 별도 API 필요할 수 있음.
 - [ ] Qoo10 시장 가격 경쟁성 스크래핑
 - [ ] `getItemDetailInfo.js` 모듈 구현
+- [ ] **수집 시 `coupang_categorys` 자동 기록 검증** — 2026-03-30 이후 수집된 상품의 categoryId가 `coupang_categorys` 시트에 자동으로 기록되는지 확인 필요. 미기록 시 `coupangApiClient.js` 브레드크럼 추출 코드 점검. (레거시 행은 수동 추가로 대응)
 
 ---
 
