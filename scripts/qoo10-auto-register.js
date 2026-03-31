@@ -533,9 +533,15 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
 
     if (updateResult.success) {
       // Upload extra images
+      let multiImageMethod = 'skip';
       if (payload.ExtraImages && payload.ExtraImages.length > 0) {
         const multiImageResult = await editGoodsMultiImage(existingQoo10ItemId, payload.ExtraImages);
-        if (!multiImageResult.success && !multiImageResult.dryRun) {
+        if (multiImageResult.dryRun) {
+          multiImageMethod = 'skip';
+        } else if (multiImageResult.success) {
+          multiImageMethod = 'ok';
+        } else {
+          multiImageMethod = 'fail';
           console.warn(`[Registration] MultiImage upload failed: ${multiImageResult.resultMsg}`);
         }
       }
@@ -564,7 +570,8 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
         mode: 'UPDATE',
         itemTitle: payload.ItemTitle,
         titleMethod,
-        descMethod
+        descMethod,
+        multiImageMethod
       };
     } else {
       return {
@@ -592,9 +599,15 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
       
       if (result.success && result.createdItemId) {
         // Upload extra images after successful registration
+        let multiImageMethod = 'skip';
         if (payload.ExtraImages && payload.ExtraImages.length > 0) {
           const multiImageResult = await editGoodsMultiImage(result.createdItemId, payload.ExtraImages);
-          if (!multiImageResult.success && !multiImageResult.dryRun) {
+          if (multiImageResult.dryRun) {
+            multiImageMethod = 'skip';
+          } else if (multiImageResult.success) {
+            multiImageMethod = 'ok';
+          } else {
+            multiImageMethod = 'fail';
             console.warn(`[Registration] MultiImage upload failed: ${multiImageResult.resultMsg}`);
           }
         }
@@ -620,7 +633,8 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
           mode: 'CREATE',
           itemTitle: payload.ItemTitle,
           titleMethod,
-          descMethod
+          descMethod,
+          multiImageMethod
         };
       }
 
@@ -797,7 +811,7 @@ async function main() {
               status: 'REGISTERED',
               registrationMode: 'REAL',
               registrationStatus: 'SUCCESS',
-              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] ${result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully'}`,
+              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] [multiImage=${result.multiImageMethod || 'skip'}] ${result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully'}`,
               lastRegisteredAt: new Date().toISOString()
             };
             
@@ -836,7 +850,7 @@ async function main() {
               status: 'REGISTERED',
               registrationMode: 'REAL',
               registrationStatus: 'WARNING',
-              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] FALLBACK category used (review required)`,
+              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] [multiImage=${result.multiImageMethod || 'skip'}] FALLBACK category used (review required)`,
               lastRegisteredAt: new Date().toISOString()
             };
             
