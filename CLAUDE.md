@@ -237,7 +237,7 @@ write calls 쿼터: 10회/세션
   > 복수 플래그는 파이프(`|`)로 구분.
   > `CATEGORY_CHANGED`: 현재 자동 처리 코드 없음 → 수동 트리거.
   > 전체 목록은 config 시트 `VALID_CHANGE_FLAGS` 키 참고.
-  > **⚠️ 미구현 래퍼:** `getItemDetailInfo.js`, `editGoodsContents.js` 파일 없음. EditGoodsContents API 호출 경로 현재 없음.
+  > **⚠️ 미구현 래퍼:** `getItemDetailInfo.js` 파일 없음. `editGoodsContents.js`는 구현 완료 (2026-03-31).
 - [x] 인벤토리 관리 qoo10_inventory 시트 + 동기화/qty처리 스크립트 | 브랜치: oc/qoo10-inventory-mgmt
 - [x] 수집기 Browser Relay 방식 전환 | 브랜치: oc/api-collector (머지 완료)
   - Playwright headless 상세 페이지 접근 → Browser Relay `evaluate(fetch())` 로 교체
@@ -290,10 +290,11 @@ write calls 쿼터: 10회/세션
   - 목표: `config` 시트에서 런타임 로드 — 코드 수정 없이 수수료율·환율·마진 조정 가능
   - 착수 조건: 운영 안정화 후
 
-- [ ] **[전략] 일본어 상세페이지 콘텐츠 생성**
-  - 착수 조건: 6순위 자동 연결 완료 후
-  - 구현 위치: `backend/qoo10/contentStrategy.js`
-  - 트리거: DetailImages < 3개 OR ItemDescriptionText < 100자
+- [x] **[전략] 일본어 상세페이지 콘텐츠 생성** | 완료 2026-03-31
+  - `backend/qoo10/descriptionGenerator.js`: ExtraImages vision 모드(Claude Haiku via OpenRouter) 또는 텍스트 모드로 일본어 HTML 생성
+  - `backend/qoo10/editGoodsContents.js`: ItemsContents.EditGoodsContents API 래퍼 (파라미터명 `Contents`)
+  - ExtraImages를 `<p><img src="..." /></p>` 형식으로 일본어 텍스트 뒤에 이어붙여 전송
+  - CREATE/UPDATE 성공 후 자동 호출, `registrationMessage`에 `[descMethod=vision|text|skip]` 기록
 
 #### ⏸ 보류 (운영 안정화 후)
 - [ ] **7순위** Qoo10 시장 가격 경쟁성 자동 스크래핑
@@ -316,8 +317,7 @@ write calls 쿼터: 10회/세션
 ### 9-D. 보류
 
 - [ ] `getItemDetailInfo.js` 모듈 구현 — GetItemDetailInfo API 래퍼 (현재 미존재)
-- [ ] `editGoodsContents.js` 모듈 구현 — EditGoodsContents API 래퍼 (현재 미존재)
-  - 구현 시 주의: large payload(일본어 상세 HTML) 처리 + 인코딩 edge case 검증 필수
+- [x] `editGoodsContents.js` 모듈 구현 — EditGoodsContents API 래퍼 (완료 2026-03-31)
 - [ ] UpdateGoods / EditGoodsContents / GetItemDetailInfo 테스트 스크립트
 - [ ] **[운영 매뉴얼 작성 시]** 매일 시작 절차 문서화
   - 순서 중요. 아래 명령을 매일 출근 시 / PC 재시작 후 실행해야 함:
@@ -355,7 +355,9 @@ crawler-pipeline/
 │   │   ├── registerNewGoods.js       # SetNewGoods 래퍼
 │   │   ├── titleTranslator.js        # KR→JP 타이틀 변환 (Claude Haiku)
 │   │   └── updateGoods.js            # UpdateGoods 래퍼 (updateExistingGoods)
-│   │   # ⚠️ 미존재: getItemDetailInfo.js, editGoodsContents.js
+│   │   ├── editGoodsContents.js      # EditGoodsContents 래퍼 (일본어 상세 HTML + 이미지)
+│   │   ├── descriptionGenerator.js   # 일본어 상세페이지 HTML 생성 (vision/text via OpenRouter)
+│   │   # ⚠️ 미존재: getItemDetailInfo.js
 │   ├── category/
 │   │   ├── japanCategoriesSync.js
 │   │   ├── parser.js
