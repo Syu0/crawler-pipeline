@@ -235,7 +235,7 @@ write calls 쿼터: 10회/세션
   > 현재 실제 동작: 플래그 무관, UpdateGoods 전체 호출 후 changeFlags='' 클리어
   > **허용값:** `PRICE_UP` | `PRICE_DOWN` | `TITLE_CHANGED` | `DESC_CHANGED` | `CATEGORY_CHANGED`
   > 복수 플래그는 파이프(`|`)로 구분.
-  > `CATEGORY_CHANGED`: 현재 자동 처리 코드 없음 → 수동 트리거.
+  > `CATEGORY_CHANGED`: category_mapping 시트에 MANUAL 매핑 등록 후 `changeFlags=CATEGORY_CHANGED` + `needsUpdate=YES` 설정 → auto-register 실행 시 자동 재resolve. ✅ 구현 완료 (2026-03-31)
   > 전체 목록은 config 시트 `VALID_CHANGE_FLAGS` 키 참고.
   > **⚠️ 미구현 래퍼:** `getItemDetailInfo.js` 파일 없음. `editGoodsContents.js`는 구현 완료 (2026-03-31).
 - [x] 인벤토리 관리 qoo10_inventory 시트 + 동기화/qty처리 스크립트 | 브랜치: oc/qoo10-inventory-mgmt
@@ -275,6 +275,10 @@ write calls 쿼터: 10회/세션
   - `qoo10-auto-register.js`: REGISTER_READY만 처리 (COLLECTED 건너뜀)
   - `setup-sheets.js`: MAX_DAILY_REGISTER 기본값 추가 + --force-defaults 옵션
   - fix: qoo10ItemId 있는 행이 CREATE 큐에 중복 진입하던 버그 수정
+- [x] **CATEGORY_CHANGED 플래그 재resolve 버그 수정** | 브랜치: oc/fix-category-changed (머지 예정)
+  - 수정: `changeFlags=CATEGORY_CHANGED` 시 `manualCategoryOverride` bypass → resolver 최신 결과 사용
+  - 기존 동작: MANUAL 타입 행은 시트의 기존 `jpCategoryIdUsed` 값 고수 → 새 MANUAL 매핑 무시
+  - 영향 대상 6개 (categoryMatchType=FALLBACK, jpCategoryIdUsed=320002604) → 300000546(시리얼/견과류) 정상 반영
 
 #### 🔄 대기 중
 
@@ -411,7 +415,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-03-26 | discover Browser Relay 전환 — Playwright 데몬 제거, li[data-id] 카드 파싱, 56개 발견 / 31개 DISCOVERED 저장 검증 완료*
+*마지막 업데이트: 2026-03-31 | CATEGORY_CHANGED 플래그 재resolve 버그 수정 — changeFlags=CATEGORY_CHANGED 시 resolver 최신 결과 사용, MANUAL override bypass 로직 추가*
 
 ---
 

@@ -392,22 +392,35 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
     };
   }
   
-  // Check if category was manually changed in sheet
-  const manualCategoryOverride = row.jpCategoryIdUsed && 
-    row.jpCategoryIdUsed !== categoryResolution.jpCategoryId &&
-    row.categoryMatchType === 'MANUAL';
-  
-  if (manualCategoryOverride) {
-    // Use the manually set category from sheet
-    categoryResolution = {
-      jpCategoryId: row.jpCategoryIdUsed,
-      matchType: 'MANUAL',
-      confidence: 1.0,
-      coupangCategoryKey: categoryResolution.coupangCategoryKey
-    };
-    console.log(`  Category: Using MANUAL override → ${categoryResolution.jpCategoryId}`);
+  // CATEGORY_CHANGED 플래그가 있으면 resolver 결과를 그대로 사용 (MANUAL override bypass)
+  const changeFlagsArr = (row.changeFlags || '').split('|').map(f => f.trim()).filter(Boolean);
+  const hasCategoryChanged = changeFlagsArr.includes('CATEGORY_CHANGED');
+
+  if (hasCategoryChanged) {
+    const oldCategoryId = row.jpCategoryIdUsed || '(none)';
+    if (oldCategoryId !== categoryResolution.jpCategoryId) {
+      console.log(`  [CATEGORY_CHANGED] 재resolve: ${oldCategoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
+    } else {
+      console.log(`  [CATEGORY_CHANGED] 동일 카테고리, skip (${categoryResolution.jpCategoryId})`);
+    }
   } else {
-    console.log(`  Category: ${row.categoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
+    // Check if category was manually changed in sheet
+    const manualCategoryOverride = row.jpCategoryIdUsed &&
+      row.jpCategoryIdUsed !== categoryResolution.jpCategoryId &&
+      row.categoryMatchType === 'MANUAL';
+
+    if (manualCategoryOverride) {
+      // Use the manually set category from sheet
+      categoryResolution = {
+        jpCategoryId: row.jpCategoryIdUsed,
+        matchType: 'MANUAL',
+        confidence: 1.0,
+        coupangCategoryKey: categoryResolution.coupangCategoryKey
+      };
+      console.log(`  Category: Using MANUAL override → ${categoryResolution.jpCategoryId}`);
+    } else {
+      console.log(`  Category: ${row.categoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
+    }
   }
   
   // Build payload with validated price and resolved category
