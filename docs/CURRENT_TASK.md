@@ -3,10 +3,24 @@
 ## 현재 상태
 - 2026-03-31 업데이트
 - `main` 브랜치 — 10개 REGISTERED
+- EditGoodsMultiImage 파라미터 수정 완료 (EnlargedImage1~50), real mode 검증 대기 중
 
 ---
 
 ## 오늘 완료된 작업 (2026-03-31)
+
+### 6. 상단 썸네일 갤러리 이미지 등록 (EditGoodsMultiImage) ✅ 완료
+
+- **원인:** 기존 `ImageUrl` 파라미터가 Qoo10 서버에서 무시됨 (`ResultCode=0` 반환하지만 실제 미반영 — UpdateGoods의 ItemQty 무시와 동일 패턴)
+- **해결:** `backend/qoo10/editGoodsMultiImage.js` 파라미터 교체
+  - `ImageUrl: "url1|url2|..."` → `EnlargedImage1: url1`, `EnlargedImage2: url2` ... (개별 파라미터, max 50개)
+  - URL 200자 초과 건 skip, 50개 초과 분 slice
+- **`scripts/qoo10-auto-register.js`** 수정
+  - CREATE/UPDATE 성공 후 multiImageMethod 추적 (ok/skip/fail)
+  - `registrationMessage`에 `[multiImage=ok|skip|fail]` 기록
+- **검증:** real mode UPDATE 실행 후 Qoo10 상품 페이지 슬라이더 반영 확인 필요 (real mode 미검증 상태로 머지)
+
+---
 
 ### 5. CATEGORY_CHANGED 플래그 카테고리 재resolve 버그 수정 ✅ 완료
 
@@ -78,8 +92,7 @@
 - [ ] **일본어 이미지 재생성** — 한국어 상세 이미지를 일본어로 재생성할 때
   이미지 파일 저장 경로 구조 + 정리 정책 + Sheets 연동 방식 함께 설계.
   현재는 base64 메모리 방식으로 vision 처리 중 (디스크 저장 없음)
-- [ ] **상단 썸네일 갤러리 이미지 등록** — ExtraImages를 상품 상단 이미지 슬라이더에 표시.
-  현재 `EditGoodsMultiImage` 동작 미검증. 별도 API 필요할 수 있음.
+- [ ] **상단 썸네일 갤러리 이미지 real mode 검증** — UPDATE 실행 후 Qoo10 슬라이더 표시 확인. EnlargedImage 파라미터로 교체 완료, 반영 여부 미확인.
 - [ ] Qoo10 시장 가격 경쟁성 스크래핑
 - [ ] `getItemDetailInfo.js` 모듈 구현
 - [ ] **수집 시 `coupang_categorys` 자동 기록 검증** — 2026-03-30 이후 수집된 상품의 categoryId가 `coupang_categorys` 시트에 자동으로 기록되는지 확인 필요. 미기록 시 `coupangApiClient.js` 브레드크럼 추출 코드 점검. (레거시 행은 수동 추가로 대응)
