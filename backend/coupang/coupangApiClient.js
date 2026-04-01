@@ -111,7 +111,7 @@ function buildImageExtractFn() {
     const normalizeSrc = (el) => el?.src || el?.dataset?.src || el?.getAttribute('data-src') || '';
     const toUrl = (el) => {
       const src = normalizeSrc(el);
-      return src && src.startsWith('//') ? `https:${src}` : src;
+      return src && src.startsWith('//') ? 'https:' + src : src;
     };
 
     const unique = (arr) => [...new Set(arr.filter(Boolean))];
