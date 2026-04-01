@@ -1090,3 +1090,7 @@ main()
     console.error('\nFatal error:', err.message);
     process.exit(1);
   });
+
+if (require.main !== module) {
+  module.exports = { parseChangeFlags };
+}

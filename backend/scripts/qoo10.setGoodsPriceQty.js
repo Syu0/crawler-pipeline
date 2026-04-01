@@ -52,9 +52,13 @@ function incrementWriteCallCount() {
 // ── API calls ─────────────────────────────────────────────────────────────────
 
 function callSetGoodsPriceQty(itemCode, price, qty) {
-  const params = { returnType: 'application/json', ItemCode: String(itemCode) };
-  if (price !== null && price !== undefined) params.ItemPrice = String(price);
-  if (qty   !== null && qty   !== undefined) params.ItemQty   = String(qty);
+  const params = {
+    returnType: 'application/json',
+    ItemCode: String(itemCode),
+    ExpireDate: '2030-12-31',
+  };
+  if (price !== null && price !== undefined) params.Price = String(price);
+  if (qty   !== null && qty   !== undefined) params.Qty   = String(qty);
   return qoo10PostMethod('ItemsOrder.SetGoodsPriceQty', params, '1.1');
 }
 
@@ -125,8 +129,8 @@ async function setGoodsPriceQty({ itemCode, price = null, qty = null }) {
     readBack = {
       afterPrice: obj?.ItemPrice,
       afterQty:   obj?.ItemQty,
-      priceMatch: price !== null ? String(obj?.ItemPrice) === String(price) : null,
-      qtyMatch:   qty   !== null ? String(obj?.ItemQty)   === String(qty)   : null,
+      priceMatch: price !== null ? parseFloat(obj?.ItemPrice) === parseFloat(price) : null,
+      qtyMatch:   qty   !== null ? parseFloat(obj?.ItemQty)   === parseFloat(qty)   : null,
     };
     console.log(`[SetGoodsPriceQty] Read-back → priceMatch=${readBack.priceMatch}, qtyMatch=${readBack.qtyMatch}`);
   } catch (e) {
