@@ -3,16 +3,17 @@
 ## 현재 상태
 - 2026-04-01 업데이트
 - `main` 브랜치 — 10개 REGISTERED
-- 브랜치 `oc/fix-bugs-b01-b02` 작업 중 (B-01 ItemTitle 빈값 + B-02 StandardImage 오수집 수정)
+- B-01/B-02 수정 PR #14 머지 완료
 
 ---
 
 ## 오늘 완료된 작업 (2026-04-01)
 
-### B-01 ItemTitle 빈값 + B-02 StandardImage 오수집 수정 ✅ 완료 (코드)
+### B-01 ItemTitle 빈값 + B-02 StandardImage 오수집 수정 ✅ 완료 (PR #14 머지)
 
 - **B-02 원인:** `coupang-collect-discovered.js` dedup 분기의 `imageCopyFields`에 `StandardImage` 포함 → 동일 product_id의 첫 번째 상품 이미지가 다른 vendorItemId 행에 복사됨
 - **B-02 수정:** `imageCopyFields`에서 `StandardImage` 제거. dedup 상품은 StandardImage 빈값(`''`)으로 유지 → `coupang:collect:one`으로 개별 재수집
+- **B-02 추가 수정:** 메인 이미지 셀렉터를 `querySelectorAll+find` 방식으로 교체 + `vendor_inventory` 경로 제외 필터 추가 (옵션 썸네일 오수집 방지)
 - **B-01 수정:** `coupangApiClient.js` `collectProductData` / `collectPriceStockReview` 반환 직전에 ItemTitle 빈값 체크 → 빈값이면 `Error` throw → 호출부에서 status=ERROR 기록
 - **editGoodsImage.js 신규 구현:** `backend/qoo10/editGoodsImage.js` — `ItemsContents.EditGoodsImage` API 래퍼. `editGoodsContents.js` 패턴과 동일.
 - **qoo10-auto-register.js UPDATE 흐름:** `editGoodsImage` 호출 추가 (multiImage 업로드 직전). `registrationMessage`에 `[imageUpdate=ok|skip|fail]` 기록.

@@ -237,7 +237,7 @@ write calls 쿼터: 10회/세션
   > 복수 플래그는 파이프(`|`)로 구분.
   > `CATEGORY_CHANGED`: category_mapping 시트에 MANUAL 매핑 등록 후 `changeFlags=CATEGORY_CHANGED` + `needsUpdate=YES` 설정 → auto-register 실행 시 자동 재resolve. ✅ 구현 완료 (2026-03-31)
   > 전체 목록은 config 시트 `VALID_CHANGE_FLAGS` 키 참고.
-  > **⚠️ 미구현 래퍼:** `getItemDetailInfo.js` 파일 없음. `editGoodsContents.js`는 구현 완료 (2026-03-31).
+  > **⚠️ 미구현 래퍼:** `getItemDetailInfo.js` 파일 없음. `editGoodsContents.js`는 구현 완료 (2026-03-31). `editGoodsImage.js`는 구현 완료 (2026-04-01).
 - [x] 인벤토리 관리 qoo10_inventory 시트 + 동기화/qty처리 스크립트 | 브랜치: oc/qoo10-inventory-mgmt
 - [x] 수집기 Browser Relay 방식 전환 | 브랜치: oc/api-collector (머지 완료)
   - Playwright headless 상세 페이지 접근 → Browser Relay `evaluate(fetch())` 로 교체
@@ -275,7 +275,7 @@ write calls 쿼터: 10회/세션
   - `qoo10-auto-register.js`: REGISTER_READY만 처리 (COLLECTED 건너뜀)
   - `setup-sheets.js`: MAX_DAILY_REGISTER 기본값 추가 + --force-defaults 옵션
   - fix: qoo10ItemId 있는 행이 CREATE 큐에 중복 진입하던 버그 수정
-- [x] **CATEGORY_CHANGED 플래그 재resolve 버그 수정** | 브랜치: oc/fix-category-changed (머지 예정)
+- [x] **CATEGORY_CHANGED 플래그 재resolve 버그 수정** | 브랜치: oc/fix-category-changed (머지 완료)
   - 수정: `changeFlags=CATEGORY_CHANGED` 시 `manualCategoryOverride` bypass → resolver 최신 결과 사용
   - 기존 동작: MANUAL 타입 행은 시트의 기존 `jpCategoryIdUsed` 값 고수 → 새 MANUAL 매핑 무시
   - 영향 대상 6개 (categoryMatchType=FALLBACK, jpCategoryIdUsed=320002604) → 300000546(시리얼/견과류) 정상 반영
@@ -293,6 +293,12 @@ write calls 쿼터: 10회/세션
     (`MARKET_COMMISSION_RATE=0.10`, `TARGET_MARGIN_RATE=0.20`, `MIN_MARGIN_RATE=0.25`, `FX_JPY_TO_KRW=10`)
   - 목표: `config` 시트에서 런타임 로드 — 코드 수정 없이 수수료율·환율·마진 조정 가능
   - 착수 조건: 운영 안정화 후
+
+- [x] **B-01/B-02 버그 수정** | 브랜치: oc/fix-bugs-b01-b02 (PR #14 머지 완료, 2026-04-01)
+  - B-01: `collectProductData` / `collectPriceStockReview` ItemTitle 빈값 시 Error throw → status=ERROR
+  - B-02: dedup `imageCopyFields`에서 `StandardImage` 제거 + 셀렉터 `querySelectorAll+find`로 교체 + `vendor_inventory` 경로 제외
+  - `editGoodsImage.js` 신규: `ItemsContents.EditGoodsImage` API 래퍼
+  - `qoo10-auto-register.js`: UPDATE 흐름에 `editGoodsImage` 호출 추가, `[imageUpdate=ok|skip|fail]` 기록
 
 - [x] **[전략] 일본어 상세페이지 콘텐츠 생성** | 완료 2026-03-31
   - `backend/qoo10/descriptionGenerator.js`: ExtraImages vision 모드(Claude Haiku via OpenRouter) 또는 텍스트 모드로 일본어 HTML 생성
@@ -415,7 +421,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-03-31 | CATEGORY_CHANGED 플래그 재resolve 버그 수정 — changeFlags=CATEGORY_CHANGED 시 resolver 최신 결과 사용, MANUAL override bypass 로직 추가*
+*마지막 업데이트: 2026-04-01 | B-01 ItemTitle 빈값 수집 실패 처리 + B-02 StandardImage 오수집 수정 (PR #14) + editGoodsImage.js 신규*
 
 ---
 
