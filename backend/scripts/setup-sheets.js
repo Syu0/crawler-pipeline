@@ -45,8 +45,8 @@ async function applyHeaderGroupColors(sheets, spreadsheetId, tabName, headerGrou
           },
           cell: {
             userEnteredFormat: {
-              backgroundColor: group.color,
-              textFormat: { bold: true },
+              backgroundColor: group.bg,
+              textFormat: { bold: true, foregroundColor: group.fg },
             },
           },
           fields: 'userEnteredFormat(backgroundColor,textFormat)',

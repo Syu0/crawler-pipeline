@@ -55,11 +55,13 @@ const COUPANG_DATA_HEADERS = [
   'errorMessage',
 ];
 
-// 그룹별 컬럼 범위 (배경색 적용용)
+// 그룹별 컬럼 범위 (배경색 + 글자색 적용용)
 const HEADER_GROUPS = [
-  { label: '[C] Coupang', start: 0,  end: 20, color: { red: 0.68, green: 0.85, blue: 0.90 } }, // 하늘색
-  { label: '[Q] Qoo10',   start: 21, end: 33, color: { red: 0.85, green: 0.74, blue: 0.90 } }, // 연보라
-  { label: '[SYS]',       start: 34, end: 36, color: { red: 0.98, green: 0.90, blue: 0.68 } }, // 연노랑
+  { label: '[D] Discover', start: 0,  end: 4,  bg: { red: 0.890, green: 0.949, blue: 0.992 }, fg: { red: 0, green: 0, blue: 0 } }, // #E3F2FD 아주 연한 하늘
+  { label: '[C] Collect',  start: 5,  end: 20, bg: { red: 0.565, green: 0.792, blue: 0.976 }, fg: { red: 0, green: 0, blue: 0 } }, // #90CAF9 중간 하늘
+  { label: '[Q] Qoo10',    start: 21, end: 31, bg: { red: 0.290, green: 0.565, blue: 0.851 }, fg: { red: 1, green: 1, blue: 1 } }, // #4A90D9 진한 파랑 (글자 흰색)
+  { label: '[USER]',       start: 32, end: 33, bg: { red: 1,     green: 1,     blue: 1     }, fg: { red: 0, green: 0, blue: 0 } }, // #FFFFFF 흰색
+  { label: '[SYS]',        start: 34, end: 36, bg: { red: 0.929, green: 0.906, blue: 0.965 }, fg: { red: 0, green: 0, blue: 0 } }, // #EDE7F6 연보라
 ];
 
 // 허용된 status ENUM 값 (파이프라인 전체 기준)
