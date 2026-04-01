@@ -25,6 +25,7 @@ const { decideItemPriceJpy } = require('../backend/pricing/priceDecision');
 const { translateTitle } = require('../backend/qoo10/titleTranslator');
 const { generateJapaneseDescription } = require('../backend/qoo10/descriptionGenerator');
 const { editGoodsContents } = require('../backend/qoo10/editGoodsContents');
+const { editGoodsImage } = require('../backend/qoo10/editGoodsImage');
 
 // Configuration
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
@@ -532,6 +533,22 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
     }
 
     if (updateResult.success) {
+      // Update standard image
+      let imageUpdateMethod = 'skip';
+      if (payload.StandardImage) {
+        const imageResult = await editGoodsImage(existingQoo10ItemId, payload.StandardImage);
+        if (imageResult.dryRun) {
+          imageUpdateMethod = 'skip';
+        } else if (imageResult.skipped) {
+          imageUpdateMethod = 'skip';
+        } else if (imageResult.success) {
+          imageUpdateMethod = 'ok';
+        } else {
+          imageUpdateMethod = 'fail';
+          console.warn(`[Registration] StandardImage update failed: ${imageResult.message}`);
+        }
+      }
+
       // Upload extra images
       let multiImageMethod = 'skip';
       if (payload.ExtraImages && payload.ExtraImages.length > 0) {
@@ -571,7 +588,8 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
         itemTitle: payload.ItemTitle,
         titleMethod,
         descMethod,
-        multiImageMethod
+        multiImageMethod,
+        imageUpdateMethod
       };
     } else {
       return {
@@ -811,7 +829,7 @@ async function main() {
               status: 'REGISTERED',
               registrationMode: 'REAL',
               registrationStatus: 'SUCCESS',
-              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] [multiImage=${result.multiImageMethod || 'skip'}] ${result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully'}`,
+              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] [multiImage=${result.multiImageMethod || 'skip'}] [imageUpdate=${result.imageUpdateMethod || 'skip'}] ${result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully'}`,
               lastRegisteredAt: new Date().toISOString()
             };
             
@@ -850,7 +868,7 @@ async function main() {
               status: 'REGISTERED',
               registrationMode: 'REAL',
               registrationStatus: 'WARNING',
-              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] [multiImage=${result.multiImageMethod || 'skip'}] FALLBACK category used (review required)`,
+              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] [multiImage=${result.multiImageMethod || 'skip'}] [imageUpdate=${result.imageUpdateMethod || 'skip'}] FALLBACK category used (review required)`,
               lastRegisteredAt: new Date().toISOString()
             };
             
