@@ -280,6 +280,24 @@ write calls 쿼터: 10회/세션
   - 기존 동작: MANUAL 타입 행은 시트의 기존 `jpCategoryIdUsed` 값 고수 → 새 MANUAL 매핑 무시
   - 영향 대상 6개 (categoryMatchType=FALLBACK, jpCategoryIdUsed=320002604) → 300000546(시리얼/견과류) 정상 반영
 
+- [x] **B-01/B-02 버그 수정** | 브랜치: oc/fix-bugs-b01-b02 (PR #14 머지 완료, 2026-04-01)
+  - B-01: `collectProductData` / `collectPriceStockReview` ItemTitle 빈값 시 Error throw → status=ERROR
+  - B-02: dedup `imageCopyFields`에서 `StandardImage` 제거 + 셀렉터 `querySelectorAll+find`로 교체 + `vendor_inventory` 경로 제외
+  - `editGoodsImage.js` 신규: `ItemsContents.EditGoodsImage` API 래퍼
+  - `qoo10-auto-register.js`: UPDATE 흐름에 `editGoodsImage` 호출 추가, `[imageUpdate=ok|skip|fail]` 기록
+- [x] **SliderImages 수집 수정** (2026-04-01)
+  - 원인: B-02 수정 시 `vendor_inventory` 제외 필터 / 셀렉터 교체가 Phase 3 SliderImages 수집에 사이드이펙트 발생
+  - 수정: 셀렉터 수정 + 테스트 완료
+- [x] **멀티이미지(EditGoodsMultiImage) EnlargedImage 파라미터 교체** | 완료 2026-03-31
+  - `ImageUrl` 단일 파라미터 → `EnlargedImage1~50` 개별 파라미터로 교체 (`editGoodsMultiImage.js`)
+  - URL 200자 초과 건 skip, 50개 초과 분 slice
+  - Qoo10 슬라이더 real mode 반영 확인 완료 (2026-04-01)
+- [x] **[전략] 일본어 상세페이지 콘텐츠 생성** | 완료 2026-03-31
+  - `backend/qoo10/descriptionGenerator.js`: ExtraImages vision 모드(Claude Haiku via OpenRouter) 또는 텍스트 모드로 일본어 HTML 생성
+  - `backend/qoo10/editGoodsContents.js`: ItemsContents.EditGoodsContents API 래퍼 (파라미터명 `Contents`)
+  - ExtraImages를 `<p><img src="..." /></p>` 형식으로 일본어 텍스트 뒤에 이어붙여 전송
+  - CREATE/UPDATE 성공 후 자동 호출, `registrationMessage`에 `[descMethod=vision|text|skip]` 기록
+
 #### 🔄 대기 중
 
 - [ ] **[cron 붙일 때]** AUTO_REGISTER_ENABLED 플래그 추가
@@ -293,18 +311,6 @@ write calls 쿼터: 10회/세션
     (`MARKET_COMMISSION_RATE=0.10`, `TARGET_MARGIN_RATE=0.20`, `MIN_MARGIN_RATE=0.25`, `FX_JPY_TO_KRW=10`)
   - 목표: `config` 시트에서 런타임 로드 — 코드 수정 없이 수수료율·환율·마진 조정 가능
   - 착수 조건: 운영 안정화 후
-
-- [x] **B-01/B-02 버그 수정** | 브랜치: oc/fix-bugs-b01-b02 (PR #14 머지 완료, 2026-04-01)
-  - B-01: `collectProductData` / `collectPriceStockReview` ItemTitle 빈값 시 Error throw → status=ERROR
-  - B-02: dedup `imageCopyFields`에서 `StandardImage` 제거 + 셀렉터 `querySelectorAll+find`로 교체 + `vendor_inventory` 경로 제외
-  - `editGoodsImage.js` 신규: `ItemsContents.EditGoodsImage` API 래퍼
-  - `qoo10-auto-register.js`: UPDATE 흐름에 `editGoodsImage` 호출 추가, `[imageUpdate=ok|skip|fail]` 기록
-
-- [x] **[전략] 일본어 상세페이지 콘텐츠 생성** | 완료 2026-03-31
-  - `backend/qoo10/descriptionGenerator.js`: ExtraImages vision 모드(Claude Haiku via OpenRouter) 또는 텍스트 모드로 일본어 HTML 생성
-  - `backend/qoo10/editGoodsContents.js`: ItemsContents.EditGoodsContents API 래퍼 (파라미터명 `Contents`)
-  - ExtraImages를 `<p><img src="..." /></p>` 형식으로 일본어 텍스트 뒤에 이어붙여 전송
-  - CREATE/UPDATE 성공 후 자동 호출, `registrationMessage`에 `[descMethod=vision|text|skip]` 기록
 
 #### ⏸ 보류 (운영 안정화 후)
 - [ ] **7순위** Qoo10 시장 가격 경쟁성 자동 스크래핑
@@ -328,6 +334,7 @@ write calls 쿼터: 10회/세션
 
 - [ ] `getItemDetailInfo.js` 모듈 구현 — GetItemDetailInfo API 래퍼 (현재 미존재)
 - [x] `editGoodsContents.js` 모듈 구현 — EditGoodsContents API 래퍼 (완료 2026-03-31)
+- [x] `editGoodsImage.js` 모듈 구현 — EditGoodsImage API 래퍼 (완료 2026-04-01)
 - [ ] UpdateGoods / EditGoodsContents / GetItemDetailInfo 테스트 스크립트
 - [ ] **[운영 매뉴얼 작성 시]** 매일 시작 절차 문서화
   - 순서 중요. 아래 명령을 매일 출근 시 / PC 재시작 후 실행해야 함:
@@ -421,7 +428,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-04-01 | B-01 ItemTitle 빈값 수집 실패 처리 + B-02 StandardImage 오수집 수정 (PR #14) + editGoodsImage.js 신규*
+*마지막 업데이트: 2026-04-01 | B-01/B-02 수정 (PR #14) + SliderImages 수집 수정 + EditGoodsMultiImage EnlargedImage 교체 + 슬라이더 real mode 검증 완료*
 
 ---
 
