@@ -79,12 +79,15 @@ function normalizeImageUrl(url) {
 
 function buildImageExtractFn() {
   return `() => {
-    // 메인 이미지: 여러 셀렉터 폴백
+    // 메인 이미지: twc-w-full + twc-max-h 클래스 조합 (현행 쿠팡 구조, 492x492ex 대표 이미지)
+    // vendor_inventory 경로는 옵션 썸네일이므로 제외
+    const isValidMain = (el) => el?.src && !el.src.includes('vendor_inventory');
     const mainEl =
-      document.querySelector('.main-image img') ||
-      document.querySelector('[class*="prod-image"] img') ||
-      document.querySelector('[class*="cdp-img"] img') ||
-      document.querySelector('img[class*="main-image"]');
+      [...document.querySelectorAll('img.twc-w-full[class*="twc-max-h"]')].find(isValidMain) ||
+      [...document.querySelectorAll('.main-image img')].find(isValidMain) ||
+      [...document.querySelectorAll('[class*="prod-image"] img')].find(isValidMain) ||
+      [...document.querySelectorAll('[class*="cdp-img"] img')].find(isValidMain) ||
+      [...document.querySelectorAll('img[class*="main-image"]')].find(isValidMain);
     const main = mainEl?.src || null;
 
     // 추가 이미지: subType-IMAGE 또는 상품 상세 이미지 섹션
@@ -245,6 +248,11 @@ async function collectProductData(productId, vendorItemId, _itemId) {
 
   browserCleanupTab();
 
+  // B-01: ItemTitle 빈값이면 수집 실패 처리
+  if (!ItemTitle || !ItemTitle.trim()) {
+    throw new Error('ItemTitle 수집 실패 — quantity-info API 응답에 ItemTitle 없음');
+  }
+
   return {
     ItemTitle,
     ItemPrice,
@@ -348,6 +356,11 @@ async function collectPriceStockReview(productId, vendorItemId) {
   }
 
   browserCleanupTab();
+
+  // B-01: ItemTitle 빈값이면 수집 실패 처리
+  if (!ItemTitle || !ItemTitle.trim()) {
+    throw new Error('ItemTitle 수집 실패 — quantity-info API 응답에 ItemTitle 없음');
+  }
 
   return {
     ItemTitle,

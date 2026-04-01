@@ -208,9 +208,10 @@ async function main() {
       console.log(`  ⏭ DEDUP — 동일 product_id (${pid}), vendorItemId=${product.vendorItemId}`);
       console.log('     → 이미지만 복사, 가격/재고/리뷰는 개별 API 호출');
 
-      // 이미지 필드만 첫 번째 상품에서 복사
+      // ExtraImages/DetailImages만 첫 번째 상품에서 복사.
+      // StandardImage는 변형마다 다를 수 있으므로 복사하지 않음 (B-02 수정)
       const sourceData = collectedDataByProductId.get(pid) || {};
-      const imageCopyFields = ['StandardImage', 'ExtraImages', 'DetailImages', 'ProductAttributes'];
+      const imageCopyFields = ['ExtraImages', 'DetailImages', 'ProductAttributes'];
       const copied = {};
       for (const f of imageCopyFields) {
         if (sourceData[f] != null && sourceData[f] !== '') copied[f] = sourceData[f];
