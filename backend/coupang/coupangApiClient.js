@@ -238,8 +238,14 @@ async function collectProductData(productId, vendorItemId, _itemId) {
         ItemTitle = infoModule?.title || null;
       }
 
-      // ItemPrice: [0].price.i18nSalePrice.amount
-      const rawPrice = data?.[0]?.price?.i18nSalePrice?.amount;
+      // ItemPrice: 쿠폰할인형 상품은 i18nSalePrice=null이므로 fallback 순서로 파싱
+      // i18nCouponPrice.amount → i18nSalePrice.amount → i18nOriginPrice.amount
+      const p = data?.[0]?.price;
+      const rawPrice =
+        p?.i18nCouponPrice?.amount ??
+        p?.i18nSalePrice?.amount ??
+        p?.i18nOriginPrice?.amount ??
+        null;
       if (rawPrice != null) {
         ItemPrice = parseInt(String(rawPrice).replace(/[^0-9]/g, ''), 10) || null;
       }
@@ -352,7 +358,12 @@ async function collectPriceStockReview(productId, vendorItemId) {
         );
         ItemTitle = infoModule?.title || null;
       }
-      const rawPrice = data?.[0]?.price?.i18nSalePrice?.amount;
+      const p = data?.[0]?.price;
+      const rawPrice =
+        p?.i18nCouponPrice?.amount ??
+        p?.i18nSalePrice?.amount ??
+        p?.i18nOriginPrice?.amount ??
+        null;
       if (rawPrice != null) {
         ItemPrice = parseInt(String(rawPrice).replace(/[^0-9]/g, ''), 10) || null;
       }
