@@ -250,7 +250,7 @@ write calls 쿼터: 10회/세션
   - 검색 페이지 navigate + `li[data-id]` 카드 파싱 → productFilters 체인 → DISCOVERED upsert
   - 56개 발견, 31개 DISCOVERED 저장 검증 완료
 
-### 9-B. 현재 작업 순서 (2026-03-18 기준)
+### 9-B. 현재 작업 순서 (2026-04-01 기준)
 
 #### ✅ 완료
 - [x] **1순위** 쿠팡 블록 대응 강화 | 브랜치: oc/block-handling → oc/browser-guard (머지 완료)
@@ -275,12 +275,16 @@ write calls 쿼터: 10회/세션
   - `qoo10-auto-register.js`: REGISTER_READY만 처리 (COLLECTED 건너뜀)
   - `setup-sheets.js`: MAX_DAILY_REGISTER 기본값 추가 + --force-defaults 옵션
   - fix: qoo10ItemId 있는 행이 CREATE 큐에 중복 진입하던 버그 수정
-- [x] **CATEGORY_CHANGED 플래그 재resolve 버그 수정** | 브랜치: oc/fix-category-changed (머지 예정)
+- [x] **CATEGORY_CHANGED 플래그 재resolve 버그 수정** | 브랜치: oc/fix-category-changed (PR #12 OPEN)
   - 수정: `changeFlags=CATEGORY_CHANGED` 시 `manualCategoryOverride` bypass → resolver 최신 결과 사용
   - 기존 동작: MANUAL 타입 행은 시트의 기존 `jpCategoryIdUsed` 값 고수 → 새 MANUAL 매핑 무시
   - 영향 대상 6개 (categoryMatchType=FALLBACK, jpCategoryIdUsed=320002604) → 300000546(시리얼/견과류) 정상 반영
+- [x] **ExtraImages 슬라이더 썸네일 수집 + EditGoodsMultiImage 반영** | 브랜치: oc/fix-image-fields-step02 (PR #13 OPEN)
+  - `ul.twc-static li img` 셀렉터로 슬라이더 썸네일 수집, StandardImage path 기준 중복 제거
+  - EditGoodsMultiImage 파라미터 `ImageUrl` → `EnlargedImage1~50` 개별 파라미터로 교체 (실제 반영 버그 수정)
+  - 기등록 10개 상품 real mode 검증 완료: 10/10 `[multiImage=ok]`
 
-#### 🔄 대기 중
+#### 🔄 대기 중 (PR 머지 후)
 
 - [ ] **[cron 붙일 때]** AUTO_REGISTER_ENABLED 플래그 추가
   - config 시트에 `AUTO_REGISTER_ENABLED` 키 추가 (true/false)
@@ -415,7 +419,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-03-31 | CATEGORY_CHANGED 플래그 재resolve 버그 수정 — changeFlags=CATEGORY_CHANGED 시 resolver 최신 결과 사용, MANUAL override bypass 로직 추가*
+*마지막 업데이트: 2026-04-01 | ExtraImages 슬라이더 썸네일 수집 + EditGoodsMultiImage EnlargedImage1~50 파라미터 수정 — real mode 10/10 [multiImage=ok] 검증 완료*
 
 ---
 
