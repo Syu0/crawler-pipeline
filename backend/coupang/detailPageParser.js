@@ -75,8 +75,34 @@ async function parseOptions(page) {
  * TODO: 실제 셀렉터, 스크롤 로직은 브라우저 테스트 후 확정
  */
 async function parseDetailImages(page) {
-  // 스텁
-  return { detailImages: [] };
+  // 상세 이미지 영역(Lazy load) 스크롤 후 수집
+  await scrollToBottom(page);
+  await page.waitForTimeout(1000);
+
+  const detailImages = await page.evaluate(() => {
+    const selectorList = [
+      '.detail-image img',
+      '#productDetail img',
+      '.product-description img',
+      '.productDetail img',
+      '.detailContents img',
+      '.detail-wrap img',
+    ];
+
+    const urls = new Set();
+    selectorList.forEach((sel) => {
+      document.querySelectorAll(sel).forEach((img) => {
+        const candidate = img.src || img.dataset?.src || img.getAttribute('data-src') || '';
+        if (candidate && candidate.includes('http')) {
+          urls.add(candidate.startsWith('//') ? `https:${candidate}` : candidate);
+        }
+      });
+    });
+
+    return Array.from(urls);
+  }).catch(() => []);
+
+  return { detailImages };
 }
 
 // ---------------------------------------------------------------------------
