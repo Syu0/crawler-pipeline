@@ -235,9 +235,9 @@ write calls 쿼터: 10회/세션
   > 현재 실제 동작: 플래그 무관, UpdateGoods 전체 호출 후 changeFlags='' 클리어
   > **허용값:** `PRICE_UP` | `PRICE_DOWN` | `TITLE_CHANGED` | `DESC_CHANGED` | `CATEGORY_CHANGED`
   > 복수 플래그는 파이프(`|`)로 구분.
-  > `CATEGORY_CHANGED`: 현재 자동 처리 코드 없음 → 수동 트리거.
+  > `CATEGORY_CHANGED`: category_mapping 시트에 MANUAL 매핑 등록 후 `changeFlags=CATEGORY_CHANGED` + `needsUpdate=YES` 설정 → auto-register 실행 시 자동 재resolve. ✅ 구현 완료 (2026-03-31)
   > 전체 목록은 config 시트 `VALID_CHANGE_FLAGS` 키 참고.
-  > **⚠️ 미구현 래퍼:** `getItemDetailInfo.js`, `editGoodsContents.js` 파일 없음. EditGoodsContents API 호출 경로 현재 없음.
+  > **⚠️ 미구현 래퍼:** `getItemDetailInfo.js` 파일 없음. `editGoodsContents.js`는 구현 완료 (2026-03-31).
 - [x] 인벤토리 관리 qoo10_inventory 시트 + 동기화/qty처리 스크립트 | 브랜치: oc/qoo10-inventory-mgmt
 - [x] 수집기 Browser Relay 방식 전환 | 브랜치: oc/api-collector (머지 완료)
   - Playwright headless 상세 페이지 접근 → Browser Relay `evaluate(fetch())` 로 교체
@@ -250,7 +250,7 @@ write calls 쿼터: 10회/세션
   - 검색 페이지 navigate + `li[data-id]` 카드 파싱 → productFilters 체인 → DISCOVERED upsert
   - 56개 발견, 31개 DISCOVERED 저장 검증 완료
 
-### 9-B. 현재 작업 순서 (2026-03-18 기준)
+### 9-B. 현재 작업 순서 (2026-04-01 기준)
 
 #### ✅ 완료
 - [x] **1순위** 쿠팡 블록 대응 강화 | 브랜치: oc/block-handling → oc/browser-guard (머지 완료)
@@ -275,8 +275,16 @@ write calls 쿼터: 10회/세션
   - `qoo10-auto-register.js`: REGISTER_READY만 처리 (COLLECTED 건너뜀)
   - `setup-sheets.js`: MAX_DAILY_REGISTER 기본값 추가 + --force-defaults 옵션
   - fix: qoo10ItemId 있는 행이 CREATE 큐에 중복 진입하던 버그 수정
+- [x] **CATEGORY_CHANGED 플래그 재resolve 버그 수정** | 브랜치: oc/fix-category-changed (PR #12 OPEN)
+  - 수정: `changeFlags=CATEGORY_CHANGED` 시 `manualCategoryOverride` bypass → resolver 최신 결과 사용
+  - 기존 동작: MANUAL 타입 행은 시트의 기존 `jpCategoryIdUsed` 값 고수 → 새 MANUAL 매핑 무시
+  - 영향 대상 6개 (categoryMatchType=FALLBACK, jpCategoryIdUsed=320002604) → 300000546(시리얼/견과류) 정상 반영
+- [x] **ExtraImages 슬라이더 썸네일 수집 + EditGoodsMultiImage 반영** | 브랜치: oc/fix-image-fields-step02 (PR #13 OPEN)
+  - `ul.twc-static li img` 셀렉터로 슬라이더 썸네일 수집, StandardImage path 기준 중복 제거
+  - EditGoodsMultiImage 파라미터 `ImageUrl` → `EnlargedImage1~50` 개별 파라미터로 교체 (실제 반영 버그 수정)
+  - 기등록 10개 상품 real mode 검증 완료: 10/10 `[multiImage=ok]`
 
-#### 🔄 대기 중
+#### 🔄 대기 중 (PR 머지 후)
 
 - [ ] **[cron 붙일 때]** AUTO_REGISTER_ENABLED 플래그 추가
   - config 시트에 `AUTO_REGISTER_ENABLED` 키 추가 (true/false)
@@ -290,10 +298,11 @@ write calls 쿼터: 10회/세션
   - 목표: `config` 시트에서 런타임 로드 — 코드 수정 없이 수수료율·환율·마진 조정 가능
   - 착수 조건: 운영 안정화 후
 
-- [ ] **[전략] 일본어 상세페이지 콘텐츠 생성**
-  - 착수 조건: 6순위 자동 연결 완료 후
-  - 구현 위치: `backend/qoo10/contentStrategy.js`
-  - 트리거: DetailImages < 3개 OR ItemDescriptionText < 100자
+- [x] **[전략] 일본어 상세페이지 콘텐츠 생성** | 완료 2026-03-31
+  - `backend/qoo10/descriptionGenerator.js`: ExtraImages vision 모드(Claude Haiku via OpenRouter) 또는 텍스트 모드로 일본어 HTML 생성
+  - `backend/qoo10/editGoodsContents.js`: ItemsContents.EditGoodsContents API 래퍼 (파라미터명 `Contents`)
+  - ExtraImages를 `<p><img src="..." /></p>` 형식으로 일본어 텍스트 뒤에 이어붙여 전송
+  - CREATE/UPDATE 성공 후 자동 호출, `registrationMessage`에 `[descMethod=vision|text|skip]` 기록
 
 #### ⏸ 보류 (운영 안정화 후)
 - [ ] **7순위** Qoo10 시장 가격 경쟁성 자동 스크래핑
@@ -316,8 +325,7 @@ write calls 쿼터: 10회/세션
 ### 9-D. 보류
 
 - [ ] `getItemDetailInfo.js` 모듈 구현 — GetItemDetailInfo API 래퍼 (현재 미존재)
-- [ ] `editGoodsContents.js` 모듈 구현 — EditGoodsContents API 래퍼 (현재 미존재)
-  - 구현 시 주의: large payload(일본어 상세 HTML) 처리 + 인코딩 edge case 검증 필수
+- [x] `editGoodsContents.js` 모듈 구현 — EditGoodsContents API 래퍼 (완료 2026-03-31)
 - [ ] UpdateGoods / EditGoodsContents / GetItemDetailInfo 테스트 스크립트
 - [ ] **[운영 매뉴얼 작성 시]** 매일 시작 절차 문서화
   - 순서 중요. 아래 명령을 매일 출근 시 / PC 재시작 후 실행해야 함:
@@ -355,7 +363,9 @@ crawler-pipeline/
 │   │   ├── registerNewGoods.js       # SetNewGoods 래퍼
 │   │   ├── titleTranslator.js        # KR→JP 타이틀 변환 (Claude Haiku)
 │   │   └── updateGoods.js            # UpdateGoods 래퍼 (updateExistingGoods)
-│   │   # ⚠️ 미존재: getItemDetailInfo.js, editGoodsContents.js
+│   │   ├── editGoodsContents.js      # EditGoodsContents 래퍼 (일본어 상세 HTML + 이미지)
+│   │   ├── descriptionGenerator.js   # 일본어 상세페이지 HTML 생성 (vision/text via OpenRouter)
+│   │   # ⚠️ 미존재: getItemDetailInfo.js
 │   ├── category/
 │   │   ├── japanCategoriesSync.js
 │   │   ├── parser.js
@@ -409,7 +419,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-03-26 | discover Browser Relay 전환 — Playwright 데몬 제거, li[data-id] 카드 파싱, 56개 발견 / 31개 DISCOVERED 저장 검증 완료*
+*마지막 업데이트: 2026-04-01 | ExtraImages 슬라이더 썸네일 수집 + EditGoodsMultiImage EnlargedImage1~50 파라미터 수정 — real mode 10/10 [multiImage=ok] 검증 완료*
 
 ---
 

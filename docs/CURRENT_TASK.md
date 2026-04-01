@@ -1,83 +1,57 @@
 # CURRENT_TASK.md
 
-## 현재 상태
-- 2026-03-30 업데이트
-- `main` 브랜치 — 10개 REGISTERED (그래놀라 1개 추가)
+## 현재 상태 (2026-04-01)
+
+- 브랜치: `oc/fix-image-fields-step02` — PR #13 OPEN
+- REGISTERED: 10개 (전부 `[multiImage=ok]` 반영 완료)
+- COLLECTED 미등록 대기: 12개 (다음 promote → 등록 대상)
+- DISCOVERED: 16개
+
+**다음 액션:** PR #13 머지 → COLLECTED 12개 promote → 등록
 
 ---
 
-## 오늘 완료된 작업 (2026-03-30)
+## 완료된 작업
 
-### 코드 수정
-- **`feat: extract categoryId from breadcrumb during collect and write to sheet`** (커밋 `839ecf2`)
-  - `coupangApiClient.js` — Step 2 DOM evaluate에 브레드크럼 categoryId 추출 추가
-    (selector: `ul.breadcrumb li a[href*="/np/categories/"]`)
-  - `coupang-collect-discovered.js` — categoryId write-back 추가
-  - `coupang-collect-one.js` — categoryId + WeightKg 기본값 `'1'` + 로그 출력 추가
+### Step 02. ExtraImages 슬라이더 썸네일 수집 + Qoo10 멀티이미지 반영 ✅ (2026-04-01)
 
-- **`docs: clarify Browser Relay CLI dependency for coupang:collect`** (커밋 `7dfba15`)
-  - RUNBOOK.md 매일 시작 절차 수정
-  - `No pages available` 실패모드 명확화
-  - `browser:start`는 stock:check 전용임을 명시
+- `ul.twc-static li img` 셀렉터로 슬라이더 썸네일 수집 → `ExtraImages` 컬럼 저장
+  - StandardImage와 path 기준 중복 제거 (사이즈 세그먼트 무시)
+  - 8개 상품 재수집 완료 (3~10개/상품)
+- 10개 상품 `EditGoodsMultiImage` 호출 → 10/10 `[multiImage=ok]` SUCCESS
 
-### 등록 완료 (오늘 6개)
-| vendorItemId | qoo10ItemId | 가격(JPY) | 타이틀 |
-|---|---|---|---|
-| 88914244301 | 1198542938 | 4,092 | 韓国商品 250g 1개 (fallback) |
-| 71152534271 | 1198542941 | 5,262 | 韓国商品 440g 1개 (fallback) |
-| 91737670170 | 1198542943 | 2,505 | 韓国商品 360g 1개 (fallback) |
-| 93082693153 | 1198542946 | 2,731 | 韓国商品 500g 2개 (fallback) |
-| 92866072752 | 1198542948 | 6,708 | 韓国商品 300g 2개 (fallback) |
-| 88596546635 | 1198542954 | 11,769 | 韓国商品 1kg 2개 (fallback) |
+### Step 01. ExtraImages → DetailImages 필드 정정 ✅
 
-카테고리: `519992` → Qoo10 `320002604` (FALLBACK — category_mapping 매핑 없음)
+- 결론: `ExtraImages`가 슬라이더 이미지 컬럼이 맞음. 정정 없이 유지.
+
+### EditGoodsMultiImage 파라미터 수정 ✅ (2026-04-01 real 검증)
+
+- `ImageUrl: "url1|url2|..."` → `EnlargedImage1~50` 개별 파라미터로 교체
+  (기존 방식은 ResultCode=0 반환하지만 실제 미반영 — UpdateGoods ItemQty 무시와 동일 패턴)
+
+### CATEGORY_CHANGED 플래그 카테고리 재resolve 버그 수정 ✅
+
+- UPDATE 흐름 CATEGORY_CHANGED 분기 추가 → CategoryResolver 재실행 후 새 jpCategoryId 적용
+- FALLBACK 6개 → jpCategoryId=300000546(시리얼) 정상 재분류
 
 ---
 
-## 다음 작업
+## 이전 완료 작업 (2026-03-31)
 
-### 🔴 우선순위 높음
+### 기등록 7개 상품 타이틀 패치 ✅
+- OpenRouter 잔액 충전 후 `[titleMethod=fallback]` 7개 → 일본어 SEO 타이틀 전환 완료
 
-#### ~~1. collect 후 Chrome 탭 로딩 스피너 멈춤 수정~~ ✅ 완료 (2026-03-30)
-- 수집 완료 후 `about:blank` navigate로 pending request 정리
-- Chrome 탭이 about:blank로 이동 (쿠키 유지 — 다음 수집 정상 동작)
-- PR #11 머지, 브랜치 `oc/fix-chrome-tab-cleanup`
+### 상세페이지 일본어 콘텐츠 생성 + Qoo10 반영 ✅
+- `descriptionGenerator.js`: vision(ExtraImages 있을 때) / text 모드 → 일본어 HTML
+- `editGoodsContents.js`: EditGoodsContents 래퍼 (파라미터명 `Contents`)
+- 검증: 상품 1197862497 상세페이지 일본어 + 이미지 정상 확인
 
-#### ~~2. 이미지 미반영 버그 (StandardImage / ExtraImages)~~ ✅ 완료 (2026-03-30)
-- **원인:** ExtraImages는 SetNewGoods만으로는 업로드 불가 — 등록 후 `EditGoodsMultiImage` 별도 호출 필요
-- **해결:**
-  - `backend/qoo10/editGoodsMultiImage.js` 신규 구현 (`ItemsContents.EditGoodsMultiImage` 래퍼)
-  - `scripts/qoo10-auto-register.js` — CREATE/UPDATE 성공 후 `editGoodsMultiImage` 호출 추가
-  - `backend/qoo10/payloadGenerator.js` — `normalizeImageUrl` `//` 프로토콜 상대 URL 처리 추가
-- **검증:** Qoo10 상품 상세페이지에서 ExtraImages 정상 표시 확인
+---
 
-### 🟡 우선순위 보통
-
-#### 3. 상세페이지 일본어 콘텐츠 생성 + Qoo10 반영
-- **배경:** 쿠팡 수집 상세페이지는 한국어 이미지 위주. 일본 소비자가 이해할 수 있는 일본어 설명 필요
-- **생성 방식 (검토 옵션):**
-  - 옵션 A — 코드 구현: DetailImages를 Claude API에 vision으로 전달 → 한국어 읽기 → 일본어 설명 생성
-  - 옵션 B — OpenClaw 위임: OpenClaw의 이미지 이해 스킬로 이미지 보고 직접 일본어 설명 생성
-    → 코드 파이프라인 없이도 가능. 두 옵션 병행 검토.
-- **출력 구조:**
-  - `DetailImages` 있음 → `[일본어 설명 텍스트]` + `[DetailImages]`
-  - `DetailImages` 없음 → `[일본어 설명 텍스트]` + `[ExtraImages]`
-- **적용 API:** `EditGoodsContents` (현재 래퍼 미구현 — `editGoodsContents.js` 신규 구현 필요)
-- **선행 조건:** 2번(이미지 미반영) 해결 후 착수
-
-#### 4. titleTranslator 401 수정 + 9개 타이틀 패치
-- **증상:** `[titleTranslator] Claude API failed (OpenRouter API error: 401 Unauthorized)`
-- **원인:** OpenRouter 잔액 부족 또는 키 만료
-- **해결:** `backend/qoo10/titleTranslator.js` — OpenRouter 호출 제거, Anthropic API 직접 호출로 교체
-  (`ANTHROPIC_API_KEY` + `@anthropic-ai/sdk` 사용, 이미 의존성 설치됨)
-- **패치 대상:** 총 9개 (3/27 3개 + 오늘 6개) — 수정 후 needsUpdate=YES + changeFlags=TITLE_CHANGED 설정 → `npm run qoo10:auto-register`
-
-### 🟢 우선순위 낮음
-
-#### 5. category_mapping 519992 추가
-- **해결:** `category_mapping` 시트에서 coupangCategoryId=519992 행에 jpCategoryId 수동 입력
-  - 519992 = 시리얼/그래놀라 카테고리로 추정
-  - Qoo10 Japan 카테고리 트리에서 적합한 jpCategoryId 확인 후 matchType=MANUAL 입력
+### 2026-03-30
+- collect 후 Chrome 탭 로딩 스피너 멈춤 수정 (PR #11)
+- editGoodsMultiImage.js 신규 구현 (CREATE/UPDATE 후 자동 호출)
+- categoryId 브레드크럼 추출 — coupangApiClient.js + coupang-collect-discovered.js
 
 ---
 
@@ -85,22 +59,37 @@
 
 - [ ] **AUTO_REGISTER_ENABLED 플래그 추가** — cron 붙일 때
 - [ ] **1195611873 카테고리 수동 재분류** — category_mapping 시트 MANUAL 수정
+- [ ] **1198542941 StandardImage 오수집 수정** — EditGoodsImage 래퍼 미구현으로 현재 수정 불가
 - [ ] **가격 상수 config 시트 이관** — pricingConstants.js 하드코딩 → 런타임 로드
+- [ ] **일본어 이미지 재생성** — 한국어 상세 이미지 → 일본어 재생성 시 저장 경로/정책/Sheets 연동 설계 필요
 - [ ] Qoo10 시장 가격 경쟁성 스크래핑
 - [ ] `getItemDetailInfo.js` 모듈 구현
+- [ ] **coupang_categorys 자동 기록 검증** — 2026-03-30 이후 수집된 상품 categoryId 자동 기록 여부 확인
 
 ---
 
-## 현재 시트 상태 요약
-- REGISTERED: 10개 (3/27 3개 + 3/30 6개 + 3/30 그래놀라 1개)
-- COLLECTED: ~17개 (내일 이후 promote 대상)
-- MAX_DAILY_REGISTER: 6
+## 현재 시트 상태 (2026-04-01)
 
-### COLLECTED 대기 중인 4개 (다음 promote 대상)
-| vendorItemId | ItemTitle | categoryId |
-|---|---|---|
-| 85296814940 | 마켓오네이처 오 그래놀라 다이제 시리얼 250g, 3개 | 433958 |
-| 86533289539 | 마켓오네이처 오 그래놀라 다이제 시리얼 300g, 4개 | 433958 |
-| 91816835421 | 마켓오네이처 오 그래놀라 저당 통보리 시리얼 360g, 2개 | 519992 |
-| 91428368907 | 원더너츠 수제 그래놀라 시리얼 플레인 | 519992 |
-- 519992 카테고리 매핑 미완료 시 FALLBACK으로 등록됨 (5번 작업 선행 권장)
+| status | 개수 |
+|---|---|
+| REGISTERED | 10 |
+| COLLECTED | 12 |
+| DISCOVERED | 16 |
+| **합계** | **38** |
+
+### COLLECTED 미등록 12개 (다음 promote 대상)
+
+| vendorItemId | ItemTitle |
+|---|---|
+| 85296814940 | 마켓오네이처 오 그래놀라 다이제 시리얼 250g, 3개 |
+| 86533289539 | 마켓오네이처 오 그래놀라 다이제 시리얼 300g, 4개 |
+| 91816835421 | 마켓오네이처 오 그래놀라 저당 통보리 시리얼 360g, 2개 |
+| 91428368907 | 원더너츠 수제 그래놀라 시리얼 플레인 |
+| 85861660468 | 그라놀로지 카카올로지 그래놀라 시리얼 440g, 2개 |
+| 3000094712 | 동서 그래놀라 시리얼 1kg, 1개 |
+| 79146586548 | 켈로그 리얼 그래놀라 오리지널 시리얼 400g, 2개 |
+| 94790519284 | (ItemTitle 미수집) |
+| 3965507525 | (ItemTitle 미수집) |
+| 88255719615 | 마켓오네이처 오그래놀라 오트 리얼 초콜릿 시리얼 360g |
+| 86205103055 | 켈로그 100% 벨기에산 그래놀라 시리얼 900g, 1개 |
+| 92498743242 | 크놀라 시그니처 그래놀라 500g 1개 리필용 |

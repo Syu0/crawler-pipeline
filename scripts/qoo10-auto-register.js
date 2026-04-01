@@ -23,6 +23,8 @@ const { calculateSellingPrice } = require('./lib/qoo10PayloadGenerator');
 const { resolveJpCategoryId } = require('./lib/categoryResolver');
 const { decideItemPriceJpy } = require('../backend/pricing/priceDecision');
 const { translateTitle } = require('../backend/qoo10/titleTranslator');
+const { generateJapaneseDescription } = require('../backend/qoo10/descriptionGenerator');
+const { editGoodsContents } = require('../backend/qoo10/editGoodsContents');
 
 // Configuration
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
@@ -390,22 +392,35 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
     };
   }
   
-  // Check if category was manually changed in sheet
-  const manualCategoryOverride = row.jpCategoryIdUsed && 
-    row.jpCategoryIdUsed !== categoryResolution.jpCategoryId &&
-    row.categoryMatchType === 'MANUAL';
-  
-  if (manualCategoryOverride) {
-    // Use the manually set category from sheet
-    categoryResolution = {
-      jpCategoryId: row.jpCategoryIdUsed,
-      matchType: 'MANUAL',
-      confidence: 1.0,
-      coupangCategoryKey: categoryResolution.coupangCategoryKey
-    };
-    console.log(`  Category: Using MANUAL override → ${categoryResolution.jpCategoryId}`);
+  // CATEGORY_CHANGED 플래그가 있으면 resolver 결과를 그대로 사용 (MANUAL override bypass)
+  const changeFlagsArr = (row.changeFlags || '').split('|').map(f => f.trim()).filter(Boolean);
+  const hasCategoryChanged = changeFlagsArr.includes('CATEGORY_CHANGED');
+
+  if (hasCategoryChanged) {
+    const oldCategoryId = row.jpCategoryIdUsed || '(none)';
+    if (oldCategoryId !== categoryResolution.jpCategoryId) {
+      console.log(`  [CATEGORY_CHANGED] 재resolve: ${oldCategoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
+    } else {
+      console.log(`  [CATEGORY_CHANGED] 동일 카테고리, skip (${categoryResolution.jpCategoryId})`);
+    }
   } else {
-    console.log(`  Category: ${row.categoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
+    // Check if category was manually changed in sheet
+    const manualCategoryOverride = row.jpCategoryIdUsed &&
+      row.jpCategoryIdUsed !== categoryResolution.jpCategoryId &&
+      row.categoryMatchType === 'MANUAL';
+
+    if (manualCategoryOverride) {
+      // Use the manually set category from sheet
+      categoryResolution = {
+        jpCategoryId: row.jpCategoryIdUsed,
+        matchType: 'MANUAL',
+        confidence: 1.0,
+        coupangCategoryKey: categoryResolution.coupangCategoryKey
+      };
+      console.log(`  Category: Using MANUAL override → ${categoryResolution.jpCategoryId}`);
+    } else {
+      console.log(`  Category: ${row.categoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
+    }
   }
   
   // Build payload with validated price and resolved category
@@ -454,6 +469,12 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
   }
   
   if (dryRun) {
+    // Generate description for log preview only (no API call)
+    const descResult = await generateJapaneseDescription(row);
+    const descMethod = descResult.method;
+    if (descResult.html) {
+      console.log(`  [DRY-RUN] Generated JP description (${descMethod}): ${descResult.html.slice(0, 100)}...`);
+    }
     return {
       status: 'DRY_RUN',
       vendorItemId,
@@ -463,7 +484,8 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
       payload,
       mode: isUpdateMode ? 'UPDATE' : 'CREATE',
       qoo10ItemId: existingQoo10ItemId || null,
-      titleMethod
+      titleMethod,
+      descMethod
     };
   }
   
@@ -511,10 +533,27 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
 
     if (updateResult.success) {
       // Upload extra images
+      let multiImageMethod = 'skip';
       if (payload.ExtraImages && payload.ExtraImages.length > 0) {
         const multiImageResult = await editGoodsMultiImage(existingQoo10ItemId, payload.ExtraImages);
-        if (!multiImageResult.success && !multiImageResult.dryRun) {
+        if (multiImageResult.dryRun) {
+          multiImageMethod = 'skip';
+        } else if (multiImageResult.success) {
+          multiImageMethod = 'ok';
+        } else {
+          multiImageMethod = 'fail';
           console.warn(`[Registration] MultiImage upload failed: ${multiImageResult.resultMsg}`);
+        }
+      }
+
+      // Generate and upload Japanese description (DESC_CHANGED or always on UPDATE)
+      const needsDescUpdate = !row.changeFlags || row.changeFlags.includes('DESC_CHANGED') || !row.changeFlags;
+      let descMethod = 'skip';
+      if (needsDescUpdate) {
+        const descResult = await generateJapaneseDescription(row);
+        descMethod = descResult.method;
+        if (descResult.html) {
+          await editGoodsContents({ itemCode: existingQoo10ItemId, htmlContent: descResult.html });
         }
       }
 
@@ -530,7 +569,9 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
         categoryResolution,
         mode: 'UPDATE',
         itemTitle: payload.ItemTitle,
-        titleMethod
+        titleMethod,
+        descMethod,
+        multiImageMethod
       };
     } else {
       return {
@@ -558,11 +599,24 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
       
       if (result.success && result.createdItemId) {
         // Upload extra images after successful registration
+        let multiImageMethod = 'skip';
         if (payload.ExtraImages && payload.ExtraImages.length > 0) {
           const multiImageResult = await editGoodsMultiImage(result.createdItemId, payload.ExtraImages);
-          if (!multiImageResult.success && !multiImageResult.dryRun) {
+          if (multiImageResult.dryRun) {
+            multiImageMethod = 'skip';
+          } else if (multiImageResult.success) {
+            multiImageMethod = 'ok';
+          } else {
+            multiImageMethod = 'fail';
             console.warn(`[Registration] MultiImage upload failed: ${multiImageResult.resultMsg}`);
           }
+        }
+
+        // Generate and upload Japanese description
+        const descResult = await generateJapaneseDescription(row);
+        const descMethod = descResult.method;
+        if (descResult.html) {
+          await editGoodsContents({ itemCode: result.createdItemId, htmlContent: descResult.html });
         }
 
         // Determine registration status based on matchType
@@ -578,7 +632,9 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
           categoryResolution,
           mode: 'CREATE',
           itemTitle: payload.ItemTitle,
-          titleMethod
+          titleMethod,
+          descMethod,
+          multiImageMethod
         };
       }
 
@@ -755,7 +811,7 @@ async function main() {
               status: 'REGISTERED',
               registrationMode: 'REAL',
               registrationStatus: 'SUCCESS',
-              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] ${result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully'}`,
+              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] [multiImage=${result.multiImageMethod || 'skip'}] ${result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully'}`,
               lastRegisteredAt: new Date().toISOString()
             };
             
@@ -794,7 +850,7 @@ async function main() {
               status: 'REGISTERED',
               registrationMode: 'REAL',
               registrationStatus: 'WARNING',
-              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] FALLBACK category used (review required)`,
+              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] [multiImage=${result.multiImageMethod || 'skip'}] FALLBACK category used (review required)`,
               lastRegisteredAt: new Date().toISOString()
             };
             
@@ -852,7 +908,7 @@ async function main() {
           const dryRunStatus = result.categoryResolution?.matchType === 'FALLBACK' ? 'WARNING' : 'DRY_RUN';
           const dryRunMessage = result.categoryResolution?.matchType === 'FALLBACK'
             ? `[titleMethod=${result.titleMethod || 'fallback'}] DRY-RUN with FALLBACK category (review required)`
-            : `[titleMethod=${result.titleMethod || 'fallback'}] DRY-RUN completed`;
+            : `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] DRY-RUN completed`;
 
           console.log(`  → DRY-RUN [${result.mode || 'CREATE'}]: price=${result.qoo10SellingPrice}, jpCat=${result.categoryResolution?.jpCategoryId} (${result.categoryResolution?.matchType})`);
           if (result.itemTitle) console.log(`    ItemTitle: ${result.itemTitle}`);

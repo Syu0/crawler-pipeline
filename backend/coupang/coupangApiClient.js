@@ -87,6 +87,11 @@ function buildImageExtractFn() {
       document.querySelector('img[class*="main-image"]');
     const main = mainEl?.src || null;
 
+    // 슬라이더 썸네일: ul.twc-static li img
+    const sliderImgs = Array.from(document.querySelectorAll('ul.twc-static li img'))
+      .map(el => el.src || el.getAttribute('src'))
+      .filter(Boolean);
+
     // 추가 이미지: subType-IMAGE 또는 상품 상세 이미지 섹션
     const extra = [
       ...document.querySelectorAll('.subType-IMAGE img'),
@@ -104,7 +109,7 @@ function buildImageExtractFn() {
       categoryId = match ? match[1] : null;
     }
 
-    return { main, extra: [...new Set(extra)], categoryId };
+    return { main, sliderImages: sliderImgs, detailImages: [...new Set(extra)], categoryId };
   }`;
 }
 
@@ -140,7 +145,7 @@ function buildReviewFn(productId) {
  * @returns {Promise<{
  *   blocked?: boolean, error?: string,
  *   ItemTitle?: string, ItemPrice?: number,
- *   StandardImage?: string, ExtraImages: string[],
+ *   StandardImage?: string, DetailImages: string[],
  *   StockStatus?: string, StockQty?: number,
  *   ReviewCount?: number, ReviewAvgRating?: number,
  *   CollectedPhases: string
@@ -150,7 +155,8 @@ async function collectProductData(productId, vendorItemId, _itemId) {
   const successfulSteps = [];
 
   let StandardImage = null;
-  let ExtraImages = [];
+  let SliderImages = null;
+  let DetailImages = [];
   let ItemTitle = null;
   let ItemPrice = null;
   let StockStatus = null;
@@ -174,7 +180,20 @@ async function collectProductData(productId, vendorItemId, _itemId) {
   try {
     const result = browserEvaluate(buildImageExtractFn());
     StandardImage = normalizeImageUrl(result.main);
-    ExtraImages = (result.extra || []).map(normalizeImageUrl).filter(Boolean);
+
+    // 슬라이더 썸네일: URL 정규화 후 StandardImage와 중복 제거
+    // 썸네일 크기 세그먼트가 달라도 같은 이미지일 수 있으므로 경로 부분으로 비교
+    const stdPath = StandardImage
+      ? StandardImage.replace(/^https?:\/\/[^/]+/, '').replace(/\/\d+x\d+\w*\//, '/')
+      : null;
+    const rawSlider = (result.sliderImages || []).map(normalizeImageUrl).filter(Boolean);
+    const deduped = rawSlider.filter((url) => {
+      const path = url.replace(/^https?:\/\/[^/]+/, '').replace(/\/\d+x\d+\w*\//, '/');
+      return path !== stdPath;
+    });
+    SliderImages = deduped.length > 0 ? deduped : null;
+
+    DetailImages = (result.detailImages || []).map(normalizeImageUrl).filter(Boolean);
     categoryId = result.categoryId || null;
     successfulSteps.push(2);
   } catch (e) {
@@ -249,7 +268,8 @@ async function collectProductData(productId, vendorItemId, _itemId) {
     ItemTitle,
     ItemPrice,
     StandardImage,
-    ExtraImages,
+    SliderImages,
+    DetailImages,
     StockStatus,
     StockQty,
     ReviewCount,
