@@ -4,6 +4,8 @@
 - 2026-04-01 업데이트
 - `main` 브랜치 — 10개 REGISTERED
 - B-01/B-02 수정 PR #14 머지 완료
+- SliderImages 수집 수정 완료 (B-02 사이드이펙트)
+- 멀티이미지 슬라이더 real mode 반영 확인 완료
 
 ---
 
@@ -15,101 +17,87 @@
 - **B-02 수정:** `imageCopyFields`에서 `StandardImage` 제거. dedup 상품은 StandardImage 빈값(`''`)으로 유지 → `coupang:collect:one`으로 개별 재수집
 - **B-02 추가 수정:** 메인 이미지 셀렉터를 `querySelectorAll+find` 방식으로 교체 + `vendor_inventory` 경로 제외 필터 추가 (옵션 썸네일 오수집 방지)
 - **B-01 수정:** `coupangApiClient.js` `collectProductData` / `collectPriceStockReview` 반환 직전에 ItemTitle 빈값 체크 → 빈값이면 `Error` throw → 호출부에서 status=ERROR 기록
-- **editGoodsImage.js 신규 구현:** `backend/qoo10/editGoodsImage.js` — `ItemsContents.EditGoodsImage` API 래퍼. `editGoodsContents.js` 패턴과 동일.
-- **qoo10-auto-register.js UPDATE 흐름:** `editGoodsImage` 호출 추가 (multiImage 업로드 직전). `registrationMessage`에 `[imageUpdate=ok|skip|fail]` 기록.
-- **다음 단계:** Mac Mini에서 REGISTERED/LIVE 상품 전체 `coupang:collect:one` 재수집 → StandardImage 확인 → `qoo10:auto-register` dry-run → real 실행 → Qoo10 대표 이미지 육안 확인
+- **editGoodsImage.js 신규 구현:** `backend/qoo10/editGoodsImage.js` — `ItemsContents.EditGoodsImage` API 래퍼
+- **qoo10-auto-register.js UPDATE 흐름:** `editGoodsImage` 호출 추가, `registrationMessage`에 `[imageUpdate=ok|skip|fail]` 기록
 
----
+### SliderImages 수집 수정 ✅ 완료 (Claude Code)
 
-## 오늘 완료된 작업 (2026-03-31)
+- **원인:** B-02 수정 시 `vendor_inventory` 제외 필터 / 셀렉터 교체가 Phase 3 SliderImages 수집에 사이드이펙트 발생
+- **증상:** 오전 재수집(09:30)까지 정상(7~10개)이다가 B-02 머지 이후 전부 0. ExtraImages는 정상.
+- **수정 및 테스트:** Claude Code가 셀렉터 수정 + 테스트 완료
 
-### 6. 상단 썸네일 갤러리 이미지 등록 (EditGoodsMultiImage) ✅ 완료
+### 멀티이미지 슬라이더 real mode 검증 ✅ 완료
 
-- **원인:** 기존 `ImageUrl` 파라미터가 Qoo10 서버에서 무시됨 (`ResultCode=0` 반환하지만 실제 미반영 — UpdateGoods의 ItemQty 무시와 동일 패턴)
-- **해결:** `backend/qoo10/editGoodsMultiImage.js` 파라미터 교체
-  - `ImageUrl: "url1|url2|..."` → `EnlargedImage1: url1`, `EnlargedImage2: url2` ... (개별 파라미터, max 50개)
-  - URL 200자 초과 건 skip, 50개 초과 분 slice
-- **`scripts/qoo10-auto-register.js`** 수정
-  - CREATE/UPDATE 성공 후 multiImageMethod 추적 (ok/skip/fail)
-  - `registrationMessage`에 `[multiImage=ok|skip|fail]` 기록
-- **검증:** real mode UPDATE 실행 후 Qoo10 상품 페이지 슬라이더 반영 확인 필요 (real mode 미검증 상태로 머지)
-
----
-
-### 5. CATEGORY_CHANGED 플래그 카테고리 재resolve 버그 수정 ✅ 완료
-
-- **원인:** UPDATE 흐름에서 `changeFlags=CATEGORY_CHANGED`를 무시하고 기존 `jpCategoryIdUsed` 그대로 UpdateGoods 호출 — resolver 재실행 로직 없음
-- **해결:** `scripts/qoo10-auto-register.js` UPDATE 블록에 CATEGORY_CHANGED 분기 추가 → `CategoryResolver` 재실행 후 새 jpCategoryId로 payload 구성
-- **부가 발견:** `coupang_categorys` 시트에 categoryId=519992 행이 없어 resolver가 path를 조회 불가. 원인은 해당 상품이 브레드크럼 자동 기록 기능(2026-03-30) 추가 이전에 수집된 레거시 행이었기 때문. `식품 > 견과류・시리얼 > 시리얼` 행을 수동으로 추가하여 해결.
-- **결과:** FALLBACK 등록 6개 상품 중 519992 카테고리 상품 정상 재분류 확인 (jpCategoryId=300000546)
-
----
-
-### 4. 기등록 7개 상품 타이틀 패치 ✅ 완료
-
-- **원인:** OpenRouter 잔액 소진으로 `[titleMethod=fallback]` 으로 등록됨 (`韓国商品 300g 1개` 형식)
-- **해결:** OpenRouter 잔액 충전 후 `registrationMessage`에 `[titleMethod=fallback]` 포함된 7개 행에 `needsUpdate=YES` + `changeFlags=TITLE_CHANGED` 설정 → `npm run qoo10:auto-register` 실행
-- **결과:** 7/7 SUCCESS — 모두 일본어 SEO 타이틀로 업데이트 완료
-  - `titleTranslator.js` 코드 변경 없음 (OpenRouter 그대로 유지)
-
----
-
-### 3. 상세페이지 일본어 콘텐츠 생성 + Qoo10 반영 ✅ 완료
-
-- **`backend/qoo10/descriptionGenerator.js`** 신규 구현
-  - ExtraImages 있음 → OpenRouter vision (Claude Haiku) → 일본어 HTML 생성
-  - ExtraImages 없음 → ItemTitle + ItemDescriptionText 텍스트 기반 생성
-  - API 실패 시 `{ html: '', method: 'skip' }` 반환 (파이프라인 중단 없음)
-  - 생성된 일본어 텍스트 뒤에 ExtraImages를 `<p><img src="..." /></p>` 형식으로 이어붙임
-
-- **`backend/qoo10/editGoodsContents.js`** 신규 구현
-  - `ItemsContents.EditGoodsContents` API 래퍼
-  - 핵심: 파라미터명 `Contents` (≠ `ItemDescription`) — 검증 완료
-
-- **`scripts/qoo10-auto-register.js`** 수정
-  - CREATE/UPDATE 성공 후 `generateJapaneseDescription` + `editGoodsContents` 자동 호출
-  - `registrationMessage`에 `[descMethod=vision|text|skip]` 기록
-
-- **검증:** Qoo10 상품 1197862497 상세페이지에서 일본어 설명 + 이미지 정상 표시 확인
-
-- **주요 트러블슈팅:**
-  - `descriptionGenerator.js`는 `OPENROUTER_API_KEY` 사용 (Anthropic SDK 아님)
-  - 쿠팡 CDN 이미지 → OpenRouter가 직접 fetch 불가 → 로컬 base64 다운로드 후 전달
-  - `/q89/` URL은 고해상도(5MB+) → 항상 `/400x400ex/`로 교체
-  - 5MB 초과 이미지는 건너뛰지 않고 URL 해상도 파라미터 축소 후 재시도
-  - `EditGoodsContents` 파라미터명 `Contents` (아닐 경우 ResultCode=-99 `Contentsは必須です`)
-  - `<img>` 태그 형식: `<p><img src="..." /></p>` (style 속성 없음, self-closing)
-  - 쿠팡 CDN URL은 Qoo10 상세페이지에서 정상 렌더링됨 — 외부 CDN 차단 아님 (1198587484 검증)
-  - `DetailImages` 컬럼은 스키마에 있지만 수집기가 채우지 않음 → ExtraImages 사용
-  - 이미지는 base64 메모리 방식으로 처리 (디스크 저장 없음)
+- EnlargedImage 파라미터 방식으로 Qoo10 슬라이더 반영 확인 완료
 
 ---
 
 ## 이전 완료 작업
 
+### 2026-03-31
+- **CATEGORY_CHANGED 플래그 재resolve 버그 수정** — UPDATE 흐름에 resolver 재실행 분기 추가 (PR 머지)
+- **기등록 7개 상품 타이틀 패치** — OpenRouter 잔액 충전 후 TITLE_CHANGED 플래그로 일괄 업데이트, 7/7 SUCCESS
+- **상세페이지 일본어 콘텐츠 생성 + Qoo10 반영** — `descriptionGenerator.js` + `editGoodsContents.js` 신규 구현, CREATE/UPDATE 후 자동 호출
+- **멀티이미지(EditGoodsMultiImage) EnlargedImage 파라미터 교체** — `ImageUrl` 단일 파라미터 → `EnlargedImage1~50` 개별 파라미터로 교체
+
 ### 2026-03-30
 - **collect 후 Chrome 탭 로딩 스피너 멈춤 수정** — `about:blank` navigate로 해결 (PR #11)
-- **이미지 미반영 버그 수정** — `editGoodsMultiImage.js` 신규 구현, CREATE/UPDATE 후 자동 호출
-- **categoryId 브레드크럼 추출** — `coupangApiClient.js` + `coupang-collect-discovered.js`
+- **categoryId 브레드크럼 자동 추출** — `coupangApiClient.js` + `coupang-collect-discovered.js`
 
 ---
 
 ## 다음 작업
 
+### 🔴 우선순위 높음
+
+#### changeFlags 분기 구현 (현재 오동작 버그)
+
+**현재 동작 (버그):**
+`needsUpdate=YES`이면 changeFlags 값 무관하게 UpdateGoods만 호출 후 `changeFlags=''` 클리어.
+UpdateGoods는 가격·재고·상세 변경을 무시하므로 PRICE_UP/DOWN, DESC_CHANGED 플래그가 실제로 반영되지 않음.
+
+**설계 의도 (구현 목표):**
+```
+TITLE_CHANGED    → UpdateGoods            (현재도 호출됨 ✅)
+PRICE_UP/DOWN    → SetGoodsPriceQty       (현재 미호출 — 버그 ❌)
+DESC_CHANGED     → EditGoodsContents      (현재 미호출 — 버그 ❌)
+CATEGORY_CHANGED → resolver 재실행 후 UpdateGoods (✅ 구현 완료)
+```
+
+복수 플래그: `changeFlags`는 파이프(`|`) 구분. 각 플래그를 순회하며 해당 API 호출.
+
+수정 파일: `scripts/qoo10-auto-register.js`
+브랜치: `oc/changeflag-dispatch`
+
 ### 🟡 우선순위 보통
 
-## 보류 (운영 안정화 후)
+#### REGISTERED 10개 StandardImage 재수집 + 대표이미지 패치
 
-- [ ] **AUTO_REGISTER_ENABLED 플래그 추가** — cron 붙일 때
-- [ ] **1195611873 카테고리 수동 재분류** — category_mapping 시트 MANUAL 수정
-- [ ] **가격 상수 config 시트 이관** — pricingConstants.js 하드코딩 → 런타임 로드
-- [ ] **일본어 이미지 재생성** — 한국어 상세 이미지를 일본어로 재생성할 때
-  이미지 파일 저장 경로 구조 + 정리 정책 + Sheets 연동 방식 함께 설계.
-  현재는 base64 메모리 방식으로 vision 처리 중 (디스크 저장 없음)
-- [ ] **상단 썸네일 갤러리 이미지 real mode 검증** — UPDATE 실행 후 Qoo10 슬라이더 표시 확인. EnlargedImage 파라미터로 교체 완료, 반영 여부 미확인.
-- [ ] Qoo10 시장 가격 경쟁성 스크래핑
-- [ ] `getItemDetailInfo.js` 모듈 구현
-- [ ] **수집 시 `coupang_categorys` 자동 기록 검증** — 2026-03-30 이후 수집된 상품의 categoryId가 `coupang_categorys` 시트에 자동으로 기록되는지 확인 필요. 미기록 시 `coupangApiClient.js` 브레드크럼 추출 코드 점검. (레거시 행은 수동 추가로 대응)
+- **완료 예정: 4/2 (Mac Mini 작업)**
+- B-02 수정 이후 후속 작업
+- 절차: `coupang:collect:one` × 10개 → StandardImage 확인 → `qoo10:auto-register` dry-run → real 실행 → Qoo10 육안 확인
+
+#### Dashboard Chat 탭 UI 확인
+
+- `/api/openclaw/*` Vercel API Route 프록시 6개 엔드포인트는 구현 완료 상태
+- Chat 탭 프론트엔드 UI (OpenClaw 연동) 완성 여부 미확인
+- **작업:** Vercel 배포에서 Chat 탭 실제 동작 확인 후 결과에 따라 구현 범위 결정
+
+### ⏸ 보류 (운영 안정화 후)
+
+- [ ] **Qoo10 API 테스트 스크립트** — UpdateGoods / EditGoodsContents / GetItemDetailInfo 단독 테스트 스크립트 미구현
+- [ ] **getItemDetailInfo.js 모듈 구현** — GetItemDetailInfo API 래퍼
+- [ ] **AUTO_REGISTER_ENABLED 플래그** — cron 자동화 붙일 때 같이 구현 (config 시트 키 + promote early exit)
+- [ ] **가격 상수 config 시트 이관** — `pricingConstants.js` 하드코딩(환율/수수료/마진) → 런타임 로드
+- [ ] **coupang_categorys 자동 기록 검증** — 3/30 이후 수집 상품 categoryId가 시트에 자동 기록되는지 확인. 미기록 시 `coupangApiClient.js` 브레드크럼 추출 코드 점검.
+- [ ] **일본어 이미지 재생성** — 한국어 상세 이미지 일본어 재생성 시 파일 저장 경로 구조 + 정리 정책 + Sheets 연동 방식 설계. 현재는 base64 메모리 방식.
+- [ ] **Qoo10 시장 가격 경쟁성 스크래핑**
+
+### 📋 별도 논의
+
+- [ ] **키워드/카테고리 전략** — 현재 텀블러/자동차용품 + 그래놀라/시리얼 진행 중. 추가 방향 논의.
+- [ ] **경쟁력 분석 로직 방향** — 옵션 A(등록 상품 가격/리뷰/재고 모니터링) vs 옵션 B(시장 트렌드 → 키워드 자동 추천)
+- [ ] **관세 기준가 정밀화** — 현재 `FILTER_PRICE_KRW_MAX=150,000` 고정. 환율 연동 or 배송비 포함 역산 검토 필요.
 
 ---
 
@@ -125,4 +113,3 @@
 | 86533289539 | 마켓오네이처 오 그래놀라 다이제 시리얼 300g, 4개 | 433958 |
 | 91816835421 | 마켓오네이처 오 그래놀라 저당 통보리 시리얼 360g, 2개 | 519992 |
 | 91428368907 | 원더너츠 수제 그래놀라 시리얼 플레인 | 519992 |
-- 519992 카테고리 매핑 미완료 시 FALLBACK으로 등록됨 (2번 작업 선행 권장)
