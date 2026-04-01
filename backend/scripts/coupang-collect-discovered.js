@@ -63,7 +63,7 @@ const TAB = 'coupang_datas';
 const HEADERS = COUPANG_DATA_HEADERS;
 const PRESERVE_ON_ERROR = [
   'coupang_product_id', 'categoryId', 'ProductURL', 'ItemTitle',
-  'ItemPrice', 'StandardImage', 'ExtraImages', 'WeightKg',
+  'ItemPrice', 'StandardImage', 'WeightKg',
   'Options', 'ItemDescriptionText',
 ];
 
@@ -206,15 +206,11 @@ async function main() {
     // ── product_id 기준 dedup ───────────────────────────────────────────────
     if (pid && collectedProductIds.has(pid)) {
       console.log(`  ⏭ DEDUP — 동일 product_id (${pid}), vendorItemId=${product.vendorItemId}`);
-      console.log('     → 이미지만 복사, 가격/재고/리뷰는 개별 API 호출');
+      console.log('     → 가격/재고/리뷰 개별 수집 (이미지 미수집 — dedup 정책)');
 
-      // 이미지 필드만 첫 번째 상품에서 복사
-      const sourceData = collectedDataByProductId.get(pid) || {};
-      const imageCopyFields = ['StandardImage', 'ExtraImages', 'DetailImages', 'ProductAttributes'];
+      // 이미지 필드는 복사하지 않음 — 각 vendorItemId별로 개별 수집 필요
+      // (동일 product_id라도 vendorItemId마다 다른 이미지를 가질 수 있음)
       const copied = {};
-      for (const f of imageCopyFields) {
-        if (sourceData[f] != null && sourceData[f] !== '') copied[f] = sourceData[f];
-      }
 
       try {
         let { vendorItemId, itemId } = product;
@@ -370,7 +366,8 @@ async function main() {
       console.log(`  StandardImage:  ${collected.StandardImage ? 'OK' : '없음'}`);
       console.log(`  StockStatus:    ${collected.StockStatus ?? '(없음)'}`);
       console.log(`  ReviewCount:    ${collected.ReviewCount ?? '(없음)'}`);
-      console.log(`  DetailImages:   ${JSON.parse(collected.DetailImages || '[]').length}개`);
+      console.log(`  SliderImages:   ${(collected.SliderImages || []).length}개`);
+      console.log(`  DetailImages:   ${(collected.DetailImages || []).length}개`);
 
       if (dryRun) {
         console.log('  [DRY-RUN] 시트 write 생략');
@@ -381,10 +378,6 @@ async function main() {
         continue;
       }
 
-      const ExtraImages = Array.isArray(collected.ExtraImages)
-        ? collected.ExtraImages.join('|')
-        : (collected.ExtraImages || '');
-
       const data = {
         vendorItemId:        product.vendorItemId,
         itemId:              product.itemId,
@@ -394,8 +387,8 @@ async function main() {
         ItemTitle:           collected.ItemTitle           ?? '',
         ItemPrice:           collected.ItemPrice    != null ? String(collected.ItemPrice)    : '',
         StandardImage:       collected.StandardImage        ?? '',
-        ExtraImages,
-        WeightKg:            '1',
+        ExtraImages:         collected.SliderImages ? JSON.stringify(collected.SliderImages) : '',
+        WeightKg:            collected.WeightKg              || '1',
         OptionType:          collected.OptionType           ?? '',
         Options:             collected.Options              ?? '',
         StockStatus:         collected.StockStatus          ?? '',
@@ -404,8 +397,7 @@ async function main() {
         ReviewAvgRating:     collected.ReviewAvgRating != null
                                ? String(collected.ReviewAvgRating)
                                : '',
-        WeightKg:            collected.WeightKg              || '1',
-        DetailImages:        collected.DetailImages         ?? JSON.stringify([]),
+        DetailImages:        JSON.stringify(collected.DetailImages || []),
         ProductAttributes:   collected.ProductAttributes    ?? JSON.stringify({}),
         CollectedPhases:     successApis,
         updatedAt:           new Date().toISOString(),

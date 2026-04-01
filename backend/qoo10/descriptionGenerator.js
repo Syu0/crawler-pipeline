@@ -1,10 +1,10 @@
 /**
  * descriptionGenerator.js
- * ExtraImages(vision) 또는 텍스트 기반으로 일본어 상품 설명 HTML 생성
+ * DetailImages(vision) 또는 텍스트 기반으로 일본어 상품 설명 HTML 생성
  *
  * 우선순위:
- *   1. ExtraImages 있으면 → OpenRouter vision (최대 5장)
- *   2. ExtraImages 없으면 → ItemTitle + ItemDescriptionText 텍스트 기반
+ *   1. DetailImages 있으면 → OpenRouter vision (최대 5장)
+ *   2. DetailImages 없으면 → ItemTitle + ItemDescriptionText 텍스트 기반
  *   3. API 실패 → { html: '', method: 'skip' }
  *
  * 사용:
@@ -22,16 +22,16 @@ const SYSTEM_PROMPT = `あなたは韓国商品を日本市場向けに紹介す
 出力はHTML形式（<p>タグ使用）で200〜400文字程度にまとめてください。`;
 
 /**
- * ExtraImages JSON string → URL 배열
+ * DetailImages JSON string → URL 배열
  */
-function parseExtraImages(extraImages) {
-  if (!extraImages) return [];
+function parseDetailImages(detailImages) {
+  if (!detailImages) return [];
   try {
-    if (typeof extraImages === 'string') {
-      if (extraImages.startsWith('[')) return JSON.parse(extraImages);
-      return extraImages.split('|').map(u => u.trim()).filter(Boolean);
+    if (typeof detailImages === 'string') {
+      if (detailImages.startsWith('[')) return JSON.parse(detailImages);
+      return detailImages.split('|').map(u => u.trim()).filter(Boolean);
     }
-    if (Array.isArray(extraImages)) return extraImages;
+    if (Array.isArray(detailImages)) return detailImages;
   } catch (e) {
     // ignore
   }
@@ -177,7 +177,7 @@ async function generateText(itemTitle, itemDescriptionText) {
 /**
  * 일본어 상품 설명 생성 메인
  *
- * @param {object} row - { ItemTitle, ItemDescriptionText, ExtraImages }
+ * @param {object} row - { ItemTitle, ItemDescriptionText, DetailImages }
  * @returns {Promise<{ html: string, method: 'vision'|'text'|'skip' }>}
  */
 async function generateJapaneseDescription(row) {
@@ -186,15 +186,15 @@ async function generateJapaneseDescription(row) {
     return { html: '', method: 'skip' };
   }
 
-  const extraImages = parseExtraImages(row.ExtraImages);
+  const detailImages = parseDetailImages(row.DetailImages);
 
   try {
     let html = '';
     let method;
 
-    if (extraImages.length > 0) {
-      console.log(`[descGen] vision mode — ${Math.min(extraImages.length, MAX_IMAGES)} images`);
-      html = await generateVision(extraImages);
+    if (detailImages.length > 0) {
+      console.log(`[descGen] vision mode — ${Math.min(detailImages.length, MAX_IMAGES)} images`);
+      html = await generateVision(detailImages);
       method = 'vision';
     } else {
       console.log('[descGen] text mode');
@@ -207,9 +207,9 @@ async function generateJapaneseDescription(row) {
       return { html: '', method: 'skip' };
     }
 
-    // Append ExtraImages as <img> tags after the generated text
-    if (extraImages.length > 0) {
-      const imgTags = extraImages
+    // Append DetailImages as <img> tags after the generated text
+    if (detailImages.length > 0) {
+      const imgTags = detailImages
         .map(url => `<p><img src="${normalizeUrl(url)}" /></p>`)
         .join('\n');
       html = html + '\n' + imgTags;

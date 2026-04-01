@@ -162,17 +162,14 @@ async function main() {
   console.log(`  ItemPrice:       ${collected.ItemPrice ?? '(없음)'}`);
   console.log(`  categoryId:      ${collected.categoryId ?? '(없음)'}`);
   console.log(`  StandardImage:   ${collected.StandardImage ? '✓' : '없음'}`);
-  console.log(`  ExtraImages:     ${(collected.ExtraImages || []).length}개`);
+  console.log(`  SliderImages:    ${(collected.SliderImages || []).length}개`);
+  console.log(`  DetailImages:    ${(collected.DetailImages || []).length}개`);
   console.log(`  StockStatus:     ${collected.StockStatus ?? '(없음)'}`);
   console.log(`  ReviewCount:     ${collected.ReviewCount ?? '(없음)'}`);
 
   // 3. 시트 업데이트
   console.log('\n[3/3] 시트 업데이트...');
   await ensureHeaders(SPREADSHEET_ID, TAB, HEADERS);
-
-  const ExtraImages = Array.isArray(collected.ExtraImages)
-    ? collected.ExtraImages.join('|')
-    : (collected.ExtraImages || '');
 
   const data = {
     vendorItemId:       product.vendorItemId,
@@ -183,7 +180,7 @@ async function main() {
     ItemTitle:          collected.ItemTitle                                       ?? '',
     ItemPrice:          collected.ItemPrice    != null ? String(collected.ItemPrice)    : '',
     StandardImage:      collected.StandardImage                                   ?? '',
-    ExtraImages,
+    ExtraImages:        collected.SliderImages ? JSON.stringify(collected.SliderImages) : '',
     OptionType:         collected.OptionType                                      ?? '',
     Options:            collected.Options                                         ?? '',
     StockStatus:        collected.StockStatus                                     ?? '',
@@ -192,7 +189,7 @@ async function main() {
     ReviewAvgRating:    collected.ReviewAvgRating != null
                           ? String(collected.ReviewAvgRating) : '',
     WeightKg:           collected.WeightKg                                        || '1',
-    DetailImages:       collected.DetailImages                                    ?? JSON.stringify([]),
+    DetailImages:       JSON.stringify(collected.DetailImages || []),
     ProductAttributes:  collected.ProductAttributes                               ?? JSON.stringify({}),
     CollectedPhases:    collected.CollectedPhases                                 || '',
     updatedAt:          new Date().toISOString(),
