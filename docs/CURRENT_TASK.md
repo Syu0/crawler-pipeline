@@ -50,38 +50,41 @@
 
 ### 🔴 우선순위 높음
 
-#### changeFlags 분기 구현 (현재 오동작 버그)
+#### changeFlags 분기 구현 | 브랜치: `oc/changeflag-dispatch`
 
-**현재 동작 (버그):**
-`needsUpdate=YES`이면 changeFlags 값 무관하게 UpdateGoods만 호출 후 `changeFlags=''` 클리어.
-UpdateGoods는 가격·재고·상세 변경을 무시하므로 PRICE_UP/DOWN, DESC_CHANGED 플래그가 실제로 반영되지 않음.
+현재 `needsUpdate=YES`이면 changeFlags 무관하게 전체 API를 호출하는 버그 수정.
+`change_flags` 시트 신규 추가 + `qoo10-auto-register.js` UPDATE 흐름 분기 구현.
 
-**설계 의도 (구현 목표):**
-```
-TITLE_CHANGED    → UpdateGoods            (현재도 호출됨 ✅)
-PRICE_UP/DOWN    → SetGoodsPriceQty       (현재 미호출 — 버그 ❌)
-DESC_CHANGED     → EditGoodsContents      (현재 미호출 — 버그 ❌)
-CATEGORY_CHANGED → resolver 재실행 후 UpdateGoods (✅ 구현 완료)
-```
+**확정된 플래그 사양:**
 
-복수 플래그: `changeFlags`는 파이프(`|`) 구분. 각 플래그를 순회하며 해당 API 호출.
+| flag | 동작 | 사용API | 비용 |
+|---|---|---|---|
+| (빈칸) | SYNC와 동일 (기본값) | Qoo10 QAPI | 무료 |
+| `SYNC` | PRICE + IMAGE + CATEGORY 전체 갱신 | Qoo10 QAPI | 무료 |
+| `ALL` | SYNC + TITLE + DESC 전체 갱신 | Qoo10 QAPI + OpenRouter | 유료 포함 |
+| `PRICE` | 가격 재계산 후 업데이트 | Qoo10 `SetGoodsPriceQty` | 무료 |
+| `IMAGE` | 대표이미지 + 슬라이더 이미지 업데이트 | Qoo10 `EditGoodsImage`, `EditGoodsMultiImage` | 무료 |
+| `CATEGORY` | 카테고리 재매핑 후 UpdateGoods 호출 | Qoo10 `UpdateGoods` | 무료 |
+| `TITLE` | 일본어 타이틀 재번역 + 업데이트 | OpenRouter + Qoo10 `UpdateGoods` | 유료 |
+| `DESC` | 일본어 상세페이지 재생성 + 반영 | OpenRouter + Qoo10 `EditGoodsContents` | 유료 |
 
-수정 파일: `scripts/qoo10-auto-register.js`
-브랜치: `oc/changeflag-dispatch`
+- 복수 플래그: 파이프(`|`) 구분. 예: `PRICE|IMAGE`, `TITLE|DESC`
+- `ALL`은 단독 사용
+- 유료 외부 API: OpenRouter만 사용 (TITLE, DESC 2곳). 이후 유료 API 추가 시 독립 플래그로 확장.
+- `change_flags` 시트: flag / 동작 / 사용API / 비용 4컬럼으로 위 사양 기록
+
+수정 파일: `backend/scripts/setup-sheets.js`, `scripts/qoo10-auto-register.js`
 
 ### 🟡 우선순위 보통
 
 #### REGISTERED 10개 StandardImage 재수집 + 대표이미지 패치
-
 - **완료 예정: 4/2 (Mac Mini 작업)**
-- B-02 수정 이후 후속 작업
 - 절차: `coupang:collect:one` × 10개 → StandardImage 확인 → `qoo10:auto-register` dry-run → real 실행 → Qoo10 육안 확인
 
 #### Dashboard Chat 탭 UI 확인
-
-- `/api/openclaw/*` Vercel API Route 프록시 6개 엔드포인트는 구현 완료 상태
+- `/api/openclaw/*` Vercel API Route 프록시 6개 엔드포인트 구현 완료 상태
 - Chat 탭 프론트엔드 UI (OpenClaw 연동) 완성 여부 미확인
-- **작업:** Vercel 배포에서 Chat 탭 실제 동작 확인 후 결과에 따라 구현 범위 결정
+- Vercel 배포에서 실제 동작 확인 후 결과에 따라 구현 범위 결정
 
 ### ⏸ 보류 (운영 안정화 후)
 
