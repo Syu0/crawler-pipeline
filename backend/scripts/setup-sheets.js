@@ -206,7 +206,55 @@ async function main() {
     }
   }
 
-  // ── 3. coupang_datas 시트 ─────────────────────────────────────────────────
+  // ── 3. change_flags 시트 ─────────────────────────────────────────────────
+  {
+    const TITLE = 'change_flags';
+    const HEADERS = ['flag', '동작', '사용API', '비용'];
+    const result = await ensureSheet(sheets, SPREADSHEET_ID, TITLE, HEADERS);
+
+    if (result === 'created') {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${TITLE}!A:A`,
+        valueInputOption: 'RAW',
+        insertDataOption: 'INSERT_ROWS',
+        requestBody: {
+          values: [
+            ['', 'SYNC와 동일 (기본값)', 'Qoo10 QAPI', '무료'],
+            ['SYNC', 'PRICE + IMAGE + CATEGORY 전체 갱신', 'Qoo10 QAPI', '무료'],
+            ['ALL', 'SYNC + TITLE + DESC 전체 갱신', 'Qoo10 QAPI + OpenRouter', '유료 포함'],
+            ['PRICE', '가격 재계산 후 업데이트', 'Qoo10 SetGoodsPriceQty', '무료'],
+            ['IMAGE', '대표이미지 + 슬라이더 이미지 업데이트', 'Qoo10 EditGoodsImage / EditGoodsMultiImage', '무료'],
+            ['CATEGORY', '카테고리 재매핑 후 UpdateGoods 호출', 'Qoo10 UpdateGoods', '무료'],
+            ['TITLE', '일본어 타이틀 재번역 + 업데이트', 'OpenRouter + Qoo10 UpdateGoods', '유료'],
+            ['DESC', '일본어 상세페이지 재생성 + 반영', 'OpenRouter + Qoo10 EditGoodsContents', '유료'],
+          ],
+        },
+      });
+      console.log(`[${TITLE}] 시트 생성 및 초기값 삽입 완료`);
+
+      // 헤더 배경색 적용
+      const sheetId = await getSheetNumericId(sheets, SPREADSHEET_ID, TITLE);
+      if (sheetId !== null) {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: SPREADSHEET_ID,
+          requestBody: {
+            requests: [{
+              repeatCell: {
+                range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 4 },
+                cell: { userEnteredFormat: { backgroundColor: { red: 0.6, green: 0.8, blue: 1.0 }, textFormat: { bold: true } } },
+                fields: 'userEnteredFormat(backgroundColor,textFormat)',
+              },
+            }],
+          },
+        });
+      }
+    } else {
+      console.log(`[${TITLE}] 시트 이미 존재 — 건드리지 않음`);
+    }
+  }
+
+  // ── 4. coupang_datas 시트 ─────────────────────────────────────────────────
   {
     const TITLE = 'coupang_datas';
     const result = await ensureSheet(sheets, SPREADSHEET_ID, TITLE, COUPANG_DATA_HEADERS);

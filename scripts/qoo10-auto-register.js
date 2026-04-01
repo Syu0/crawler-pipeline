@@ -39,6 +39,30 @@ const FIXED_PRODUCTION_PLACE = 'Overseas';
 const FIXED_WEIGHT = '1';
 
 /**
+ * Parse changeFlags string into a flags object.
+ * '' or 'SYNC' → price+image+category (기본 SYNC 동작)
+ * 'ALL'        → 전체 (title+price+image+category+desc)
+ * 'PRICE|IMAGE' 등 → 해당 플래그만 true
+ */
+function parseChangeFlags(changeFlags) {
+  const raw = (changeFlags || '').trim().toUpperCase();
+  if (raw === '' || raw === 'SYNC') {
+    return { title: false, price: true, image: true, category: true, desc: false };
+  }
+  if (raw === 'ALL') {
+    return { title: true, price: true, image: true, category: true, desc: true };
+  }
+  const flags = raw.split('|').map(f => f.trim());
+  return {
+    title:    flags.includes('TITLE'),
+    price:    flags.includes('PRICE'),
+    image:    flags.includes('IMAGE'),
+    category: flags.includes('CATEGORY'),
+    desc:     flags.includes('DESC'),
+  };
+}
+
+/**
  * Parse command line arguments
  */
 function parseArgs() {
@@ -393,25 +417,25 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
     };
   }
   
-  // CATEGORY_CHANGED 플래그가 있으면 resolver 결과를 그대로 사용 (MANUAL override bypass)
-  const changeFlagsArr = (row.changeFlags || '').split('|').map(f => f.trim()).filter(Boolean);
-  const hasCategoryChanged = changeFlagsArr.includes('CATEGORY_CHANGED');
+  // changeFlags 파싱 (CREATE/UPDATE 공통)
+  const flags = parseChangeFlags(row.changeFlags);
 
-  if (hasCategoryChanged) {
+  // CATEGORY: flags.category 이면 resolver 결과 사용 (MANUAL override bypass)
+  //           아니면 기존 MANUAL override 로직 유지
+  if (flags.category) {
     const oldCategoryId = row.jpCategoryIdUsed || '(none)';
     if (oldCategoryId !== categoryResolution.jpCategoryId) {
-      console.log(`  [CATEGORY_CHANGED] 재resolve: ${oldCategoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
+      console.log(`  [CATEGORY] 재resolve: ${oldCategoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
     } else {
-      console.log(`  [CATEGORY_CHANGED] 동일 카테고리, skip (${categoryResolution.jpCategoryId})`);
+      console.log(`  [CATEGORY] 동일 카테고리 (${categoryResolution.jpCategoryId})`);
     }
   } else {
-    // Check if category was manually changed in sheet
+    // CATEGORY 플래그 없으면 기존 MANUAL override 유지
     const manualCategoryOverride = row.jpCategoryIdUsed &&
       row.jpCategoryIdUsed !== categoryResolution.jpCategoryId &&
       row.categoryMatchType === 'MANUAL';
 
     if (manualCategoryOverride) {
-      // Use the manually set category from sheet
       categoryResolution = {
         jpCategoryId: row.jpCategoryIdUsed,
         matchType: 'MANUAL',
@@ -423,24 +447,27 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
       console.log(`  Category: ${row.categoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
     }
   }
-  
-  // Build payload with validated price and resolved category
+
+  // Build base values
   const sellerCode = `auto_${vendorItemId}`;
   const sellingPrice = priceDecision.priceJpy;
   const extraImages = parseExtraImages(row.ExtraImages);
   const jpCategoryId = categoryResolution?.jpCategoryId || row.categoryId;
 
-  // ── 타이틀 번역 (한국어 → 일본어 SEO 최적화) ──
+  // ── 타이틀 번역: CREATE는 항상 / UPDATE는 flags.title 일 때만 ──
   let itemTitle = row.ItemTitle;
-  let titleMethod = 'fallback';
-  try {
-    const categoryPath = row.categoryPath3 || row.categoryPath2 || null;
-    const titleResult = await translateTitle(row.ItemTitle, categoryPath);
-    itemTitle = titleResult.jpTitle;
-    titleMethod = titleResult.method;
-    console.log(`  Title [${titleResult.method}]: ${row.ItemTitle.slice(0, 30)}... → ${itemTitle}`);
-  } catch (titleErr) {
-    console.warn(`  Title translation failed (${titleErr.message}), using original`);
+  let titleMethod = 'original';
+  if (!isUpdateMode || flags.title) {
+    try {
+      const categoryPath = row.categoryPath3 || row.categoryPath2 || null;
+      const titleResult = await translateTitle(row.ItemTitle, categoryPath);
+      itemTitle = titleResult.jpTitle;
+      titleMethod = titleResult.method;
+      console.log(`  Title [${titleResult.method}]: ${row.ItemTitle.slice(0, 30)}... → ${itemTitle}`);
+    } catch (titleErr) {
+      console.warn(`  Title translation failed (${titleErr.message}), using original`);
+      titleMethod = 'fallback';
+    }
   }
 
   const payload = {
@@ -456,7 +483,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
     Weight: FIXED_WEIGHT,
     ExtraImages: extraImages.map(url => normalizeImageUrl(url)),
   };
-  
+
   // Parse and add options if present
   if (row.Options) {
     try {
@@ -468,14 +495,21 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
       // No options
     }
   }
-  
+
   if (dryRun) {
-    // Generate description for log preview only (no API call)
-    const descResult = await generateJapaneseDescription(row);
-    const descMethod = descResult.method;
-    if (descResult.html) {
-      console.log(`  [DRY-RUN] Generated JP description (${descMethod}): ${descResult.html.slice(0, 100)}...`);
+    const msgParts = [`[flags=${row.changeFlags || ''}]`];
+    if (flags.title) msgParts.push('[titleUpdate=dry]');
+    if (flags.price) msgParts.push('[priceUpdate=dry]');
+    if (flags.image) msgParts.push('[imageUpdate=dry]');
+    if (flags.category) msgParts.push('[categoryUpdate=dry]');
+    if (flags.desc) {
+      const descResult = await generateJapaneseDescription(row);
+      msgParts.push(`[descMethod=${descResult.method}]`);
+      if (descResult.html) {
+        console.log(`  [DRY-RUN] Generated JP description (${descResult.method}): ${descResult.html.slice(0, 100)}...`);
+      }
     }
+    console.log(`  [DRY-RUN] ${msgParts.join(' ')}`);
     return {
       status: 'DRY_RUN',
       vendorItemId,
@@ -486,123 +520,128 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
       mode: isUpdateMode ? 'UPDATE' : 'CREATE',
       qoo10ItemId: existingQoo10ItemId || null,
       titleMethod,
-      descMethod
+      registrationMessage: msgParts.join(' ')
     };
   }
-  
+
   // ===== UPDATE MODE =====
   if (isUpdateMode) {
-    console.log(`[Registration] Updating existing Qoo10 item: ${existingQoo10ItemId}`);
-    
-    // Pass ALL fields like SetNewGoods - updateExistingGoods will build full payload
-    const updateResult = await updateExistingGoods({
-      ItemCode: existingQoo10ItemId,
-      // All fields from payload (like SetNewGoods)
-      SecondSubCat: payload.SecondSubCat,
-      ItemTitle: payload.ItemTitle,
-      ItemPrice: payload.ItemPrice,
-      ItemQty: payload.ItemQty || '100',
-      StandardImage: payload.StandardImage,
-      ItemDescription: payload.ItemDescription,
-      Weight: payload.Weight,
-      ProductionPlaceType: payload.ProductionPlaceType,
-      ProductionPlace: payload.ProductionPlace,
-      ShippingNo: FIXED_SHIPPING_NO,
-      // Additional fields for structural parity with SetNewGoods
-      RetailPrice: '0',
-      TaxRate: 'S',
-      ExpireDate: '2030-12-31',
-      AdultYN: 'N',
-      AvailableDateType: '0',
-      AvailableDateValue: '2',
-    }, row);
-    
-    if (updateResult.dryRun) {
-      return {
-        status: 'DRY_RUN',
-        vendorItemId,
-        qoo10ItemId: existingQoo10ItemId,
-        qoo10SellingPrice: sellingPrice,
-        sellerCode: row.qoo10SellerCode || sellerCode,
-        categoryResolution,
-        mode: 'UPDATE',
-        payload: updateResult.payload,
-        itemTitle: payload.ItemTitle,
-        titleMethod
-      };
+    console.log(`[Registration] Updating existing Qoo10 item: ${existingQoo10ItemId} [flags=${row.changeFlags || ''}]`);
+
+    const msgParts = [`[flags=${row.changeFlags || ''}]`];
+
+    // ── CATEGORY / TITLE → UpdateGoods (조합 시 단일 호출) ──
+    let updateGoodsResult = null;
+    if (flags.category || flags.title) {
+      const updateResult = await updateExistingGoods({
+        ItemCode: existingQoo10ItemId,
+        SecondSubCat: payload.SecondSubCat,
+        ItemTitle: payload.ItemTitle,
+        ItemPrice: payload.ItemPrice,
+        ItemQty: payload.ItemQty || '100',
+        StandardImage: payload.StandardImage,
+        ItemDescription: payload.ItemDescription,
+        Weight: payload.Weight,
+        ProductionPlaceType: payload.ProductionPlaceType,
+        ProductionPlace: payload.ProductionPlace,
+        ShippingNo: FIXED_SHIPPING_NO,
+        RetailPrice: '0',
+        TaxRate: 'S',
+        ExpireDate: '2030-12-31',
+        AdultYN: 'N',
+        AvailableDateType: '0',
+        AvailableDateValue: '2',
+      }, row);
+
+      if (updateResult.dryRun) {
+        return {
+          status: 'DRY_RUN',
+          vendorItemId,
+          qoo10ItemId: existingQoo10ItemId,
+          qoo10SellingPrice: sellingPrice,
+          sellerCode: row.qoo10SellerCode || sellerCode,
+          categoryResolution,
+          mode: 'UPDATE',
+          payload: updateResult.payload,
+          itemTitle: payload.ItemTitle,
+          titleMethod
+        };
+      }
+
+      updateGoodsResult = updateResult;
+      if (flags.category) msgParts.push(`[categoryUpdate=${updateResult.success ? 'ok' : 'fail'}]`);
+      if (flags.title) msgParts.push(`[titleUpdate=${updateResult.success ? 'ok' : 'fail'}]`);
+      if (!updateResult.success) {
+        console.warn(`  UpdateGoods failed: ${updateResult.resultMsg}`);
+      }
     }
 
-    if (updateResult.success) {
-      // Update standard image
-      let imageUpdateMethod = 'skip';
+    // ── PRICE → SetGoodsPriceQty ──
+    if (flags.price) {
+      const { setGoodsPriceQty } = require('../backend/scripts/qoo10.setGoodsPriceQty');
+      let priceResult = { success: false };
+      try {
+        priceResult = await setGoodsPriceQty({
+          itemCode: existingQoo10ItemId,
+          price: sellingPrice,
+          qty: 100,
+        });
+      } catch (e) {
+        console.warn(`  SetGoodsPriceQty failed: ${e.message}`);
+      }
+      msgParts.push(`[priceUpdate=${priceResult.success ? 'ok' : 'fail'}]`);
+    }
+
+    // ── IMAGE → EditGoodsImage + EditGoodsMultiImage ──
+    let imageUpdateMethod = 'skip';
+    let multiImageMethod = 'skip';
+    if (flags.image) {
       if (payload.StandardImage) {
         const imageResult = await editGoodsImage(existingQoo10ItemId, payload.StandardImage);
-        if (imageResult.dryRun) {
-          imageUpdateMethod = 'skip';
-        } else if (imageResult.skipped) {
-          imageUpdateMethod = 'skip';
-        } else if (imageResult.success) {
-          imageUpdateMethod = 'ok';
-        } else {
-          imageUpdateMethod = 'fail';
-          console.warn(`[Registration] StandardImage update failed: ${imageResult.message}`);
-        }
+        imageUpdateMethod = imageResult.success ? 'ok' : (imageResult.skipped ? 'skip' : 'fail');
+        if (imageUpdateMethod === 'fail') console.warn(`  StandardImage update failed: ${imageResult.message}`);
       }
-
-      // Upload extra images
-      let multiImageMethod = 'skip';
       if (payload.ExtraImages && payload.ExtraImages.length > 0) {
         const multiImageResult = await editGoodsMultiImage(existingQoo10ItemId, payload.ExtraImages);
-        if (multiImageResult.dryRun) {
-          multiImageMethod = 'skip';
-        } else if (multiImageResult.success) {
-          multiImageMethod = 'ok';
-        } else {
-          multiImageMethod = 'fail';
-          console.warn(`[Registration] MultiImage upload failed: ${multiImageResult.resultMsg}`);
-        }
+        multiImageMethod = multiImageResult.success ? 'ok' : 'fail';
+        if (multiImageMethod === 'fail') console.warn(`  MultiImage upload failed: ${multiImageResult.resultMsg}`);
       }
-
-      // Generate and upload Japanese description (DESC_CHANGED or always on UPDATE)
-      const needsDescUpdate = !row.changeFlags || row.changeFlags.includes('DESC_CHANGED') || !row.changeFlags;
-      let descMethod = 'skip';
-      if (needsDescUpdate) {
-        const descResult = await generateJapaneseDescription(row);
-        descMethod = descResult.method;
-        if (descResult.html) {
-          await editGoodsContents({ itemCode: existingQoo10ItemId, htmlContent: descResult.html });
-        }
-      }
-
-      // Determine status based on category match type
-      const registrationStatus = categoryResolution.matchType === 'FALLBACK' ? 'WARNING' : 'SUCCESS';
-
-      return {
-        status: registrationStatus,
-        vendorItemId,
-        qoo10ItemId: existingQoo10ItemId,
-        qoo10SellingPrice: sellingPrice,
-        sellerCode: row.qoo10SellerCode || sellerCode,
-        categoryResolution,
-        mode: 'UPDATE',
-        itemTitle: payload.ItemTitle,
-        titleMethod,
-        descMethod,
-        multiImageMethod,
-        imageUpdateMethod
-      };
-    } else {
-      return {
-        status: 'FAILED',
-        vendorItemId,
-        qoo10ItemId: existingQoo10ItemId,
-        qoo10SellingPrice: sellingPrice, // Still include computed price for write-back
-        apiError: updateResult.resultMsg,
-        categoryResolution,
-        mode: 'UPDATE',
-        titleMethod
-      };
+      msgParts.push(`[imageUpdate=${imageUpdateMethod}]`);
     }
+
+    // ── DESC → EditGoodsContents ──
+    let descMethod = 'skip';
+    if (flags.desc) {
+      const descResult = await generateJapaneseDescription(row);
+      descMethod = descResult.method;
+      if (descResult.html) {
+        await editGoodsContents({ itemCode: existingQoo10ItemId, htmlContent: descResult.html });
+      }
+      msgParts.push(`[descMethod=${descMethod}]`);
+    }
+
+    // 플래그 중 하나도 없는 경우는 parseChangeFlags가 빈칸=SYNC를 처리하므로 여기 오지 않음.
+    // UpdateGoods 실패여도 나머지는 진행하고 최종 상태 결정
+    const anySuccess = (updateGoodsResult?.success !== false) || flags.price || flags.image || flags.desc;
+    const registrationStatus = anySuccess
+      ? (categoryResolution.matchType === 'FALLBACK' ? 'WARNING' : 'SUCCESS')
+      : 'FAILED';
+
+    return {
+      status: registrationStatus,
+      vendorItemId,
+      qoo10ItemId: existingQoo10ItemId,
+      qoo10SellingPrice: sellingPrice,
+      sellerCode: row.qoo10SellerCode || sellerCode,
+      categoryResolution,
+      mode: 'UPDATE',
+      itemTitle: flags.title ? payload.ItemTitle : undefined,
+      titleMethod,
+      descMethod,
+      multiImageMethod,
+      imageUpdateMethod,
+      registrationMessage: msgParts.join(' '),
+    };
   }
   
   // ===== CREATE MODE =====
@@ -829,7 +868,7 @@ async function main() {
               status: 'REGISTERED',
               registrationMode: 'REAL',
               registrationStatus: 'SUCCESS',
-              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] [multiImage=${result.multiImageMethod || 'skip'}] [imageUpdate=${result.imageUpdateMethod || 'skip'}] ${result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully'}`,
+              registrationMessage: result.registrationMessage || `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] [multiImage=${result.multiImageMethod || 'skip'}] [imageUpdate=${result.imageUpdateMethod || 'skip'}] ${result.mode === 'UPDATE' ? 'Updated successfully' : 'Registered successfully'}`,
               lastRegisteredAt: new Date().toISOString()
             };
             
@@ -868,7 +907,7 @@ async function main() {
               status: 'REGISTERED',
               registrationMode: 'REAL',
               registrationStatus: 'WARNING',
-              registrationMessage: `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] [multiImage=${result.multiImageMethod || 'skip'}] [imageUpdate=${result.imageUpdateMethod || 'skip'}] FALLBACK category used (review required)`,
+              registrationMessage: result.registrationMessage || `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] [multiImage=${result.multiImageMethod || 'skip'}] [imageUpdate=${result.imageUpdateMethod || 'skip'}] FALLBACK category used (review required)`,
               lastRegisteredAt: new Date().toISOString()
             };
             
@@ -924,9 +963,9 @@ async function main() {
         case 'DRY_RUN_API': {
           // Determine DRY-RUN status based on matchType
           const dryRunStatus = result.categoryResolution?.matchType === 'FALLBACK' ? 'WARNING' : 'DRY_RUN';
-          const dryRunMessage = result.categoryResolution?.matchType === 'FALLBACK'
+          const dryRunMessage = result.registrationMessage || (result.categoryResolution?.matchType === 'FALLBACK'
             ? `[titleMethod=${result.titleMethod || 'fallback'}] DRY-RUN with FALLBACK category (review required)`
-            : `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] DRY-RUN completed`;
+            : `[titleMethod=${result.titleMethod || 'fallback'}] [descMethod=${result.descMethod || 'skip'}] DRY-RUN completed`);
 
           console.log(`  → DRY-RUN [${result.mode || 'CREATE'}]: price=${result.qoo10SellingPrice}, jpCat=${result.categoryResolution?.jpCategoryId} (${result.categoryResolution?.matchType})`);
           if (result.itemTitle) console.log(`    ItemTitle: ${result.itemTitle}`);
