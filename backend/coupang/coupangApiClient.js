@@ -102,13 +102,10 @@ function buildImageExtractFn() {
       '.image-slider img',
     ].flatMap((sel) => Array.from(document.querySelectorAll(sel)));
 
+    // 슬라이더 추가 전 원래 ExtraImages 셀렉터 — 상세페이지 이미지 수집 검증 완료
     const detailEls = [
-      '.detail-image img',
-      '#productDetail img',
-      '.product-description img',
-      '.productDetail img',
-      '.detailContents img',
-      '.detail-wrap img',
+      '.subType-IMAGE img',
+      '[class*="detail-image"] img',
     ].flatMap((sel) => Array.from(document.querySelectorAll(sel)));
 
     const normalizeSrc = (el) => el?.src || el?.dataset?.src || el?.getAttribute('data-src') || '';
