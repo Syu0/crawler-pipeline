@@ -40,16 +40,16 @@ const FIXED_WEIGHT = '1';
 
 /**
  * Parse changeFlags string into a flags object.
- * '' or 'SYNC' → price+image+category (기본 SYNC 동작)
- * 'ALL'        → 전체 (title+price+image+category+desc)
+ * '' or 'REFRESH' → price+image+category (기본 REFRESH 동작)
+ * 'REBUILD'     → 전체 (title+price+image+category+desc)
  * 'PRICE|IMAGE' 등 → 해당 플래그만 true
  */
 function parseChangeFlags(changeFlags) {
   const raw = (changeFlags || '').trim().toUpperCase();
-  if (raw === '' || raw === 'SYNC') {
+  if (raw === '' || raw === 'REFRESH') {
     return { title: false, price: true, image: true, category: true, desc: false };
   }
-  if (raw === 'ALL') {
+  if (raw === 'REBUILD') {
     return { title: true, price: true, image: true, category: true, desc: true };
   }
   const flags = raw.split('|').map(f => f.trim());
@@ -647,7 +647,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
       msgParts.push(`[descMethod=${descMethod}]`);
     }
 
-    // 플래그 중 하나도 없는 경우는 parseChangeFlags가 빈칸=SYNC를 처리하므로 여기 오지 않음.
+    // 플래그 중 하나도 없는 경우는 parseChangeFlags가 빈칸=REFRESH를 처리하므로 여기 오지 않음.
     // UpdateGoods 실패여도 나머지는 진행하고 최종 상태 결정
     const anySuccess = (updateGoodsResult?.success !== false) || flags.price || flags.image || flags.desc;
     const registrationStatus = anySuccess

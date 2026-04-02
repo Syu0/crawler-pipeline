@@ -220,9 +220,9 @@ async function main() {
         insertDataOption: 'INSERT_ROWS',
         requestBody: {
           values: [
-            ['', 'SYNC와 동일 (기본값)', 'Qoo10 QAPI', '무료'],
-            ['SYNC', 'PRICE + IMAGE + CATEGORY 전체 갱신', 'Qoo10 QAPI', '무료'],
-            ['ALL', 'SYNC + TITLE + DESC 전체 갱신', 'Qoo10 QAPI + OpenRouter', '유료 포함'],
+            ['', 'REFRESH와 동일 (기본값)', 'Qoo10 QAPI', '무료'],
+            ['REFRESH', 'PRICE + IMAGE + CATEGORY 전체 갱신', 'Qoo10 QAPI', '무료'],
+            ['REBUILD', 'REFRESH + TITLE + DESC 전체 갱신', 'Qoo10 QAPI + OpenRouter', '유료 포함'],
             ['PRICE', '가격 재계산 후 업데이트 (변경 필드: Price / ExpireDate=2030-12-31 고정 / Qty 변경 없음)', 'Qoo10 SetGoodsPriceQty', '무료'],
             ['IMAGE', '대표이미지 + 슬라이더 이미지 업데이트', 'Qoo10 EditGoodsImage / EditGoodsMultiImage', '무료'],
             ['CATEGORY', '카테고리 재맵핑 결과 반영 + UpdateGoods 호출 (갱신 필드 전체: SecondSubCat / ItemTitle=jpTitle 컬럼 그대로 사용(번역 안 함) / ItemPrice / RetailPrice / ItemQty / AvailableDateType / AvailableDateValue / ShippingNo / AdultYN / TaxRate / ExpireDate / StandardImage / Weight / PromotionName / ProductionPlaceType / ProductionPlace / IndustrialCodeType / IndustrialCode)', 'Qoo10 UpdateGoods', '무료'],
