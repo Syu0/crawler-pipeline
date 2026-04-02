@@ -11,13 +11,13 @@
 const FX_JPY_TO_KRW = 10;
 
 // Korean domestic shipping cost (fixed)
-const DOMESTIC_SHIPPING_KRW = 3000;
+const DOMESTIC_SHIPPING_KRW = 3800;
 
-// Market commission rate (10%)
-const MARKET_COMMISSION_RATE = 0.10;
+// Market commission rate (13%, based on Qoo10 selling price)
+const MARKET_COMMISSION_RATE = 0.13;
 
-// Target margin rate (20%)
-const TARGET_MARGIN_RATE = 0.20;
+// Target margin rate (40%)
+const TARGET_MARGIN_RATE = 0.40;
 
 // Minimum margin rate (25%)
 const MIN_MARGIN_RATE = 0.25;

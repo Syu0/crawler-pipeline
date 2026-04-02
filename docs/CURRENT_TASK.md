@@ -1,15 +1,37 @@
 # CURRENT_TASK.md
 
 ## 현재 상태
-- 2026-04-01 업데이트
-- `main` 브랜치 — 10개 REGISTERED
-- B-01/B-02 수정 PR #14 머지 완료
-- SliderImages 수집 수정 완료 (B-02 사이드이펙트)
-- 멀티이미지 슬라이더 real mode 반영 확인 완료
+- 2026-04-02 업데이트
+- 브랜치: `oc/header-colors`
+- changeFlags 분기 구현 완료 + 플래그별 테스트 통과 (SYNC 제외)
+- `jpTitle` 컬럼 추가 — TITLE/CREATE 시 write-back, CATEGORY 시 재사용
 
 ---
 
-## 오늘 완료된 작업 (2026-04-01)
+## 오늘 완료된 작업 (2026-04-02)
+
+### changeFlags 플래그별 테스트 완료 ✅ (SYNC 제외)
+
+| flag | 테스트 결과 |
+|---|---|
+| `PRICE` | ✅ 통과 |
+| `IMAGE` | ✅ 통과 |
+| `CATEGORY` | ✅ 통과 |
+| `TITLE` | ✅ 통과 |
+| `DESC` | ✅ 통과 |
+| `ALL` | ✅ 통과 |
+| `SYNC` | ⏳ 미테스트 |
+
+### 수정 사항
+- **`pricingConstants.js`**: `DOMESTIC_SHIPPING_KRW=3800`, `MARKET_COMMISSION_RATE=0.13`, `TARGET_MARGIN_RATE=0.40` 수정
+- **`jpTitle` 컬럼 추가** (`sheetSchema.js`): TITLE/CREATE 시 번역 결과 write-back, CATEGORY 시 저장값 재사용 (`stored`)
+- **CATEGORY 플래그 jpTitle 없어 번역 시 write-back 버그 수정** (`qoo10-auto-register.js`)
+- **PRICE 플래그 qty 하드코딩 버그 수정**: `qty: 100` → `qty: null` (가격만 변경, 재고 불변)
+- **`change_flags` 시트 설명 정확화**: CATEGORY/TITLE 갱신 필드 전체 명시, `ItemDescription` 제거 (UpdateGoods가 상세페이지를 덮어쓰지 않음 확인)
+
+---
+
+## 이전 완료 작업 (2026-04-01)
 
 ### B-01 ItemTitle 빈값 + B-02 StandardImage 오수집 수정 ✅ 완료 (PR #14 머지)
 
@@ -34,6 +56,12 @@
 
 ## 이전 완료 작업
 
+### 2026-04-01
+- **B-01/B-02 수정** PR #14 머지 완료
+- **SliderImages 수집 수정** 완료 (B-02 사이드이펙트)
+- **멀티이미지 슬라이더 real mode** 반영 확인 완료
+- **changeFlags 분기 구현** — `qoo10-auto-register.js` UPDATE 흐름 플래그별 분기 + `change_flags` 시트 추가
+
 ### 2026-03-31
 - **CATEGORY_CHANGED 플래그 재resolve 버그 수정** — UPDATE 흐름에 resolver 재실행 분기 추가 (PR 머지)
 - **기등록 7개 상품 타이틀 패치** — OpenRouter 잔액 충전 후 TITLE_CHANGED 플래그로 일괄 업데이트, 7/7 SUCCESS
@@ -50,30 +78,8 @@
 
 ### 🔴 우선순위 높음
 
-#### changeFlags 분기 구현 | 브랜치: `oc/changeflag-dispatch`
-
-현재 `needsUpdate=YES`이면 changeFlags 무관하게 전체 API를 호출하는 버그 수정.
-`change_flags` 시트 신규 추가 + `qoo10-auto-register.js` UPDATE 흐름 분기 구현.
-
-**확정된 플래그 사양:**
-
-| flag | 동작 | 사용API | 비용 |
-|---|---|---|---|
-| (빈칸) | SYNC와 동일 (기본값) | Qoo10 QAPI | 무료 |
-| `SYNC` | PRICE + IMAGE + CATEGORY 전체 갱신 | Qoo10 QAPI | 무료 |
-| `ALL` | SYNC + TITLE + DESC 전체 갱신 | Qoo10 QAPI + OpenRouter | 유료 포함 |
-| `PRICE` | 가격 재계산 후 업데이트 | Qoo10 `SetGoodsPriceQty` | 무료 |
-| `IMAGE` | 대표이미지 + 슬라이더 이미지 업데이트 | Qoo10 `EditGoodsImage`, `EditGoodsMultiImage` | 무료 |
-| `CATEGORY` | 카테고리 재매핑 후 UpdateGoods 호출 | Qoo10 `UpdateGoods` | 무료 |
-| `TITLE` | 일본어 타이틀 재번역 + 업데이트 | OpenRouter + Qoo10 `UpdateGoods` | 유료 |
-| `DESC` | 일본어 상세페이지 재생성 + 반영 | OpenRouter + Qoo10 `EditGoodsContents` | 유료 |
-
-- 복수 플래그: 파이프(`|`) 구분. 예: `PRICE|IMAGE`, `TITLE|DESC`
-- `ALL`은 단독 사용
-- 유료 외부 API: OpenRouter만 사용 (TITLE, DESC 2곳). 이후 유료 API 추가 시 독립 플래그로 확장.
-- `change_flags` 시트: flag / 동작 / 사용API / 비용 4컬럼으로 위 사양 기록
-
-수정 파일: `backend/scripts/setup-sheets.js`, `scripts/qoo10-auto-register.js`
+#### SYNC 플래그 테스트 | 브랜치: `oc/header-colors`
+- PRICE + IMAGE + CATEGORY 전체 갱신 경로 실제 동작 확인 필요
 
 ### 🟡 우선순위 보통
 
