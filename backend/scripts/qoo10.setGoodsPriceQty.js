@@ -132,7 +132,7 @@ async function setGoodsPriceQty({ itemCode, price = null, qty = null }) {
       priceMatch: price !== null ? parseFloat(obj?.ItemPrice) === parseFloat(price) : null,
       qtyMatch:   qty   !== null ? parseFloat(obj?.ItemQty)   === parseFloat(qty)   : null,
     };
-    console.log(`[SetGoodsPriceQty] Read-back → priceMatch=${readBack.priceMatch}, qtyMatch=${readBack.qtyMatch}`);
+    console.log(`[SetGoodsPriceQty] Read-back → priceMatch=${readBack.priceMatch}, qtyMatch=${readBack.qtyMatch} (주의: 최대 10분 동기화 지연 가능)`);
   } catch (e) {
     console.warn(`[SetGoodsPriceQty] read-back (after) failed: ${e.message}`);
   }

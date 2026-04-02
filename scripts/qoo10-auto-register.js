@@ -454,19 +454,44 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
   const extraImages = parseExtraImages(row.ExtraImages);
   const jpCategoryId = categoryResolution?.jpCategoryId || row.categoryId;
 
-  // ── 타이틀 번역: CREATE는 항상 / UPDATE는 flags.title 일 때만 ──
+  // ── 타이틀 번역 ──
+  // CREATE: 항상 translateTitle() 호출 → jpTitle write-back
+  // UPDATE TITLE: translateTitle() 재호출 → jpTitle 덮어쓰기
+  // UPDATE CATEGORY: row.jpTitle 있으면 그대로 사용 / 없으면 translateTitle() 호출 → jpTitle write-back
+  // 그 외 UPDATE: 번역 안 함 (row.ItemTitle 원본 유지)
   let itemTitle = row.ItemTitle;
   let titleMethod = 'original';
+  let jpTitleWriteBack = null; // null이면 write-back 안 함
   if (!isUpdateMode || flags.title) {
     try {
       const categoryPath = row.categoryPath3 || row.categoryPath2 || null;
       const titleResult = await translateTitle(row.ItemTitle, categoryPath);
       itemTitle = titleResult.jpTitle;
       titleMethod = titleResult.method;
+      jpTitleWriteBack = itemTitle; // CREATE / TITLE 플래그: write-back 대상
       console.log(`  Title [${titleResult.method}]: ${row.ItemTitle.slice(0, 30)}... → ${itemTitle}`);
     } catch (titleErr) {
       console.warn(`  Title translation failed (${titleErr.message}), using original`);
       titleMethod = 'fallback';
+    }
+  } else if (flags.category) {
+    if (row.jpTitle) {
+      itemTitle = row.jpTitle;
+      titleMethod = 'stored';
+      console.log(`  Title [stored]: ${itemTitle}`);
+    } else {
+      // jpTitle 미저장 상태에서 CATEGORY 플래그 — 번역 fallback
+      try {
+        const categoryPath = row.categoryPath3 || row.categoryPath2 || null;
+        const titleResult = await translateTitle(row.ItemTitle, categoryPath);
+        itemTitle = titleResult.jpTitle;
+        titleMethod = titleResult.method;
+        jpTitleWriteBack = itemTitle; // CATEGORY 플래그 + jpTitle 없어 번역: write-back 대상
+        console.log(`  Title [${titleResult.method}] (jpTitle 없어 번역): ${row.ItemTitle.slice(0, 30)}... → ${itemTitle}`);
+      } catch (titleErr) {
+        console.warn(`  Title translation failed (${titleErr.message}), using original`);
+        titleMethod = 'fallback';
+      }
     }
   }
 
@@ -520,6 +545,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
       mode: isUpdateMode ? 'UPDATE' : 'CREATE',
       qoo10ItemId: existingQoo10ItemId || null,
       titleMethod,
+      jpTitleWriteBack,
       registrationMessage: msgParts.join(' ')
     };
   }
@@ -564,7 +590,8 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
           mode: 'UPDATE',
           payload: updateResult.payload,
           itemTitle: payload.ItemTitle,
-          titleMethod
+          titleMethod,
+          jpTitleWriteBack,
         };
       }
 
@@ -584,7 +611,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
         priceResult = await setGoodsPriceQty({
           itemCode: existingQoo10ItemId,
           price: sellingPrice,
-          qty: 100,
+          qty: null,  // 재고 건드리지 않음, 가격만 변경
         });
       } catch (e) {
         console.warn(`  SetGoodsPriceQty failed: ${e.message}`);
@@ -637,6 +664,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
       mode: 'UPDATE',
       itemTitle: flags.title ? payload.ItemTitle : undefined,
       titleMethod,
+      jpTitleWriteBack,
       descMethod,
       multiImageMethod,
       imageUpdateMethod,
@@ -690,6 +718,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
           mode: 'CREATE',
           itemTitle: payload.ItemTitle,
           titleMethod,
+          jpTitleWriteBack,
           descMethod,
           multiImageMethod
         };
@@ -876,7 +905,8 @@ async function main() {
             if (result.qoo10ItemId) sheetUpdate.qoo10ItemId = result.qoo10ItemId;
             if (result.qoo10SellingPrice) sheetUpdate.qoo10SellingPrice = result.qoo10SellingPrice;
             if (result.sellerCode) sheetUpdate.qoo10SellerCode = result.sellerCode;
-            
+            if (result.jpTitleWriteBack) sheetUpdate.jpTitle = result.jpTitleWriteBack;
+
             // Clear needsUpdate flag after successful update
             if (result.mode === 'UPDATE') {
               sheetUpdate.needsUpdate = 'NO';
@@ -914,6 +944,7 @@ async function main() {
             if (result.qoo10ItemId) warningUpdate.qoo10ItemId = result.qoo10ItemId;
             if (result.qoo10SellingPrice) warningUpdate.qoo10SellingPrice = result.qoo10SellingPrice;
             if (result.sellerCode) warningUpdate.qoo10SellerCode = result.sellerCode;
+            if (result.jpTitleWriteBack) warningUpdate.jpTitle = result.jpTitleWriteBack;
             
             if (result.mode === 'UPDATE') {
               warningUpdate.needsUpdate = 'NO';
