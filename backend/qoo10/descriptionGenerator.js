@@ -177,7 +177,7 @@ async function generateText(itemTitle, itemDescriptionText) {
 /**
  * 일본어 상품 설명 생성 메인
  *
- * @param {object} row - { ItemTitle, ItemDescriptionText, ExtraImages }
+ * @param {object} row - { ItemTitle, ItemDescriptionText, ExtraImages, DetailImages }
  * @returns {Promise<{ html: string, method: 'vision'|'text'|'skip' }>}
  */
 async function generateJapaneseDescription(row) {
@@ -186,15 +186,18 @@ async function generateJapaneseDescription(row) {
     return { html: '', method: 'skip' };
   }
 
+  // DetailImages 우선, 없으면 ExtraImages fallback (기존 수집 상품 호환)
+  const detailImages = parseExtraImages(row.DetailImages);
   const extraImages = parseExtraImages(row.ExtraImages);
+  const visionImages = detailImages.length > 0 ? detailImages : extraImages;
 
   try {
     let html = '';
     let method;
 
-    if (extraImages.length > 0) {
-      console.log(`[descGen] vision mode — ${Math.min(extraImages.length, MAX_IMAGES)} images`);
-      html = await generateVision(extraImages);
+    if (visionImages.length > 0) {
+      console.log(`[descGen] vision mode — ${Math.min(visionImages.length, MAX_IMAGES)} images (source: ${detailImages.length > 0 ? 'DetailImages' : 'ExtraImages'})`);
+      html = await generateVision(visionImages);
       method = 'vision';
     } else {
       console.log('[descGen] text mode');

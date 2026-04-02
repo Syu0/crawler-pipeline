@@ -121,7 +121,6 @@ function buildImageExtractFn() {
 
     const slider = unique(sliderEls.map(toUrl));
     const detail = unique(detailEls.map(toUrl));
-    const extra = unique([...slider, ...detail]);
 
     // 브레드크럼에서 categoryId 추출
     const breadcrumbLinks = Array.from(
@@ -134,7 +133,12 @@ function buildImageExtractFn() {
       categoryId = match ? match[1] : null;
     }
 
-    return { main, extra: [...new Set(extra)], categoryId };
+    return {
+      main,
+      extra: slider,    // ExtraImages: 슬라이더만
+      detail: detail,   // DetailImages: 상세페이지만
+      categoryId,
+    };
   }`;
 }
 
@@ -209,9 +213,9 @@ async function collectProductData(productId, vendorItemId, _itemId) {
     const rawExtra = Array.isArray(result.extra) ? result.extra : [];
     const rawDetail = Array.isArray(result.detail) ? result.detail : [];
 
-    // ExtraImages: 기존 호환용 (slider + detail 통합)
+    // ExtraImages: 슬라이더 이미지 (EditGoodsMultiImage 상단 갤러리용)
     ExtraImages = [...new Set(rawExtra.map(normalizeImageUrl).filter(Boolean))];
-    // DetailImages: Phase 3 상세 이미지
+    // DetailImages: 상세페이지 이미지 (DESC vision 입력용)
     DetailImages = [...new Set(rawDetail.map(normalizeImageUrl).filter(Boolean))];
 
     categoryId = result.categoryId || null;
