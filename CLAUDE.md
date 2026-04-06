@@ -12,7 +12,7 @@
 
 | 상황 | 참조 문서 |
 |------|-----------|
-| 시스템 구조·기술스택·대시보드·에이전트 구성 파악 | `docs/ARCHITECTURE.md` |
+| 시스템 구조·기술스택·에이전트 구성 파악 | `docs/ARCHITECTURE.md` |
 | Google Sheets 컬럼·스키마 확인 | `docs/SHEET_SCHEMA.md` |
 | Qoo10 API 필드별 엔드포인트 매핑 | `docs/QOO10_FIELD_API_MAP.md` |
 | 운영 중 오류 대응·데몬 재시작·cron 설정 | `docs/RUNBOOK.md` |
@@ -339,14 +339,7 @@ write calls 쿼터: 10회/세션
   - 진행 방식: 새 채팅에서 별도 논의 후 keywords 시트에 반영
 - [ ] **카테고리 미스매치 수동 수정**: 1195611873 (자동차 기어노브) → category_mapping 시트에서 jpCategoryId를 자동차 카테고리로 MANUAL 변경
 
-### 9-C. dashboard 작업
-
-- [x] `/api/openclaw/*` Vercel API Route 프록시 구현 완료
-  - `health`, `send`, `history`, `session-status`, `aegis-send`, `aegis-history` 6개 엔드포인트 존재
-  - 위치: `dashboard/src/app/api/openclaw/`
-- [ ] Chat 탭 프론트엔드 UI — OpenClaw 연동 UI 완성 여부 별도 확인 필요
-
-### 9-D. 보류
+### 9-C. 보류
 
 - [ ] `getItemDetailInfo.js` 모듈 구현 — GetItemDetailInfo API 래퍼 (현재 미존재)
 - [x] `editGoodsContents.js` 모듈 구현 — EditGoodsContents API 래퍼 (완료 2026-03-31)
@@ -428,13 +421,6 @@ crawler-pipeline/
 │   ├── qoo10-register-cli.js
 │   ├── qoo10-sync-japan-categories.js
 │   └── (기타 디버그/테스트 스크립트)
-├── dashboard/                         # Next.js 대시보드 (Vercel 배포)
-│   └── src/app/api/
-│       ├── openclaw/                  # OpenClaw 프록시 (6개 엔드포인트)
-│       ├── qoo10/
-│       ├── registration/
-│       ├── sheets/
-│       └── chat/
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── SHEET_SCHEMA.md
