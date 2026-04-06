@@ -180,7 +180,7 @@ async function scrapeSearchResults(keyword, pages = 1) {
           }
 
           // 리뷰수: (숫자) 패턴
-          var reviewMatch = infoText.match(/\((\d+)\)/);
+          var reviewMatch = infoText.match(/\\((\\d+)\\)/);
           var reviewCount = (reviewMatch && reviewMatch[1]) ? parseInt(reviewMatch[1]) : 0;
 
           // 발송국: 마지막 td의 순수 텍스트 노드
