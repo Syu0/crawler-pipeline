@@ -233,6 +233,34 @@ function buildAdditionalOptionSingle(optionsInput) {
  * @param {Object} optionResult - Result from buildAdditionalOptionSingle()
  * @returns {Object} params for SetNewGoods API call
  */
+function buildSearchKeywords(input) {
+  const keywords = new Set();
+
+  // 1) jpTitle(번역된 일본어 타이틀)에서 단어 추출
+  const jpTitle = (input.jpTitle || '').trim();
+  if (jpTitle) {
+    jpTitle
+      .replace(/[\(\)（）「」【】\d]+/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 2 && !/^[a-zA-Z]{1,3}$/.test(w))
+      .slice(0, 6)
+      .forEach(w => keywords.add(w));
+  }
+
+  // 2) ItemTitle(한국어 원본)에서 브랜드/상품명 추출 (보조)
+  const krTitle = (input.ItemTitle || '').trim();
+  if (krTitle && keywords.size < 8) {
+    krTitle
+      .replace(/[\(\)\[\]\d,\.]+/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 2 && /[가-힣]/.test(w))
+      .slice(0, 3)
+      .forEach(w => keywords.add(w));
+  }
+
+  return [...keywords].slice(0, 10).join('\n');
+}
+
 function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode, optionResult) {
   // Build base ItemDescription
   let finalDescription = String(input.ItemDescription || '<p>Product description</p>');
@@ -268,7 +296,7 @@ function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode, optionResul
     RetailPrice: String(input.RetailPrice || '0'),
     ItemQty: String(input.ItemQty),
     AvailableDateType: String(input.AvailableDateType || '0'),
-    AvailableDateValue: String(input.AvailableDateValue || '2'),
+    AvailableDateValue: String(input.AvailableDateValue || '3'),
     ShippingNo: String(shippingNo),
     SellerCode: uniqueSellerCode,
     AdultYN: String(input.AdultYN || 'N'),
@@ -281,11 +309,12 @@ function buildSetNewGoodsParams(input, shippingNo, uniqueSellerCode, optionResul
     // ProductionPlaceType: "1"=国内(Japan), "2"=海外(Overseas), "3"=その他(Other)
     // Default to "2" (Overseas) for foreign products
     ProductionPlaceType: String(input.ProductionPlaceType || '2'),
-    ProductionPlace: String(input.ProductionPlace || 'Overseas'),
+    ProductionPlace: String(input.ProductionPlace || 'KR'),
     IndustrialCodeType: String(input.IndustrialCodeType || ''),
-    IndustrialCode: String(input.IndustrialCode || '')
+    IndustrialCode: String(input.IndustrialCode || ''),
+    SearchKeyword: input.SearchKeyword || buildSearchKeywords(input)
   };
-  
+
   // Add AdditionalOption if Options provided and valid
   if (optionResult && optionResult.additionalOption) {
     params.AdditionalOption = optionResult.additionalOption;

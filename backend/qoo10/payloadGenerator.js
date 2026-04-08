@@ -225,7 +225,7 @@ function generatePayload(row) {
     ShippingNo: '471554',
     Weight: 1,
     ProductionPlaceType: 2,
-    ProductionPlace: 'Overseas',
+    ProductionPlace: 'KR',
     ImageUrl: imageUrl,
     ExtraImageUrl: extraImageUrl,
     Options: formattedOptions,

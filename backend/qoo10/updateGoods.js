@@ -88,7 +88,7 @@ function buildUpdateGoodsParams(input, rowData, shippingNo) {
     RetailPrice: resolve('RetailPrice', 'RetailPrice', '0'),
     ItemQty: resolve('ItemQty', 'ItemQty', '100'),
     AvailableDateType: resolve('AvailableDateType', 'AvailableDateType', '0'),
-    AvailableDateValue: resolve('AvailableDateValue', 'AvailableDateValue', '2'),
+    AvailableDateValue: resolve('AvailableDateValue', 'AvailableDateValue', '3'),
     ShippingNo: String(shippingNo),
     AdultYN: resolve('AdultYN', 'AdultYN', 'N'),
     TaxRate: resolve('TaxRate', 'TaxRate', 'S'),
@@ -99,7 +99,7 @@ function buildUpdateGoodsParams(input, rowData, shippingNo) {
     PromotionName: resolve('PromotionName', 'PromotionName', ''),
     // ProductionPlaceType: "1"=国内(Japan), "2"=海外(Overseas), "3"=その他(Other)
     ProductionPlaceType: resolve('ProductionPlaceType', 'ProductionPlaceType', '2'),
-    ProductionPlace: resolve('ProductionPlace', 'ProductionPlace', 'Overseas'),
+    ProductionPlace: resolve('ProductionPlace', 'ProductionPlace', 'KR'),
     IndustrialCodeType: resolve('IndustrialCodeType', 'IndustrialCodeType', ''),
     IndustrialCode: resolve('IndustrialCode', 'IndustrialCode', ''),
   };

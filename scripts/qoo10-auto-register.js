@@ -37,7 +37,7 @@ const MAX_RETRIES = 1;
 // Fixed rules (STRICT)
 const FIXED_SHIPPING_NO = '471554';
 const FIXED_PRODUCTION_PLACE_TYPE = '2';
-const FIXED_PRODUCTION_PLACE = 'Overseas';
+const FIXED_PRODUCTION_PLACE = 'KR';
 const FIXED_WEIGHT = '1';
 
 /**
@@ -292,6 +292,7 @@ function buildRegistrationPayload(row, categoryResolution, computedPriceJpy) {
   const payload = {
     SecondSubCat: jpCategoryId,
     ItemTitle: row.ItemTitle,
+    jpTitle: row.jpTitle || row.ItemTitle,
     ItemPrice: String(computedPriceJpy),
     ItemQty: '100',
     ShippingNo: FIXED_SHIPPING_NO,
@@ -300,7 +301,7 @@ function buildRegistrationPayload(row, categoryResolution, computedPriceJpy) {
     ProductionPlaceType: FIXED_PRODUCTION_PLACE_TYPE,
     ProductionPlace: FIXED_PRODUCTION_PLACE,
     Weight: FIXED_WEIGHT,
-    
+
     // Extra images if available
     ExtraImages: extraImages.map(url => normalizeImageUrl(url)),
   };
@@ -512,6 +513,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
   const payload = {
     SecondSubCat: jpCategoryId,
     ItemTitle: itemTitle,
+    jpTitle: itemTitle,
     ItemPrice: String(sellingPrice),
     ItemQty: '100',
     ShippingNo: FIXED_SHIPPING_NO,
@@ -590,7 +592,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
         ExpireDate: '2030-12-31',
         AdultYN: 'N',
         AvailableDateType: '0',
-        AvailableDateValue: '2',
+        AvailableDateValue: '3',
       }, row);
 
       if (updateResult.dryRun) {
