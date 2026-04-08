@@ -15,17 +15,19 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend', '.env') });
 
-const { getSheetsClient } = require('./lib/sheetsClient');
+const { getSheetsClient } = require('../backend/coupang/sheetsClient');
 const { registerNewGoods } = require('../backend/qoo10/registerNewGoods');
 const { updateExistingGoods } = require('../backend/qoo10/updateGoods');
 const { editGoodsMultiImage } = require('../backend/qoo10/editGoodsMultiImage');
-const { calculateSellingPrice } = require('./lib/qoo10PayloadGenerator');
-const { resolveJpCategoryId } = require('./lib/categoryResolver');
+const { calculateSellingPrice } = require('../backend/qoo10/payloadGenerator');
+const { resolveJpCategoryId } = require('../backend/category/resolver');
 const { decideItemPriceJpy } = require('../backend/pricing/priceDecision');
 const { translateTitle } = require('../backend/qoo10/titleTranslator');
 const { generateJapaneseDescription } = require('../backend/qoo10/descriptionGenerator');
 const { editGoodsContents } = require('../backend/qoo10/editGoodsContents');
 const { editGoodsImage } = require('../backend/qoo10/editGoodsImage');
+const { editGoodsInventory, buildInventoryInfo, validateDeltas } = require('../backend/qoo10/editGoodsInventory');
+const { detectGroupPattern } = require('../backend/qoo10/groupDetector');
 
 // Configuration
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
@@ -455,23 +457,35 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
   const jpCategoryId = categoryResolution?.jpCategoryId || row.categoryId;
 
   // ── 타이틀 번역 ──
+  // MASTER / SOLO_SPLIT: detectGroupPattern으로 수량 제거한 baseTitle 사용
   // CREATE: 항상 translateTitle() 호출 → jpTitle write-back
   // UPDATE TITLE: translateTitle() 재호출 → jpTitle 덮어쓰기
   // UPDATE CATEGORY: row.jpTitle 있으면 그대로 사용 / 없으면 translateTitle() 호출 → jpTitle write-back
   // 그 외 UPDATE: 번역 안 함 (row.ItemTitle 원본 유지)
-  let itemTitle = row.ItemTitle;
+  const isMaster = row.groupRole === 'MASTER';
+  const isSoloSplit = row.groupRole === 'SLAVE' && row.optionIncluded === 'NO';
+  const groupPattern = detectGroupPattern(row.ItemTitle);
+  let sourceTitle = (isMaster || isSoloSplit) && groupPattern
+    ? groupPattern.baseTitle
+    : row.ItemTitle;
+  // UPDATE + MASTER: flags.title 유무와 관계없이 baseTitle 재번역 강제
+  if (isUpdateMode && isMaster && groupPattern) {
+    sourceTitle = groupPattern.baseTitle;
+  }
+  let itemTitle = sourceTitle;
   let titleMethod = 'original';
   let jpTitleWriteBack = null; // null이면 write-back 안 함
-  if (!isUpdateMode || flags.title) {
+  if (!isUpdateMode || flags.title || (isUpdateMode && isMaster)) {
     try {
       const categoryPath = row.categoryPath3 || row.categoryPath2 || null;
-      const titleResult = await translateTitle(row.ItemTitle, categoryPath);
+      const titleResult = await translateTitle(sourceTitle, categoryPath);
       itemTitle = titleResult.jpTitle;
       titleMethod = titleResult.method;
-      jpTitleWriteBack = itemTitle; // CREATE / TITLE 플래그: write-back 대상
-      console.log(`  Title [${titleResult.method}]: ${row.ItemTitle.slice(0, 30)}... → ${itemTitle}`);
+      jpTitleWriteBack = itemTitle; // CREATE / TITLE 플래그 / MASTER UPDATE: write-back 대상
+      console.log(`  Title [${titleResult.method}]: ${sourceTitle.slice(0, 30)}... → ${itemTitle}`);
     } catch (titleErr) {
       console.warn(`  Title translation failed (${titleErr.message}), using original`);
+      itemTitle = sourceTitle;
       titleMethod = 'fallback';
     }
   } else if (flags.category) {
@@ -483,11 +497,11 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
       // jpTitle 미저장 상태에서 CATEGORY 플래그 — 번역 fallback
       try {
         const categoryPath = row.categoryPath3 || row.categoryPath2 || null;
-        const titleResult = await translateTitle(row.ItemTitle, categoryPath);
+        const titleResult = await translateTitle(sourceTitle, categoryPath);
         itemTitle = titleResult.jpTitle;
         titleMethod = titleResult.method;
         jpTitleWriteBack = itemTitle; // CATEGORY 플래그 + jpTitle 없어 번역: write-back 대상
-        console.log(`  Title [${titleResult.method}] (jpTitle 없어 번역): ${row.ItemTitle.slice(0, 30)}... → ${itemTitle}`);
+        console.log(`  Title [${titleResult.method}] (jpTitle 없어 번역): ${sourceTitle.slice(0, 30)}... → ${itemTitle}`);
       } catch (titleErr) {
         console.warn(`  Title translation failed (${titleErr.message}), using original`);
         titleMethod = 'fallback';
@@ -647,6 +661,46 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
       msgParts.push(`[descMethod=${descMethod}]`);
     }
 
+    // ── MASTER UPDATE: EditGoodsInventory 재호출 ──
+    let inventoryUpdateMethod = 'skip';
+    if (isMaster && row.groupId) {
+      try {
+        const allRows = row._allRows || [];
+        const slaveYesRows = allRows.filter(r =>
+          r.groupId === row.groupId && r.groupRole === 'SLAVE' && r.optionIncluded === 'YES'
+        );
+        if (slaveYesRows.length > 0) {
+          const masterJpy = Number(sellingPrice);
+          const optionEntries = [
+            { label: row.optionLabel || `${groupPattern?.optionValue}個`, deltaPriceJpy: 0, qty: 100, code: String(groupPattern?.optionValue || '1') },
+          ];
+          for (const slaveRow of slaveYesRows) {
+            const slavePrice = await decideItemPriceJpy({ row: slaveRow, vendorItemId: slaveRow.vendorItemId, mode: 'UPDATE', sheetsClient, sheetId: SHEET_ID });
+            if (!slavePrice.valid) continue;
+            const slavePattern = detectGroupPattern(slaveRow.ItemTitle);
+            const rawDelta = Number(slavePrice.priceJpy) - masterJpy;
+            const cappedDelta = Math.min(Math.max(0, rawDelta), Math.floor(masterJpy * 0.5));
+            optionEntries.push({
+              label: slaveRow.optionLabel || `${slavePattern?.optionValue}個`,
+              deltaPriceJpy: cappedDelta,
+              qty: 100,
+              code: String(slavePattern?.optionValue || slaveRow.vendorItemId),
+            });
+          }
+          if (optionEntries.length > 1) {
+            const inventoryInfo = buildInventoryInfo(optionEntries);
+            console.log(`  [MASTER] EditGoodsInventory (UPDATE): ${inventoryInfo}`);
+            await editGoodsInventory({ itemCode: existingQoo10ItemId, inventoryInfo });
+            inventoryUpdateMethod = 'ok';
+          }
+        }
+      } catch (invErr) {
+        console.warn(`  [MASTER] EditGoodsInventory 실패: ${invErr.message}`);
+        inventoryUpdateMethod = 'fail';
+      }
+      msgParts.push(`[inventoryUpdate=${inventoryUpdateMethod}]`);
+    }
+
     // 플래그 중 하나도 없는 경우는 parseChangeFlags가 빈칸=REFRESH를 처리하므로 여기 오지 않음.
     // UpdateGoods 실패여도 나머지는 진행하고 최종 상태 결정
     const anySuccess = (updateGoodsResult?.success !== false) || flags.price || flags.image || flags.desc;
@@ -704,6 +758,55 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
           await editGoodsContents({ itemCode: result.createdItemId, htmlContent: descResult.html });
         }
 
+        // ── MASTER: EditGoodsInventory 호출 ──
+        let inventoryUpdateMethod = 'skip';
+        let slaveYesRows = [];
+        if (isMaster && row.groupId) {
+          try {
+            // 같은 groupId의 SLAVE YES 행 찾기 (호출자에서 전달받은 dataRows 필요 → row._allRows 사용)
+            const allRows = row._allRows || [];
+            slaveYesRows = allRows.filter(r =>
+              r.groupId === row.groupId &&
+              r.groupRole === 'SLAVE' &&
+              r.optionIncluded === 'YES'
+            );
+
+            if (slaveYesRows.length > 0) {
+              // 가격 계산: master + slaves
+              const masterJpy = Number(sellingPrice);
+              const optionEntries = [
+                { label: row.optionLabel || `${groupPattern?.optionValue}個`, deltaPriceJpy: 0, qty: 100, code: String(groupPattern?.optionValue || '1') },
+              ];
+              for (const slaveRow of slaveYesRows) {
+                const slavePrice = await decideItemPriceJpy({ row: slaveRow, vendorItemId: slaveRow.vendorItemId, mode: 'CREATE', sheetsClient, sheetId: SHEET_ID });
+                if (!slavePrice.valid) {
+                  console.warn(`  [MASTER] SLAVE 가격 계산 실패 (${slaveRow.vendorItemId}): ${slavePrice.error}`);
+                  continue;
+                }
+                const slavePattern = detectGroupPattern(slaveRow.ItemTitle);
+                const rawDelta = Number(slavePrice.priceJpy) - masterJpy;
+                const cappedDelta = Math.min(Math.max(0, rawDelta), Math.floor(masterJpy * 0.5));
+                optionEntries.push({
+                  label: slaveRow.optionLabel || `${slavePattern?.optionValue}個`,
+                  deltaPriceJpy: cappedDelta,
+                  qty: 100,
+                  code: String(slavePattern?.optionValue || slaveRow.vendorItemId),
+                });
+              }
+
+              if (optionEntries.length > 1) {
+                const inventoryInfo = buildInventoryInfo(optionEntries);
+                console.log(`  [MASTER] EditGoodsInventory: ${inventoryInfo}`);
+                await editGoodsInventory({ itemCode: result.createdItemId, inventoryInfo });
+                inventoryUpdateMethod = 'ok';
+              }
+            }
+          } catch (invErr) {
+            console.warn(`  [MASTER] EditGoodsInventory 실패: ${invErr.message}`);
+            inventoryUpdateMethod = 'fail';
+          }
+        }
+
         // Determine registration status based on matchType
         // FALLBACK = WARNING even if API succeeds
         const registrationStatus = categoryResolution.matchType === 'FALLBACK' ? 'WARNING' : 'SUCCESS';
@@ -720,7 +823,12 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
           titleMethod,
           jpTitleWriteBack,
           descMethod,
-          multiImageMethod
+          multiImageMethod,
+          inventoryUpdateMethod,
+          isMaster,
+          isSoloSplit,
+          slaveYesRows,
+          groupId: row.groupId || '',
         };
       }
 
@@ -801,9 +909,17 @@ async function main() {
     
     // Count row categories
     // CREATE: status=REGISTER_READY + qoo10ItemId 없음 (신규 등록)
+    //   - groupRole=SLAVE, optionIncluded=YES → MASTER 처리 시 함께 처리되므로 스킵
     // UPDATE: qoo10ItemId 있고 needsUpdate=YES (기존 상품 업데이트, status 무관)
-    const unregisteredRows = dataRows.filter(r => r.status === 'REGISTER_READY' && !r.qoo10ItemId);
-    const registeredNeedsUpdate = dataRows.filter(r => r.qoo10ItemId && r.needsUpdate === 'YES');
+    //   - groupRole=SLAVE, optionIncluded=YES → MASTER UPDATE에 포함되므로 스킵
+    const unregisteredRows = dataRows.filter(r =>
+      r.status === 'REGISTER_READY' && !r.qoo10ItemId &&
+      !(r.groupRole === 'SLAVE' && r.optionIncluded === 'YES')
+    );
+    const registeredNeedsUpdate = dataRows.filter(r =>
+      r.qoo10ItemId && r.needsUpdate === 'YES' &&
+      !(r.groupRole === 'SLAVE' && r.optionIncluded === 'YES')
+    );
     const registeredNoUpdate = dataRows.filter(r => r.qoo10ItemId && r.needsUpdate !== 'YES');
 
     console.log(`  REGISTER_READY (CREATE): ${unregisteredRows.length}`);
@@ -843,6 +959,9 @@ async function main() {
     
     // Process each row
     for (const row of rowsToProcess) {
+      // SLAVE YES 행 찾기용으로 전체 dataRows 참조 전달
+      row._allRows = dataRows;
+
       const vendorItemId = row.vendorItemId || row.itemId;
       const isUpdate = row.qoo10ItemId && row.qoo10ItemId.trim() !== '';
 
@@ -912,14 +1031,38 @@ async function main() {
               sheetUpdate.needsUpdate = 'NO';
               sheetUpdate.changeFlags = '';
             }
-            
+
+            // MASTER CREATE: registrationMessage에 groupRole 정보 추가
+            if (result.isMaster && result.mode === 'CREATE') {
+              sheetUpdate.registrationMessage = `[groupRole=MASTER] [optionCount=${1 + (result.slaveYesRows?.length || 0)}] [inventoryUpdate=${result.inventoryUpdateMethod || 'skip'}] ` + (sheetUpdate.registrationMessage || '');
+            } else if (result.isSoloSplit && result.mode === 'CREATE') {
+              sheetUpdate.registrationMessage = `[groupRole=SOLO_SPLIT] [groupId=${result.groupId}] ` + (sheetUpdate.registrationMessage || '');
+            }
+
             await updateSheetRow(row._rowIndex, sheetUpdate);
             console.log(`  ✓ Sheet updated`);
+
+            // MASTER CREATE 성공: SLAVE YES 행 qoo10ItemId 비움 + masterItemCode 기록
+            if (result.isMaster && result.mode === 'CREATE' && result.slaveYesRows?.length > 0) {
+              for (const slaveRow of result.slaveYesRows) {
+                try {
+                  await updateSheetRow(slaveRow._rowIndex, {
+                    qoo10ItemId: '',
+                    registrationMessage: `[groupRole=SLAVE] [masterItemCode=${result.qoo10ItemId}]`,
+                    status: 'REGISTERED',
+                    lastRegisteredAt: new Date().toISOString(),
+                  });
+                  console.log(`  ✓ SLAVE write-back: vendorItemId=${slaveRow.vendorItemId}`);
+                } catch (e) {
+                  console.warn(`  ✗ SLAVE write-back 실패 (${slaveRow.vendorItemId}): ${e.message}`);
+                }
+              }
+            }
           } catch (sheetErr) {
             console.log(`  ✗ Sheet update failed: ${sheetErr.message}`);
           }
           break;
-          
+
         case 'NO_CHANGES':
           console.log(`  → NO_CHANGES: ${result.message}`);
           results.noChanges.push(result);
@@ -950,9 +1093,31 @@ async function main() {
               warningUpdate.needsUpdate = 'NO';
               warningUpdate.changeFlags = '';
             }
-            
+
+            if (result.isMaster && result.mode === 'CREATE') {
+              warningUpdate.registrationMessage = `[groupRole=MASTER] [optionCount=${1 + (result.slaveYesRows?.length || 0)}] [inventoryUpdate=${result.inventoryUpdateMethod || 'skip'}] ` + (warningUpdate.registrationMessage || '');
+            } else if (result.isSoloSplit && result.mode === 'CREATE') {
+              warningUpdate.registrationMessage = `[groupRole=SOLO_SPLIT] [groupId=${result.groupId}] ` + (warningUpdate.registrationMessage || '');
+            }
+
             await updateSheetRow(row._rowIndex, warningUpdate);
             console.log(`  ⚠ Sheet updated (WARNING status)`);
+
+            if (result.isMaster && result.mode === 'CREATE' && result.slaveYesRows?.length > 0) {
+              for (const slaveRow of result.slaveYesRows) {
+                try {
+                  await updateSheetRow(slaveRow._rowIndex, {
+                    qoo10ItemId: '',
+                    registrationMessage: `[groupRole=SLAVE] [masterItemCode=${result.qoo10ItemId}]`,
+                    status: 'REGISTERED',
+                    lastRegisteredAt: new Date().toISOString(),
+                  });
+                  console.log(`  ⚠ SLAVE write-back: vendorItemId=${slaveRow.vendorItemId}`);
+                } catch (e) {
+                  console.warn(`  ✗ SLAVE write-back 실패 (${slaveRow.vendorItemId}): ${e.message}`);
+                }
+              }
+            }
           } catch (sheetErr) {
             console.log(`  ✗ Sheet update failed: ${sheetErr.message}`);
           }

@@ -2,15 +2,16 @@
 
 ## 현재 상태
 - 2026-04-02 업데이트
-- 브랜치: `oc/header-colors`
-- changeFlags 분기 구현 완료 + 플래그별 테스트 통과 (SYNC 제외)
+- 브랜치: `main` (oc/fix-detail-images 완료 머지)
+- changeFlags 분기 + 전체 플래그 테스트(REFRESH 포함) 완료
+- 플래그명 확정: SYNC→REFRESH, ALL→REBUILD
 - `jpTitle` 컬럼 추가 — TITLE/CREATE 시 write-back, CATEGORY 시 재사용
 
 ---
 
 ## 오늘 완료된 작업 (2026-04-02)
 
-### changeFlags 플래그별 테스트 완료 ✅ (SYNC 제외)
+### changeFlags 플래그별 테스트 완료 ✅
 
 | flag | 테스트 결과 |
 |---|---|
@@ -19,8 +20,15 @@
 | `CATEGORY` | ✅ 통과 |
 | `TITLE` | ✅ 통과 |
 | `DESC` | ✅ 통과 |
-| `ALL` | ✅ 통과 |
-| `SYNC` | ⏳ 미테스트 |
+| `REBUILD` (구 ALL) | ✅ 통과 |
+| `REFRESH` (구 SYNC) | ✅ 통과 |
+
+### DetailImages 수집 버그 수정 + DESC vision 입력 변경 ✅ (oc/fix-detail-images)
+
+- `buildImageExtractFn()` return에 `detail` 누락 → DetailImages 항상 빈 배열 버그 수정
+- ExtraImages = 슬라이더만, DetailImages = 상세페이지 이미지로 수집 분리
+- `descriptionGenerator`: vision 입력을 DetailImages 우선 (없으면 ExtraImages fallback)으로 변경
+- **플래그명 변경**: SYNC→REFRESH, ALL→REBUILD (코드 + 문서 반영 완료)
 
 ### 수정 사항
 - **`pricingConstants.js`**: `DOMESTIC_SHIPPING_KRW=3800`, `MARKET_COMMISSION_RATE=0.13`, `TARGET_MARGIN_RATE=0.40` 수정
@@ -75,11 +83,6 @@
 ---
 
 ## 다음 작업
-
-### 🔴 우선순위 높음
-
-#### SYNC 플래그 테스트 | 브랜치: `oc/header-colors`
-- PRICE + IMAGE + CATEGORY 전체 갱신 경로 실제 동작 확인 필요
 
 ### 🟡 우선순위 보통
 

@@ -102,26 +102,22 @@ function buildImageExtractFn() {
       '.image-slider img',
     ].flatMap((sel) => Array.from(document.querySelectorAll(sel)));
 
+    // 슬라이더 추가 전 원래 ExtraImages 셀렉터 — 상세페이지 이미지 수집 검증 완료
     const detailEls = [
-      '.detail-image img',
-      '#productDetail img',
-      '.product-description img',
-      '.productDetail img',
-      '.detailContents img',
-      '.detail-wrap img',
+      '.subType-IMAGE img',
+      '[class*="detail-image"] img',
     ].flatMap((sel) => Array.from(document.querySelectorAll(sel)));
 
     const normalizeSrc = (el) => el?.src || el?.dataset?.src || el?.getAttribute('data-src') || '';
     const toUrl = (el) => {
       const src = normalizeSrc(el);
-      return src && src.startsWith('//') ? `https:${src}` : src;
+      return src && src.startsWith('//') ? 'https:' + src : src;
     };
 
     const unique = (arr) => [...new Set(arr.filter(Boolean))];
 
     const slider = unique(sliderEls.map(toUrl));
     const detail = unique(detailEls.map(toUrl));
-    const extra = unique([...slider, ...detail]);
 
     // 브레드크럼에서 categoryId 추출
     const breadcrumbLinks = Array.from(
@@ -134,7 +130,12 @@ function buildImageExtractFn() {
       categoryId = match ? match[1] : null;
     }
 
-    return { main, extra: [...new Set(extra)], categoryId };
+    return {
+      main,
+      extra: slider,    // ExtraImages: 슬라이더만
+      detail: detail,   // DetailImages: 상세페이지만
+      categoryId,
+    };
   }`;
 }
 
@@ -209,9 +210,9 @@ async function collectProductData(productId, vendorItemId, _itemId) {
     const rawExtra = Array.isArray(result.extra) ? result.extra : [];
     const rawDetail = Array.isArray(result.detail) ? result.detail : [];
 
-    // ExtraImages: 기존 호환용 (slider + detail 통합)
+    // ExtraImages: 슬라이더 이미지 (EditGoodsMultiImage 상단 갤러리용)
     ExtraImages = [...new Set(rawExtra.map(normalizeImageUrl).filter(Boolean))];
-    // DetailImages: Phase 3 상세 이미지
+    // DetailImages: 상세페이지 이미지 (DESC vision 입력용)
     DetailImages = [...new Set(rawDetail.map(normalizeImageUrl).filter(Boolean))];
 
     categoryId = result.categoryId || null;

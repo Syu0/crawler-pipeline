@@ -12,7 +12,7 @@
 
 | 상황 | 참조 문서 |
 |------|-----------|
-| 시스템 구조·기술스택·대시보드·에이전트 구성 파악 | `docs/ARCHITECTURE.md` |
+| 시스템 구조·기술스택·에이전트 구성 파악 | `docs/ARCHITECTURE.md` |
 | Google Sheets 컬럼·스키마 확인 | `docs/SHEET_SCHEMA.md` |
 | Qoo10 API 필드별 엔드포인트 매핑 | `docs/QOO10_FIELD_API_MAP.md` |
 | 운영 중 오류 대응·데몬 재시작·cron 설정 | `docs/RUNBOOK.md` |
@@ -229,21 +229,24 @@ write calls 쿼터: 10회/세션
   - `registrationMessage`에 `[titleMethod=api|fallback]` prefix 기록
 - [x] Qoo10 Update API 래퍼 완성 (브랜치: oc/update-api-wrappers)
   - `updateGoods.js` → `updateExistingGoods()` / `buildUpdateGoodsParams()`: UpdateGoods 호출. SecondSubCat은 파라미터에서 직접 resolve (`jpCategoryIdUsed` 컬럼 사용), getItemDetailInfo 별도 조회 없음.
-  - `qoo10-auto-register.js` UPDATE 흐름: changeFlags 기반 분기 **미구현** — needsUpdate=YES이면 UpdateGoods 전체 실행. changeFlags는 단순히 처리 후 `''`로 클리어만 됨.
-  > **⚠️ changeFlags 분기 미구현 (추후 논의 필요)**
-  > 설계 의도: 플래그별로 호출 API를 분리 (TITLE_CHANGED → UpdateGoods, DESC_CHANGED → EditGoodsContents, PRICE_UP/DOWN → SetGoodsPriceQty)
-  > 현재 실제 동작: 플래그 무관, UpdateGoods 전체 호출 후 changeFlags='' 클리어
-  > **허용값:** `PRICE_UP` | `PRICE_DOWN` | `TITLE_CHANGED` | `DESC_CHANGED` | `CATEGORY_CHANGED`
-  > 복수 플래그는 파이프(`|`)로 구분.
-  > `CATEGORY_CHANGED`: category_mapping 시트에 MANUAL 매핑 등록 후 `changeFlags=CATEGORY_CHANGED` + `needsUpdate=YES` 설정 → auto-register 실행 시 자동 재resolve. ✅ 구현 완료 (2026-03-31)
-  > 전체 목록은 config 시트 `VALID_CHANGE_FLAGS` 키 참고.
-  > **⚠️ 미구현 래퍼:** `getItemDetailInfo.js` 파일 없음. `editGoodsContents.js`는 구현 완료 (2026-03-31). `editGoodsImage.js`는 구현 완료 (2026-04-01).
+  - `qoo10-auto-register.js` UPDATE 흐름: changeFlags 플래그별 API 분기 구현 완료 (2026-04-02)
+  > **허용값:** `REFRESH` | `REBUILD` | `PRICE` | `IMAGE` | `CATEGORY` | `TITLE` | `DESC`
+  > 복수 플래그는 파이프(`|`) 구분. `REFRESH` / `REBUILD`는 단독 사용.
+  > `REFRESH` = `PRICE` + `IMAGE` + `CATEGORY` 전체 갱신
+  > `REBUILD` = `REFRESH` + `TITLE` + `DESC` 전체 갱신 (유료 OpenRouter 포함)
+  > `CATEGORY`: category_mapping 시트에 MANUAL 매핑 등록 후 `changeFlags=CATEGORY` + `needsUpdate=YES` → auto-register 실행 시 자동 재resolve.
+  > `TITLE`: 일본어 타이틀 재번역 → `jpTitle` 컬럼 write-back + UpdateGoods 호출
+  > `DESC`: 일본어 상세페이지 재생성 → EditGoodsContents 호출
+  > **⚠️ 미구현 래퍼:** `getItemDetailInfo.js` 파일 없음.
 - [x] 인벤토리 관리 qoo10_inventory 시트 + 동기화/qty처리 스크립트 | 브랜치: oc/qoo10-inventory-mgmt
 - [x] 수집기 Browser Relay 방식 전환 | 브랜치: oc/api-collector (머지 완료)
   - Playwright headless 상세 페이지 접근 → Browser Relay `evaluate(fetch())` 로 교체
   - `next-api/products/quantity-info`: ItemTitle·ItemPrice·StockStatus
   - `next-api/review`: ReviewCount·ReviewAvgRating
-  - DOM 파싱: StandardImage·ExtraImages
+  - DOM 파싱: StandardImage·ExtraImages(슬라이더 이미지)·DetailImages(상세페이지 이미지)
+  - **ExtraImages**: 슬라이더 썸네일 DOM 파싱 결과 → `EditGoodsMultiImage` 상단 갤러리 등록용
+  - **DetailImages**: 상세페이지 이미지 DOM 파싱 결과 → `descriptionGenerator` vision 입력용
+  - ⚠️ 현재 `buildImageExtractFn()` return에 `detail` 누락 버그 → DetailImages 항상 빈 배열 (수정 예정: oc/fix-detail-images)
   - HARD_BLOCK 0, 3/3 연속 수집 성공 검증 완료
 - [x] discover Browser Relay 방식 전환 | 브랜치: oc/browser-relay-discover (머지 완료)
   - Playwright 데몬 → Browser Relay `evaluate()` 로 교체
@@ -288,6 +291,13 @@ write calls 쿼터: 10회/세션
 - [x] **SliderImages 수집 수정** (2026-04-01)
   - 원인: B-02 수정 시 `vendor_inventory` 제외 필터 / 셀렉터 교체가 Phase 3 SliderImages 수집에 사이드이펙트 발생
   - 수정: 셀렉터 수정 + 테스트 완료
+- [x] **changeFlags 플래그별 분기 구현** | 브랜치: oc/header-colors (2026-04-02)
+  - 플래그명 변경: `SYNC` → `REFRESH`, `ALL` → `REBUILD`
+  - `PRICE` / `IMAGE` / `CATEGORY` / `TITLE` / `DESC` 각 플래그별 전용 API 호출 분기 구현
+  - `jpTitle` 컬럼 추가 — TITLE/CREATE 시 번역 결과 write-back, CATEGORY 시 저장값 재사용
+  - PRICE 플래그 qty 하드코딩 버그 수정 (`qty: 100` → `qty: null`)
+  - CATEGORY 플래그 jpTitle 없을 때 번역 후 write-back 버그 수정
+  - 플래그 테스트 완료: PRICE/IMAGE/CATEGORY/TITLE/DESC/ALL ✅ (SYNC/REFRESH 미테스트)
 - [x] **멀티이미지(EditGoodsMultiImage) EnlargedImage 파라미터 교체** | 완료 2026-03-31
   - `ImageUrl` 단일 파라미터 → `EnlargedImage1~50` 개별 파라미터로 교체 (`editGoodsMultiImage.js`)
   - URL 200자 초과 건 skip, 50개 초과 분 slice
@@ -295,6 +305,7 @@ write calls 쿼터: 10회/세션
 - [x] **[전략] 일본어 상세페이지 콘텐츠 생성** | 완료 2026-03-31
   - `backend/qoo10/descriptionGenerator.js`: ExtraImages vision 모드(Claude Haiku via OpenRouter) 또는 텍스트 모드로 일본어 HTML 생성
   - `backend/qoo10/editGoodsContents.js`: ItemsContents.EditGoodsContents API 래퍼 (파라미터명 `Contents`)
+  - `backend/qoo10/editGoodsMultiImage.js`: ItemsContents.EditGoodsMultiImage API 래퍼 (EnlargedImage1~50)
   - ExtraImages를 `<p><img src="..." /></p>` 형식으로 일본어 텍스트 뒤에 이어붙여 전송
   - CREATE/UPDATE 성공 후 자동 호출, `registrationMessage`에 `[descMethod=vision|text|skip]` 기록
 
@@ -305,6 +316,11 @@ write calls 쿼터: 10회/세션
   - promote 스크립트 실행 시작 시점에 이 값을 읽어 false면 즉시 종료 (cron 긴급정지용)
   - false 시 출력: `[promote] 비활성화 상태입니다 (AUTO_REGISTER_ENABLED=false). config 시트에서 true로 변경하면 재개됩니다.`
   - setup-sheets.js 기본값에도 추가
+
+- [ ] **DetailImages 수집 버그 수정 + DESC vision 입력 변경** | 브랜치: oc/fix-detail-images
+  - `buildImageExtractFn()` return에 `detail` 누락 버그 수정
+  - ExtraImages = 슬라이더만, DetailImages = 상세페이지만으로 수집 분리
+  - `descriptionGenerator`: vision 입력을 ExtraImages → DetailImages 우선 (없으면 fallback)
 
 - [ ] **[추후 작업] 가격 상수 config 시트 이관**
   - 현재: `backend/pricing/pricingConstants.js`에 하드코딩
@@ -323,14 +339,7 @@ write calls 쿼터: 10회/세션
   - 진행 방식: 새 채팅에서 별도 논의 후 keywords 시트에 반영
 - [ ] **카테고리 미스매치 수동 수정**: 1195611873 (자동차 기어노브) → category_mapping 시트에서 jpCategoryId를 자동차 카테고리로 MANUAL 변경
 
-### 9-C. dashboard 작업
-
-- [x] `/api/openclaw/*` Vercel API Route 프록시 구현 완료
-  - `health`, `send`, `history`, `session-status`, `aegis-send`, `aegis-history` 6개 엔드포인트 존재
-  - 위치: `dashboard/src/app/api/openclaw/`
-- [ ] Chat 탭 프론트엔드 UI — OpenClaw 연동 UI 완성 여부 별도 확인 필요
-
-### 9-D. 보류
+### 9-C. 보류
 
 - [ ] `getItemDetailInfo.js` 모듈 구현 — GetItemDetailInfo API 래퍼 (현재 미존재)
 - [x] `editGoodsContents.js` 모듈 구현 — EditGoodsContents API 래퍼 (완료 2026-03-31)
@@ -371,8 +380,10 @@ crawler-pipeline/
 │   │   ├── payloadGenerator.js       # SetNewGoods 파라미터 빌더
 │   │   ├── registerNewGoods.js       # SetNewGoods 래퍼
 │   │   ├── titleTranslator.js        # KR→JP 타이틀 변환 (Claude Haiku)
-│   │   └── updateGoods.js            # UpdateGoods 래퍼 (updateExistingGoods)
+│   │   ├── updateGoods.js            # UpdateGoods 래퍼 (updateExistingGoods)
 │   │   ├── editGoodsContents.js      # EditGoodsContents 래퍼 (일본어 상세 HTML + 이미지)
+│   │   ├── editGoodsImage.js         # EditGoodsImage 래퍼 (대표이미지 업데이트)
+│   │   ├── editGoodsMultiImage.js    # EditGoodsMultiImage 래퍼 (슬라이더 이미지 EnlargedImage1~50)
 │   │   ├── descriptionGenerator.js   # 일본어 상세페이지 HTML 생성 (vision/text via OpenRouter)
 │   │   # ⚠️ 미존재: getItemDetailInfo.js
 │   ├── category/
@@ -410,13 +421,6 @@ crawler-pipeline/
 │   ├── qoo10-register-cli.js
 │   ├── qoo10-sync-japan-categories.js
 │   └── (기타 디버그/테스트 스크립트)
-├── dashboard/                         # Next.js 대시보드 (Vercel 배포)
-│   └── src/app/api/
-│       ├── openclaw/                  # OpenClaw 프록시 (6개 엔드포인트)
-│       ├── qoo10/
-│       ├── registration/
-│       ├── sheets/
-│       └── chat/
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── SHEET_SCHEMA.md
@@ -428,7 +432,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-04-01 | B-01/B-02 수정 (PR #14) + SliderImages 수집 수정 + EditGoodsMultiImage EnlargedImage 교체 + 슬라이더 real mode 검증 완료*
+*마지막 업데이트: 2026-04-02 | changeFlags 플래그별 분기 구현 완료 + jpTitle 컬럼 추가 + DetailImages/ExtraImages 역할 정의 + editGoodsImage/editGoodsMultiImage 파일 목록 추가*
 
 ---
 

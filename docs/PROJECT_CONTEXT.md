@@ -14,7 +14,7 @@
 → 재고 모니터링 → OUT_OF_STOCK (qty=0) / LIVE 복구
 ```
 
-운영 환경: Mac Mini / Google Sheets SSOT / Vercel 대시보드
+운영 환경: Mac Mini / Google Sheets SSOT
 
 ---
 
