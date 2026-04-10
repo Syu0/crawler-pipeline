@@ -13,7 +13,7 @@
  *   --dry-run     Generate payloads without calling API or updating sheet
  */
 
-require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend', '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend', '.env'), override: true });
 
 const { getSheetsClient } = require('../backend/coupang/sheetsClient');
 const { registerNewGoods } = require('../backend/qoo10/registerNewGoods');
