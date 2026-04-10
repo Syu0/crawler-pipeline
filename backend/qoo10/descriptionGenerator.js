@@ -46,34 +46,55 @@ function normalizeUrl(url) {
   return url;
 }
 
+const OPENROUTER_MAX_RETRIES = 3;
+const OPENROUTER_RETRY_BASE_MS = 2000; // 2s → 4s → 8s
+
 /**
- * OpenRouter API 호출 (vision 또는 텍스트)
+ * OpenRouter API 호출 (vision 또는 텍스트) — retry with exponential backoff
+ * 401/429/5xx: 최대 3회 재시도
  */
 async function callOpenRouter(messages) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY not set in backend/.env');
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 1024,
-      messages,
-    }),
-  });
+  let lastError;
+  for (let attempt = 1; attempt <= OPENROUTER_MAX_RETRIES; attempt++) {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 1024,
+        messages,
+      }),
+    });
 
-  if (!response.ok) {
-    throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
+    if (response.ok) {
+      const data = await response.json();
+      const raw = data.choices?.[0]?.message?.content?.trim() || '';
+      // 마크다운 코드펜스 제거 (```html ... ``` 또는 ``` ... ```)
+      return raw.replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/, '').trim();
+    }
+
+    // 에러 body 읽기 (rate limit 원인 파악용)
+    let errBody = '';
+    try { errBody = await response.text(); } catch (_) {}
+    const errMsg = `OpenRouter ${response.status} ${response.statusText}: ${errBody.slice(0, 200)}`;
+
+    const isRetryable = response.status === 401 || response.status === 429 || response.status >= 500;
+    if (!isRetryable || attempt === OPENROUTER_MAX_RETRIES) {
+      throw new Error(errMsg);
+    }
+
+    const waitMs = OPENROUTER_RETRY_BASE_MS * Math.pow(2, attempt - 1);
+    console.warn(`[descGen] ${errMsg} — retry ${attempt}/${OPENROUTER_MAX_RETRIES} after ${waitMs}ms`);
+    await new Promise(r => setTimeout(r, waitMs));
+    lastError = errMsg;
   }
-
-  const data = await response.json();
-  const raw = data.choices?.[0]?.message?.content?.trim() || '';
-  // 마크다운 코드펜스 제거 (```html ... ``` 또는 ``` ... ```)
-  return raw.replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/, '').trim();
+  throw new Error(lastError);
 }
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4MB (Anthropic 제한 5MB에 여유 두기)

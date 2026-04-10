@@ -307,6 +307,10 @@ write calls 쿼터: 10회/세션
   - `backend/qoo10/editGoodsContents.js`: ItemsContents.EditGoodsContents API 래퍼 (파라미터명 `Contents`)
   - `backend/qoo10/editGoodsMultiImage.js`: ItemsContents.EditGoodsMultiImage API 래퍼 (EnlargedImage1~50)
   - ExtraImages를 `<p><img src="..." /></p>` 형식으로 일본어 텍스트 뒤에 이어붙여 전송
+- [x] **payload 기본값 수정 + SearchKeyword 자동생성** | 브랜치: oc/fix-payload-defaults (PR #18 머지 완료, 2026-04-08)
+  - `AvailableDateValue`: `'2'` → `'3'` (발송 가능일 3일)
+  - `ProductionPlace`: `'Overseas'` → `'KR'` (Qoo10 Japan Type2 해외 ISO 코드)
+  - `buildSearchKeywords()` 추가 — jpTitle 단어 추출(단위·괄호·숫자·1~3자 알파벳 제거) + 한국어 보조, 최대 10개
   - CREATE/UPDATE 성공 후 자동 호출, `registrationMessage`에 `[descMethod=vision|text|skip]` 기록
 
 #### 🔄 대기 중
@@ -432,7 +436,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-04-02 | changeFlags 플래그별 분기 구현 완료 + jpTitle 컬럼 추가 + DetailImages/ExtraImages 역할 정의 + editGoodsImage/editGoodsMultiImage 파일 목록 추가*
+*마지막 업데이트: 2026-04-08 | payload 기본값 수정 (AvailableDateValue=3, ProductionPlace=KR) + SearchKeyword 자동생성 추가*
 
 ---
 

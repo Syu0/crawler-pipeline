@@ -69,6 +69,44 @@ npm run qoo10:auto-register:dry
 npm run qoo10:auto-register
 ```
 
+### 기존 등록 상품 업데이트 (needsUpdate + changeFlags)
+
+이미 Qoo10에 등록된 상품(`qoo10ItemId` 있음)을 부분 업데이트할 때 사용한다.
+
+**시트에서 설정:**
+1. 대상 행의 `needsUpdate` 컬럼 → `YES`
+2. `changeFlags` 컬럼 → 아래 플래그 입력
+
+| 플래그 | 호출 API | 설명 |
+|--------|----------|------|
+| `REFRESH` (기본값, 빈값과 동일) | SetGoodsPriceQty + EditGoodsImage + UpdateGoods(카테고리) | 가격·대표이미지·카테고리 전체 갱신 |
+| `REBUILD` | REFRESH 전체 + 타이틀 재번역 + 상세 HTML 재생성 | 전체 갱신 (유료 OpenRouter 포함) |
+| `PRICE` | SetGoodsPriceQty | 가격·재고 수량만 |
+| `IMAGE` | EditGoodsImage + EditGoodsMultiImage | 대표이미지 + 슬라이더 이미지 |
+| `CATEGORY` | UpdateGoods | 카테고리 재resolve → 적용. category_mapping 시트에 MANUAL 매핑 등록 후 사용 |
+| `TITLE` | UpdateGoods | 일본어 타이틀 재번역 → jpTitle write-back + 적용 |
+| `DESC` | EditGoodsContents | 일본어 상세페이지 재생성 → 적용 |
+
+복수 플래그는 파이프(`|`) 구분: 예) `PRICE|IMAGE`, `TITLE|DESC`
+
+> `REFRESH` / `REBUILD`는 단독 사용. 다른 플래그와 조합 불가.
+
+**실행:**
+```bash
+npm run qoo10:auto-register:dry   # 대상 행·플래그 확인
+npm run qoo10:auto-register       # 실제 적용
+```
+
+성공 후 `needsUpdate`는 자동으로 `NO`로 초기화된다.
+
+**예시: 카테고리 수동 수정 후 재적용**
+1. `category_mapping` 시트에서 해당 카테고리를 MANUAL 타입으로 수정
+2. 대상 행: `needsUpdate=YES`, `changeFlags=CATEGORY`
+3. `npm run qoo10:auto-register:dry` → 카테고리 resolve 결과 확인
+4. `npm run qoo10:auto-register` → 적용
+
+---
+
 ### cron 자동화 (옵션)
 
 Mac Mini에서 매일 오전 9시에 promote를 자동 실행하려면:

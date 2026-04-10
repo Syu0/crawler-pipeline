@@ -102,13 +102,54 @@ function buildFallbackTitle(categoryPath, meta) {
 
 // ─── 3. OpenRouter API 호출 ───────────────────────────────────────────────
 
+const OPENROUTER_MAX_RETRIES = 3;
+const OPENROUTER_RETRY_BASE_MS = 2000; // 2s → 4s → 8s
+
+/**
+ * OpenRouter API 호출 공통 함수 (retry with exponential backoff)
+ * 401/429/5xx: 최대 3회 재시도
+ */
+async function callOpenRouterWithRetry(body) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY not set in backend/.env');
+
+  let lastError;
+  for (let attempt = 1; attempt <= OPENROUTER_MAX_RETRIES; attempt++) {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (response.ok) {
+      return response.json();
+    }
+
+    // 에러 body 읽기 (rate limit 원인 파악용)
+    let errBody = '';
+    try { errBody = await response.text(); } catch (_) {}
+    const errMsg = `OpenRouter ${response.status} ${response.statusText}: ${errBody.slice(0, 200)}`;
+
+    const isRetryable = response.status === 401 || response.status === 429 || response.status >= 500;
+    if (!isRetryable || attempt === OPENROUTER_MAX_RETRIES) {
+      throw new Error(errMsg);
+    }
+
+    const waitMs = OPENROUTER_RETRY_BASE_MS * Math.pow(2, attempt - 1);
+    console.warn(`[titleTranslator] ${errMsg} — retry ${attempt}/${OPENROUTER_MAX_RETRIES} after ${waitMs}ms`);
+    await new Promise(r => setTimeout(r, waitMs));
+    lastError = errMsg;
+  }
+  throw new Error(lastError);
+}
+
 /**
  * OpenRouter API로 SEO 최적화 일본어 타이틀 생성.
  */
 async function callClaudeForTitle(krTitle, categoryPath, meta) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY not set in backend/.env');
-
   const metaHints = [];
   if (meta.brand) metaHints.push(`ブランド: ${meta.brand}`);
   if (meta.numbers.length > 0) metaHints.push(`数量/容量: ${meta.numbers.join(', ')}`);
@@ -131,24 +172,12 @@ ${metaHints.length > 0 ? metaHints.join('\n') : ''}
 
 日本語SEOタイトル:`;
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'anthropic/claude-haiku-4-5',
-      max_tokens: 200,
-      messages: [{ role: 'user', content: prompt }],
-    }),
+  const data = await callOpenRouterWithRetry({
+    model: 'anthropic/claude-haiku-4-5',
+    max_tokens: 200,
+    messages: [{ role: 'user', content: prompt }],
   });
 
-  if (!response.ok) {
-    throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
-  }
-
-  const data = await response.json();
   const raw = data.choices?.[0]?.message?.content?.trim() || '';
   return raw.replace(/^["「『]|["」』]$/g, '').trim().slice(0, MAX_JP_TITLE_LEN);
 }

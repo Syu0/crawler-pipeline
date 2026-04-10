@@ -635,32 +635,47 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
       msgParts.push(`[priceUpdate=${priceResult.success ? 'ok' : 'fail'}]`);
     }
 
+    // EXT_ prefix 상품은 쿠팡 수집 데이터가 없으므로
+    // IMAGE / DESC changeFlag는 skip한다.
+    // PRICE / CATEGORY / TITLE은 정상 처리.
+    const isExternalGoods = row.vendorItemId?.startsWith('EXT_');
+
     // ── IMAGE → EditGoodsImage + EditGoodsMultiImage ──
     let imageUpdateMethod = 'skip';
     let multiImageMethod = 'skip';
     if (flags.image) {
-      if (payload.StandardImage) {
-        const imageResult = await editGoodsImage(existingQoo10ItemId, payload.StandardImage);
-        imageUpdateMethod = imageResult.success ? 'ok' : (imageResult.skipped ? 'skip' : 'fail');
-        if (imageUpdateMethod === 'fail') console.warn(`  StandardImage update failed: ${imageResult.message}`);
+      if (isExternalGoods) {
+        console.log(`  [skip] EXT_ 상품 — IMAGE flag 미지원 (쿠팡 수집 데이터 없음)`);
+        msgParts.push('[imageUpdate=skip(EXT_)]');
+      } else {
+        if (payload.StandardImage) {
+          const imageResult = await editGoodsImage(existingQoo10ItemId, payload.StandardImage);
+          imageUpdateMethod = imageResult.success ? 'ok' : (imageResult.skipped ? 'skip' : 'fail');
+          if (imageUpdateMethod === 'fail') console.warn(`  StandardImage update failed: ${imageResult.message}`);
+        }
+        if (payload.ExtraImages && payload.ExtraImages.length > 0) {
+          const multiImageResult = await editGoodsMultiImage(existingQoo10ItemId, payload.ExtraImages);
+          multiImageMethod = multiImageResult.success ? 'ok' : 'fail';
+          if (multiImageMethod === 'fail') console.warn(`  MultiImage upload failed: ${multiImageResult.resultMsg}`);
+        }
+        msgParts.push(`[imageUpdate=${imageUpdateMethod}]`);
       }
-      if (payload.ExtraImages && payload.ExtraImages.length > 0) {
-        const multiImageResult = await editGoodsMultiImage(existingQoo10ItemId, payload.ExtraImages);
-        multiImageMethod = multiImageResult.success ? 'ok' : 'fail';
-        if (multiImageMethod === 'fail') console.warn(`  MultiImage upload failed: ${multiImageResult.resultMsg}`);
-      }
-      msgParts.push(`[imageUpdate=${imageUpdateMethod}]`);
     }
 
     // ── DESC → EditGoodsContents ──
     let descMethod = 'skip';
     if (flags.desc) {
-      const descResult = await generateJapaneseDescription(row);
-      descMethod = descResult.method;
-      if (descResult.html) {
-        await editGoodsContents({ itemCode: existingQoo10ItemId, htmlContent: descResult.html });
+      if (isExternalGoods) {
+        console.log(`  [skip] EXT_ 상품 — DESC flag 미지원 (쿠팡 수집 데이터 없음)`);
+        msgParts.push('[descMethod=skip(EXT_)]');
+      } else {
+        const descResult = await generateJapaneseDescription(row);
+        descMethod = descResult.method;
+        if (descResult.html) {
+          await editGoodsContents({ itemCode: existingQoo10ItemId, htmlContent: descResult.html });
+        }
+        msgParts.push(`[descMethod=${descMethod}]`);
       }
-      msgParts.push(`[descMethod=${descMethod}]`);
     }
 
     // ── MASTER UPDATE: EditGoodsInventory 재호출 ──

@@ -54,6 +54,12 @@ const COUPANG_DATA_HEADERS = [
   'status',
   'updatedAt',
   'errorMessage',
+
+  // ── [GRP] 멀티옵션 그룹 ──────────────────────────────
+  'groupId',
+  'groupRole',
+  'optionLabel',
+  'optionIncluded',
 ];
 
 // 그룹별 컬럼 범위 (배경색 + 글자색 적용용)
@@ -63,6 +69,7 @@ const HEADER_GROUPS = [
   { label: '[Q] Qoo10',    start: 21, end: 32, bg: { red: 0.290, green: 0.565, blue: 0.851 }, fg: { red: 1, green: 1, blue: 1 } }, // #4A90D9 진한 파랑 (글자 흰색)
   { label: '[USER]',       start: 33, end: 34, bg: { red: 1,     green: 1,     blue: 1     }, fg: { red: 0, green: 0, blue: 0 } }, // #FFFFFF 흰색
   { label: '[SYS]',        start: 35, end: 37, bg: { red: 0.929, green: 0.906, blue: 0.965 }, fg: { red: 0, green: 0, blue: 0 } }, // #EDE7F6 연보라
+  { label: '[GRP]',        start: 38, end: 41, bg: { red: 0.984, green: 0.929, blue: 0.831 }, fg: { red: 0, green: 0, blue: 0 } }, // #FBECD4 연주황
 ];
 
 // 허용된 status ENUM 값 (파이프라인 전체 기준)
