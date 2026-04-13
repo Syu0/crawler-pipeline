@@ -54,6 +54,17 @@
 
 ## 완료된 작업
 
+### 2026-04-13
+- **breadcrumbTexts 수집 누락 버그 수정 완료**
+  - `buildImageExtractFn()`에 breadcrumbTexts 배열 추출 추가
+  - `collect-discovered.js` / `collect-one.js`에 `upsertCoupangCategory` 호출 삽입
+  - 수집 시 coupang_categorys 자동 기록 동작 검증 완료
+- **FALLBACK 카테고리 정상화 완료**
+  - 3개 재수집 → breadcrumbTexts 확보 → coupang_categorys 기록
+  - 그룹 A(마켓 등록 2개): changeFlags=CATEGORY → auto-register 처리 완료
+  - 그룹 B(COLLECTED 1개 / 87298879452): MANUAL 카테고리 매핑 추가 후 Qoo10 신규 등록 완료
+  - categoryMatchType=FALLBACK 전체 0건
+
 ### 2026-04-10
 - **REGISTERED 9개 jpTitle 번역 업데이트 완료** (9/9 SUCCESS)
   - 번역 방식: api (Claude Haiku) — fallback 없음

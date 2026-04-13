@@ -171,6 +171,8 @@ write calls 쿼터: 10회/세션
   dry-run 모드에서는 500ms 고정.
 - 동일 `coupang_product_id`를 가진 vendorItemId 변형들은 세션 내에서 중복 Playwright 접근을 하지 않는다.
   첫 번째 수집 후 나머지는 `registrationMessage=[dedup]` + status=COLLECTED 처리.
+- collect 스크립트는 수집 완료 후 breadcrumbTexts가 있으면 반드시 `upsertCoupangCategory()`를 호출한다.
+  category_mapping AUTO match는 이 데이터 없이는 동작하지 않는다.
 - collect 스크립트는 행 처리 전마다 데몬 잔여시간을 체크한다.
   잔여 2분 이하 시 Graceful Exit (EXIT_REASON=DAEMON_EXPIRING). 재개 시 DISCOVERED 행이 남아있으면 자동으로 이어서 처리.
 - daemon `running: true`는 프로세스 생존만을 의미한다. 수집 재개 가능 여부는 반드시
@@ -247,6 +249,8 @@ write calls 쿼터: 10회/세션
   - **ExtraImages**: 슬라이더 썸네일 DOM 파싱 결과 → `EditGoodsMultiImage` 상단 갤러리 등록용
   - **DetailImages**: 상세페이지 이미지 DOM 파싱 결과 → `descriptionGenerator` vision 입력용
   - ⚠️ 현재 `buildImageExtractFn()` return에 `detail` 누락 버그 → DetailImages 항상 빈 배열 (수정 예정: oc/fix-detail-images)
+  - **breadcrumbTexts**: 브레드크럼 텍스트 배열 수집 → coupang_categorys 자동 upsert
+    (collect 시마다 자동 기록, category_mapping AUTO match 키 소스)
   - HARD_BLOCK 0, 3/3 연속 수집 성공 검증 완료
 - [x] discover Browser Relay 방식 전환 | 브랜치: oc/browser-relay-discover (머지 완료)
   - Playwright 데몬 → Browser Relay `evaluate()` 로 교체
@@ -283,6 +287,11 @@ write calls 쿼터: 10회/세션
   - 기존 동작: MANUAL 타입 행은 시트의 기존 `jpCategoryIdUsed` 값 고수 → 새 MANUAL 매핑 무시
   - 영향 대상 6개 (categoryMatchType=FALLBACK, jpCategoryIdUsed=320002604) → 300000546(시리얼/견과류) 정상 반영
 
+- [x] **breadcrumbTexts 수집 누락 버그 수정** | 브랜치: oc/fix-image-collection (머지 완료)
+  - `buildImageExtractFn()`에 breadcrumbTexts 배열 추출 추가
+  - `collect-discovered.js` / `collect-one.js`에 `upsertCoupangCategory` 호출 삽입
+  - 수집 시 coupang_categorys 시트 자동 upsert 동작 확인
+  - FALLBACK 3개 재수집 완료, 그룹 A 2개 CATEGORY 플래그 처리 완료
 - [x] **B-01/B-02 버그 수정** | 브랜치: oc/fix-bugs-b01-b02 (PR #14 머지 완료, 2026-04-01)
   - B-01: `collectProductData` / `collectPriceStockReview` ItemTitle 빈값 시 Error throw → status=ERROR
   - B-02: dedup `imageCopyFields`에서 `StandardImage` 제거 + 셀렉터 `querySelectorAll+find`로 교체 + `vendor_inventory` 경로 제외
@@ -436,7 +445,7 @@ crawler-pipeline/
 
 ---
 
-*마지막 업데이트: 2026-04-08 | payload 기본값 수정 (AvailableDateValue=3, ProductionPlace=KR) + SearchKeyword 자동생성 추가*
+*마지막 업데이트: 2026-04-13 | breadcrumbTexts 수집 수정 + FALLBACK 처리 완료*
 
 ---
 
