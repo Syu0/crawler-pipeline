@@ -80,29 +80,24 @@ function normalizeImageUrl(url) {
 function buildImageExtractFn() {
   return `() => {
     // 메인 이미지: twc-w-full + twc-max-h 클래스 조합 (현행 쿠팡 구조, 492x492ex 대표 이미지)
-    // vendor_inventory 경로는 옵션 썸네일이므로 제외
-    const isValidMain = (el) => el?.src && !el.src.includes('vendor_inventory');
+    // vendor_inventory 경로도 메인 이미지면 유효 — 셀렉터가 이미 메인 영역에 특화되어 있음
+    const hasSrc = (el) => !!el?.src;
     const mainEl =
-      [...document.querySelectorAll('img.twc-w-full[class*="twc-max-h"]')].find(isValidMain) ||
-      [...document.querySelectorAll('.main-image img')].find(isValidMain) ||
-      [...document.querySelectorAll('[class*="prod-image"] img')].find(isValidMain) ||
-      [...document.querySelectorAll('[class*="cdp-img"] img')].find(isValidMain) ||
-      [...document.querySelectorAll('img[class*="main-image"]')].find(isValidMain);
+      [...document.querySelectorAll('img.twc-w-full[class*="twc-max-h"]')].find(hasSrc) ||
+      [...document.querySelectorAll('.main-image img')].find(hasSrc) ||
+      [...document.querySelectorAll('[class*="prod-image"] img')].find(hasSrc) ||
+      [...document.querySelectorAll('[class*="cdp-img"] img')].find(hasSrc) ||
+      [...document.querySelectorAll('img[class*="main-image"]')].find(hasSrc);
     const main = mainEl?.src || null;
 
-    // Phase 3 (SliderImages) + 상세 이미지 수집 보강
-    const sliderEls = [
-      '.subType-IMAGE img',
-      '.prod-image-list img',
-      '.thumb-list img',
-      '.prod-image__thumb img',
-      '.product-image-thumbnail img',
-      '.slick-slide img',
-      '.cdp-gallery img',
-      '.image-slider img',
-    ].flatMap((sel) => Array.from(document.querySelectorAll(sel)));
+    // 슬라이더 썸네일: twc-w-[70px] 클래스를 가진 img (DOM 분석 결과 — 케이스 1: 3개, 케이스 2: 1개 확인)
+    const allImgs = Array.from(document.querySelectorAll('img'));
+    const sliderEls = allImgs.filter(el =>
+      el.className && el.className.includes('twc-w-[70px]') &&
+      el.src && el.src.includes('thumbnail.coupangcdn')
+    );
 
-    // 슬라이더 추가 전 원래 ExtraImages 셀렉터 — 상세페이지 이미지 수집 검증 완료
+    // 상세페이지 이미지: .subType-IMAGE (슬라이더와 독립적으로 수집)
     const detailEls = [
       '.subType-IMAGE img',
       '[class*="detail-image"] img',
@@ -116,18 +111,24 @@ function buildImageExtractFn() {
 
     const unique = (arr) => [...new Set(arr.filter(Boolean))];
 
-    const slider = unique(sliderEls.map(toUrl));
+    // 슬라이더 URL 해상도 업그레이드: 48x48ex → 492x492ex (메인 이미지와 동일 해상도)
+    const slider = unique(
+      sliderEls.map(toUrl).map(src => src.replace('/48x48ex/', '/492x492ex/'))
+    );
     const detail = unique(detailEls.map(toUrl));
 
-    // 브레드크럼에서 categoryId 추출
+    // 브레드크럼에서 categoryId + breadcrumbTexts 추출
     const breadcrumbLinks = Array.from(
       document.querySelectorAll('ul.breadcrumb li a[href*="/np/categories/"]')
     );
     let categoryId = null;
-    if (breadcrumbLinks.length > 0) {
-      const lastHref = breadcrumbLinks[breadcrumbLinks.length - 1].href;
-      const match = lastHref.match(/\\/np\\/categories\\/(\\d+)/);
-      categoryId = match ? match[1] : null;
+    const breadcrumbTexts = [];
+    for (const a of breadcrumbLinks) {
+      const match = a.href.match(/\\/np\\/categories\\/(\\d+)/);
+      if (match) {
+        categoryId = match[1];
+        breadcrumbTexts.push(a.textContent.trim());
+      }
     }
 
     return {
@@ -135,6 +136,7 @@ function buildImageExtractFn() {
       extra: slider,    // ExtraImages: 슬라이더만
       detail: detail,   // DetailImages: 상세페이지만
       categoryId,
+      breadcrumbTexts,
     };
   }`;
 }
@@ -190,6 +192,7 @@ async function collectProductData(productId, vendorItemId, _itemId) {
   let ReviewCount = null;
   let ReviewAvgRating = null;
   let categoryId = null;
+  let breadcrumbTexts = [];
 
   // ── Step 1: navigate ────────────────────────────────────────────────────────
   try {
@@ -216,6 +219,7 @@ async function collectProductData(productId, vendorItemId, _itemId) {
     DetailImages = [...new Set(rawDetail.map(normalizeImageUrl).filter(Boolean))];
 
     categoryId = result.categoryId || null;
+    breadcrumbTexts = Array.isArray(result.breadcrumbTexts) ? result.breadcrumbTexts : [];
     successfulSteps.push(2);
   } catch (e) {
     console.warn(`  [step2/images] ${e.message.split('\n')[0]}`);
@@ -307,6 +311,7 @@ async function collectProductData(productId, vendorItemId, _itemId) {
     ReviewCount,
     ReviewAvgRating,
     categoryId,
+    breadcrumbTexts,
     CollectedPhases: successfulSteps.join(','),
   };
 }
