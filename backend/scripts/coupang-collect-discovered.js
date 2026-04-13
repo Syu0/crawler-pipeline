@@ -383,7 +383,7 @@ async function main() {
       }
 
       const ExtraImages = Array.isArray(collected.ExtraImages)
-        ? collected.ExtraImages.join('|')
+        ? JSON.stringify(collected.ExtraImages)
         : (collected.ExtraImages || '');
 
       const data = {

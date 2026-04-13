@@ -171,7 +171,7 @@ async function main() {
   await ensureHeaders(SPREADSHEET_ID, TAB, HEADERS);
 
   const ExtraImages = Array.isArray(collected.ExtraImages)
-    ? collected.ExtraImages.join('|')
+    ? JSON.stringify(collected.ExtraImages)
     : (collected.ExtraImages || '');
 
   const data = {
