@@ -19,6 +19,7 @@ const {
   getSheetsClient,
   ensureHeaders,
   upsertRow,
+  upsertCoupangCategory,
 } = require('../coupang/sheetsClient');
 const { COUPANG_DATA_HEADERS } = require('../coupang/sheetSchema');
 const { collectProductData } = require('../coupang/coupangApiClient');
@@ -199,6 +200,18 @@ async function main() {
     status:             'COLLECTED',
     errorMessage:       '',
   };
+
+  if (collected.breadcrumbTexts && collected.breadcrumbTexts.length > 0) {
+    try {
+      await upsertCoupangCategory(sheets, SPREADSHEET_ID, {
+        categoryId: collected.categoryId,
+        breadcrumbTexts: collected.breadcrumbTexts,
+      });
+      console.log(`  [categorys] upsert ok (categoryId=${collected.categoryId}, texts=${collected.breadcrumbTexts.join(' > ')})`);
+    } catch (e) {
+      console.warn(`  [categorys] upsert 실패 (categoryId=${collected.categoryId}):`, e.message);
+    }
+  }
 
   await upsertRow(SPREADSHEET_ID, TAB, HEADERS, data, 'vendorItemId', 'itemId');
   console.log(`  ✓ COLLECTED (CollectedPhases: ${collected.CollectedPhases})`);

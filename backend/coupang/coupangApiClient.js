@@ -117,15 +117,18 @@ function buildImageExtractFn() {
     );
     const detail = unique(detailEls.map(toUrl));
 
-    // 브레드크럼에서 categoryId 추출
+    // 브레드크럼에서 categoryId + breadcrumbTexts 추출
     const breadcrumbLinks = Array.from(
       document.querySelectorAll('ul.breadcrumb li a[href*="/np/categories/"]')
     );
     let categoryId = null;
-    if (breadcrumbLinks.length > 0) {
-      const lastHref = breadcrumbLinks[breadcrumbLinks.length - 1].href;
-      const match = lastHref.match(/\\/np\\/categories\\/(\\d+)/);
-      categoryId = match ? match[1] : null;
+    const breadcrumbTexts = [];
+    for (const a of breadcrumbLinks) {
+      const match = a.href.match(/\\/np\\/categories\\/(\\d+)/);
+      if (match) {
+        categoryId = match[1];
+        breadcrumbTexts.push(a.textContent.trim());
+      }
     }
 
     return {
@@ -133,6 +136,7 @@ function buildImageExtractFn() {
       extra: slider,    // ExtraImages: 슬라이더만
       detail: detail,   // DetailImages: 상세페이지만
       categoryId,
+      breadcrumbTexts,
     };
   }`;
 }
@@ -188,6 +192,7 @@ async function collectProductData(productId, vendorItemId, _itemId) {
   let ReviewCount = null;
   let ReviewAvgRating = null;
   let categoryId = null;
+  let breadcrumbTexts = [];
 
   // ── Step 1: navigate ────────────────────────────────────────────────────────
   try {
@@ -214,6 +219,7 @@ async function collectProductData(productId, vendorItemId, _itemId) {
     DetailImages = [...new Set(rawDetail.map(normalizeImageUrl).filter(Boolean))];
 
     categoryId = result.categoryId || null;
+    breadcrumbTexts = Array.isArray(result.breadcrumbTexts) ? result.breadcrumbTexts : [];
     successfulSteps.push(2);
   } catch (e) {
     console.warn(`  [step2/images] ${e.message.split('\n')[0]}`);
@@ -305,6 +311,7 @@ async function collectProductData(productId, vendorItemId, _itemId) {
     ReviewCount,
     ReviewAvgRating,
     categoryId,
+    breadcrumbTexts,
     CollectedPhases: successfulSteps.join(','),
   };
 }
