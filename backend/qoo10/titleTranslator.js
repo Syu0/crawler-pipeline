@@ -217,4 +217,29 @@ async function translateTitle(krTitle, categoryPath = null) {
   return { jpTitle, method: 'fallback', confidence: 0.3, meta };
 }
 
-module.exports = { translateTitle, extractMeta, buildFallbackTitle };
+/**
+ * 일본어 Qoo10 타이틀 → 한국어 상품명 역번역.
+ * ItemTitle 컬럼 write-back용 배치 역번역에 사용.
+ *
+ * @param {string} jpTitle - 일본어 상품명
+ * @returns {Promise<string>} 한국어 상품명
+ */
+async function translateTitleJpToKr(jpTitle) {
+  if (!jpTitle || typeof jpTitle !== 'string' || jpTitle.trim() === '') {
+    throw new Error('translateTitleJpToKr: jpTitle is required');
+  }
+
+  const data = await callOpenRouterWithRetry({
+    model: 'anthropic/claude-haiku-4-5',
+    max_tokens: 200,
+    messages: [{
+      role: 'user',
+      content: `다음 일본어 상품명을 한국어로 번역해줘. 상품명만 출력.\n\n${jpTitle.trim()}`,
+    }],
+  });
+
+  const raw = data.choices?.[0]?.message?.content?.trim() || '';
+  return raw.replace(/^["「『]|["」』]$/g, '').trim();
+}
+
+module.exports = { translateTitle, translateTitleJpToKr, extractMeta, buildFallbackTitle };

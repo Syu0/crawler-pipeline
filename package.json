@@ -51,7 +51,9 @@
     "sheets:reset": "node backend/scripts/reset-coupang-datas.js",
     "sheets:reset:dry": "node backend/scripts/reset-coupang-datas.js --dry-run",
     "qoo10:import:existing": "node scripts/qoo10-import-existing-goods.js",
-    "qoo10:import:existing:dry": "node scripts/qoo10-import-existing-goods.js --dry-run"
+    "qoo10:import:existing:dry": "node scripts/qoo10-import-existing-goods.js --dry-run",
+    "qoo10:translate:titles": "node scripts/qoo10-translate-titles.js",
+    "qoo10:translate:titles:dry": "node scripts/qoo10-translate-titles.js --dry-run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

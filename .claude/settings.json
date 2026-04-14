@@ -5,7 +5,10 @@
       "Bash(node --check backend/coupang/coupangApiClient.js)",
       "Bash(node -e \":*)",
       "Bash(npm install:*)",
-      "Bash(node -e \"require\\(''got-scraping''\\); console.log\\(''ok''\\)\")"
+      "Bash(node -e \"require\\(''got-scraping''\\); console.log\\(''ok''\\)\")",
+      "Bash(node scripts/qoo10-import-existing-goods.js --dry-run --file=/Users/judy/dev/crawler-pipeline/Qoo10_ItemInfo_20260408114140.xlsx)",
+      "Bash(node -e ':*)",
+      "Bash(node scripts/qoo10-import-existing-goods.js --file=/Users/judy/dev/crawler-pipeline/Qoo10_ItemInfo_20260408114140.xlsx)"
     ]
   }
 }

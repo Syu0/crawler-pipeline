@@ -2,30 +2,36 @@
 /**
  * qoo10-import-existing-goods.js
  *
- * Qoo10 GetAllGoodsInfo API로 기존 운영 상품 조회 → coupang_datas 시트에 역수입(upsert).
+ * Qoo10 엑셀 export 파일을 파싱하여 coupang_datas 시트에 역수입(upsert).
+ * (GetAllGoodsInfo API는 ItemTitle을 반환하지 않아 엑셀 방식으로 전환)
  *
  * PK 결정 규칙:
- *   SellerCode가 숫자로만 구성된 문자열 → vendorItemId = SellerCode
- *   그 외 (빈값 또는 다른 형식)           → vendorItemId = "EXT_" + qoo10ItemId
+ *   seller_unique_item_id가 숫자로만 구성된 문자열 → vendorItemId = seller_unique_item_id
+ *   그 외 (빈값 또는 다른 형식)                    → vendorItemId = "EXT_" + item_number
  *
  * Usage:
- *   node scripts/qoo10-import-existing-goods.js --dry-run   # API 조회 후 write skip
- *   node scripts/qoo10-import-existing-goods.js             # 실제 upsert
- *   npm run qoo10:import:existing:dry
- *   npm run qoo10:import:existing
+ *   node scripts/qoo10-import-existing-goods.js --file=Qoo10_ItemInfo_20260408114140.xlsx
+ *   node scripts/qoo10-import-existing-goods.js --file=Qoo10_ItemInfo_20260408114140.xlsx --dry-run
+ *   npm run qoo10:import:existing -- --file=Qoo10_ItemInfo_20260408114140.xlsx
+ *   npm run qoo10:import:existing:dry -- --file=Qoo10_ItemInfo_20260408114140.xlsx
  */
 
 'use strict';
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend', '.env') });
 
+const path = require('path');
+const XLSX = require('xlsx');
 const { getSheetsClient } = require('../backend/coupang/sheetsClient');
-const { qoo10PostMethod } = require('../backend/qoo10/client');
-const { COUPANG_DATA_HEADERS } = require('../backend/coupang/sheetSchema');
+
 
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 const TAB = 'coupang_datas';
 const DRY_RUN = process.argv.includes('--dry-run');
+
+// --file=path.xlsx 파싱
+const fileArg = process.argv.find(a => a.startsWith('--file='));
+const FILE_PATH = fileArg ? fileArg.replace('--file=', '') : null;
 
 // 컬럼 인덱스 → 컬럼 문자 변환
 function colLetter(idx) {
@@ -39,178 +45,213 @@ function colLetter(idx) {
 }
 
 /**
- * GetAllGoodsInfo S1(판매중) + S2(일시정지) 순회 조회 후 ItemCode 기준 dedup
+ * 엑셀 파일 파싱 → 상품 행 배열 반환
+ * 엑셀 구조:
+ *   1행(index 0): 영문 컬럼명 (item_number, seller_unique_item_id, ...)
+ *   2~4행(index 1~3): 한국어 설명 / 필수여부 안내 / 상세 안내
+ *   5행(index 4)~: 실제 데이터
  */
-async function fetchAllGoods() {
-  const STATUS_LIST = ['S1', 'S2'];
-  const allItems = [];
+function parseExcel(filePath) {
+  const resolvedPath = path.resolve(filePath);
+  console.log(`[import] 엑셀 파일 파싱: ${resolvedPath}`);
 
-  for (const itemStatus of STATUS_LIST) {
-    let page = 1;
-    while (true) {
-      console.log(`[import] GetAllGoodsInfo ItemStatus=${itemStatus} page=${page} 조회 중...`);
-      const res = await qoo10PostMethod('ItemsLookup.GetAllGoodsInfo', {
-        Page: String(page),
-        ItemStatus: itemStatus,
-        returnType: 'application/json',
-      });
+  const wb = XLSX.readFile(resolvedPath);
+  const ws = wb.Sheets[wb.SheetNames[0]];
 
-      // 응답 구조: { ResultObject: { Items: [...], TotalPages: N, ... } }
-      const result = res?.ResultObject;
-      const items = result?.Items;
-      const totalPages = result?.TotalPages ?? 1;
+  // header: 1 → 모든 행을 배열로 읽음 (헤더 행 포함)
+  const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-      if (!items || items.length === 0) {
-        console.log(`[import] ItemStatus=${itemStatus} page=${page} 응답 빈 배열 — 종료`);
-        break;
-      }
+  // 0행 = 영문 헤더키, 4행(index 4)부터 실제 데이터
+  const headerKeys = rawRows[0];
+  const dataArrays = rawRows.slice(4);
 
-      console.log(`[import] ItemStatus=${itemStatus} page=${page}/${totalPages}: ${items.length}개 수신`);
-      allItems.push(...items);
-
-      if (page >= totalPages) break;
-      page++;
-    }
-  }
-
-  // ItemCode 기준 dedup (S1/S2 중복 가능성 제거)
-  const seen = new Set();
-  const deduped = allItems.filter((item) => {
-    const key = String(item.ItemCode);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+  // 배열 → 객체 변환
+  const rows = dataArrays.map(arr => {
+    const obj = {};
+    headerKeys.forEach((key, i) => { obj[key] = arr[i] ?? ''; });
+    return obj;
   });
 
-  if (deduped.length < allItems.length) {
-    console.log(`[import] dedup: ${allItems.length}개 → ${deduped.length}개 (중복 ${allItems.length - deduped.length}개 제거)`);
-  }
+  // item_number가 숫자인 행만 (빈행 제외)
+  const data = rows.filter(r =>
+    r['item_number'] && /^\d+$/.test(String(r['item_number']).trim())
+  );
 
-  return deduped;
+  console.log(`[import] 엑셀 파싱 완료: ${data.length}개 상품`);
+  return data;
+}
+
+const CELL_MAX = 49000; // Google Sheets 셀 최대 50000자, 안전 마진 포함
+
+function truncate(val) {
+  const s = String(val ?? '');
+  return s.length > CELL_MAX ? s.slice(0, CELL_MAX) : s;
+}
+
+/**
+ * 엑셀 행 → 시트 필드 매핑 + PK 결정
+ */
+function mapRow(row) {
+  const qoo10ItemId = String(row['item_number']).trim();
+  const sellerCode  = String(row['seller_unique_item_id'] || '').trim();
+  const vendorItemId = /^\d+$/.test(sellerCode) ? sellerCode : `EXT_${qoo10ItemId}`;
+
+  // ExtraImages: $$ 구분 → JSON 배열 문자열
+  const extraImages = row['image_other_url']
+    ? JSON.stringify(
+        String(row['image_other_url']).split('$$').map(u => u.trim()).filter(Boolean)
+      )
+    : '';
+
+  return {
+    vendorItemId,
+    qoo10ItemId,
+    qoo10SellerCode:     sellerCode,
+    jpCategoryIdUsed:    String(row['category_number'] || ''),
+    jpTitle:             truncate(row['item_name'] || ''),
+    qoo10SellingPrice:   row['price_yen'] ? Number(row['price_yen']) : '',
+    OptionsRaw:          truncate(row['option_info'] || ''),
+    StandardImage:       truncate(row['image_main_url'] || ''),
+    ExtraImages:         truncate(extraImages),
+    SearchKeyword:       truncate(row['search_keyword'] || ''),
+    WeightKg:            row['item_weight'] ? Number(row['item_weight']) : '',
+    // 파생 고정값
+    ItemTitle:           '',
+    categoryMatchType:   'MANUAL',
+    registrationMode:    'REAL',
+    registrationStatus:  'SUCCESS',
+    registrationMessage: '[imported=qoo10_native]',
+    status:              'LIVE',
+    updatedAt:           new Date().toISOString(),
+    _pkType:             vendorItemId.startsWith('EXT_') ? 'EXT_' : 'coupang',
+  };
 }
 
 async function main() {
+  if (!FILE_PATH) {
+    console.error('[import] ERROR: --file 옵션이 필요합니다.');
+    console.error('  예: node scripts/qoo10-import-existing-goods.js --file=Qoo10_ItemInfo_20260408114140.xlsx');
+    process.exit(1);
+  }
   if (!SPREADSHEET_ID) {
     console.error('[import] ERROR: GOOGLE_SHEET_ID가 설정되지 않았습니다.');
     process.exit(1);
   }
 
-  // ── 1. Qoo10 API 조회 ─────────────────────────────────────────────────────
-  const items = await fetchAllGoods();
-  console.log(`[import] 총 ${items.length}개 상품 조회 완료`);
-
-  if (items.length === 0) {
+  // ── 1. 엑셀 파싱 ────────────────────────────────────────────────────────────
+  const rawRows = parseExcel(FILE_PATH);
+  if (rawRows.length === 0) {
     console.log('[import] 역수입할 상품이 없습니다. 종료합니다.');
     return;
   }
 
-  // PK 결정 및 콘솔 출력
-  const importRows = items.map((item) => {
-    const qoo10ItemId = String(item.ItemCode || '');
-    const sellerCode  = String(item.SellerCode || '');
-    const vendorItemId = /^\d+$/.test(sellerCode) ? sellerCode : `EXT_${qoo10ItemId}`;
-    const pkType = vendorItemId.startsWith('EXT_') ? 'EXT_' : 'vendorItemId';
+  const importRows = rawRows.map(mapRow);
 
-    return {
-      vendorItemId,
-      qoo10ItemId,
-      ItemTitle: String(item.ItemTitle || ''),
-      qoo10SellingPrice: String(item.Price || ''),
-      qoo10SellerCode: sellerCode,
-      pkType,
-    };
-  });
+  const extCount    = importRows.filter(r => r._pkType === 'EXT_').length;
+  const coupangCount = importRows.filter(r => r._pkType === 'coupang').length;
+  console.log(`[import] PK 결정 — EXT_ 가상키: ${extCount}개 / 쿠팡 연결: ${coupangCount}개`);
 
-  console.log('');
-  console.log('[import] PK 결정 결과:');
-  for (const r of importRows) {
-    console.log(`  [${r.pkType}] vendorItemId=${r.vendorItemId} | qoo10ItemId=${r.qoo10ItemId} | title=${r.ItemTitle.slice(0, 40)}`);
-  }
-  console.log('');
-
+  // dry-run: 목록 출력 후 종료
   if (DRY_RUN) {
+    console.log('');
+    console.log('[import] DRY-RUN 미리보기 (샘플 최대 10개):');
+    for (const r of importRows.slice(0, 10)) {
+      console.log(`  [${r._pkType}] vendorItemId=${r.vendorItemId} | qoo10ItemId=${r.qoo10ItemId} | jpTitle=${r.jpTitle.slice(0, 40)}`);
+    }
+    if (importRows.length > 10) {
+      console.log(`  ... 외 ${importRows.length - 10}개`);
+    }
+    console.log('');
     console.log(`[import] DRY-RUN: ${importRows.length}개 upsert 대상 (시트 write skip)`);
     return;
   }
 
-  // ── 2. 시트 현재 상태 읽기 (vendorItemId로 중복 검사용) ──────────────────
+  // ── 2. 시트 현재 상태 읽기 (헤더 행 + vendorItemId 중복 검사) ─────────────────
   const sheets = await getSheetsClient();
+
+  // 헤더 행 읽기 — 실제 시트 컬럼 순서를 기준으로 사용 (sheetSchema.js와 불일치 방지)
+  const headerRes = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${TAB}!1:1`,
+  });
+  const headers = (headerRes.data.values || [[]])[0];
+  if (headers.length === 0) {
+    console.error('[import] ERROR: 시트 헤더 행을 읽을 수 없습니다. setup-sheets.js를 먼저 실행하세요.');
+    process.exit(1);
+  }
+  console.log(`[import] 시트 헤더 확인: ${headers.length}개 컬럼`);
+  const idx = (name) => headers.indexOf(name);
 
   const sheetRes = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: `${TAB}!A:A`,
   });
   const existingCol = sheetRes.data.values || [];
-  // 1-based 행 번호 → vendorItemId 맵
-  const existingMap = new Map(); // vendorItemId → sheetRowNum
+  // vendorItemId → 1-based 행 번호
+  const existingMap = new Map();
   for (let i = 1; i < existingCol.length; i++) {
     const val = (existingCol[i] || [])[0] || '';
     if (val) existingMap.set(val, i + 1);
   }
 
-  const nowISO = new Date().toISOString();
-  const headers = COUPANG_DATA_HEADERS;
-
-  // 컬럼 인덱스 (헤더 기준)
-  const idx = (name) => headers.indexOf(name);
-
-  let upsertCount = 0;
-  let appendCount = 0;
+  // UPDATE / APPEND 분리
+  const updateRows = [];
+  const appendNewRows = [];
 
   for (const r of importRows) {
-    // 역수입 시 채울 필드만 정의 — 나머지는 빈값
-    const fieldMap = {
-      vendorItemId:        r.vendorItemId,
-      qoo10ItemId:         r.qoo10ItemId,
-      ItemTitle:           r.ItemTitle,
-      qoo10SellingPrice:   r.qoo10SellingPrice,
-      qoo10SellerCode:     r.qoo10SellerCode,
-      status:              'LIVE',
-      registrationMode:    'REAL',
-      registrationStatus:  'SUCCESS',
-      registrationMessage: '[imported=qoo10_native]',
-      updatedAt:           nowISO,
-    };
-
+    const { _pkType, ...fieldMap } = r;
     const existingRowNum = existingMap.get(r.vendorItemId);
-
     if (existingRowNum) {
-      // 기존 행 업데이트
-      const updateData = Object.entries(fieldMap).map(([field, value]) => ({
-        range: `${TAB}!${colLetter(idx(field))}${existingRowNum}`,
-        values: [[value]],
-      }));
-
-      await sheets.spreadsheets.values.batchUpdate({
-        spreadsheetId: SPREADSHEET_ID,
-        requestBody: { valueInputOption: 'RAW', data: updateData },
-      });
-      console.log(`[import] UPDATE vendorItemId=${r.vendorItemId} (행 ${existingRowNum})`);
-      upsertCount++;
+      updateRows.push({ fieldMap, existingRowNum, vendorItemId: r.vendorItemId });
     } else {
-      // 새 행 append — 전체 헤더 컬럼 수만큼 빈 배열 생성 후 필드 채우기
       const newRow = new Array(headers.length).fill('');
       for (const [field, value] of Object.entries(fieldMap)) {
         const colIdx = idx(field);
         if (colIdx !== -1) newRow[colIdx] = value;
       }
+      appendNewRows.push({ newRow, vendorItemId: r.vendorItemId, jpTitle: r.jpTitle });
+    }
+  }
 
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${TAB}!A:A`,
-        valueInputOption: 'RAW',
-        insertDataOption: 'INSERT_ROWS',
-        requestBody: { values: [newRow] },
-      });
-      console.log(`[import] APPEND vendorItemId=${r.vendorItemId}`);
-      appendCount++;
+  console.log(`[import] UPDATE 대상: ${updateRows.length}개, APPEND 대상: ${appendNewRows.length}개`);
+
+  // ── UPDATE: 행별로 batchUpdate (한 번에 한 행, 셀 단위는 묶음) ───────────────
+  // Google Sheets 쓰기 쿼터: 60 req/min. 1초 간격으로 처리.
+  for (const { fieldMap, existingRowNum, vendorItemId } of updateRows) {
+    const updateData = Object.entries(fieldMap)
+      .filter(([field]) => idx(field) !== -1)
+      .map(([field, value]) => ({
+        range: `${TAB}!${colLetter(idx(field))}${existingRowNum}`,
+        values: [[value]],
+      }));
+
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { valueInputOption: 'RAW', data: updateData },
+    });
+    console.log(`[import] UPDATE vendorItemId=${vendorItemId} (행 ${existingRowNum})`);
+    await new Promise(r => setTimeout(r, 1100)); // 쿼터 방지
+  }
+
+  // ── APPEND: 전체를 한 번의 API 호출로 처리 ──────────────────────────────────
+  if (appendNewRows.length > 0) {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${TAB}!A:A`,
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: appendNewRows.map(r => r.newRow) },
+    });
+    for (const r of appendNewRows) {
+      console.log(`[import] APPEND vendorItemId=${r.vendorItemId} | ${r.jpTitle.slice(0, 40)}`);
     }
   }
 
   console.log('');
-  console.log(`[import] 완료: UPDATE ${upsertCount}개, APPEND ${appendCount}개`);
+  console.log(`[import] 시트 upsert 완료: ${importRows.length}개`);
+  console.log(`         UPDATE ${updateRows.length}개, APPEND ${appendNewRows.length}개`);
   console.log('');
-  console.log('▶ 다음 단계: changeFlags=REFRESH + needsUpdate=YES 설정 후 npm run qoo10:auto-register');
+  console.log('▶ 다음 단계: npm run qoo10:translate:titles:dry');
 }
 
 main()

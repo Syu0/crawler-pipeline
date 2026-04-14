@@ -279,6 +279,28 @@ npm run cookie:refresh
 npm run coupang:browser:start
 ```
 
+### 15:00 자동 파이프라인 — 브라우저 준비 절차
+
+15:00 크론 시작 시 judy(OpenClaw)가 텔레그램 그룹 (`crawler-pipeline`, chatId: `-5221359008`)으로 알림을 보낸다.
+
+**알림 수신 시 아가씨가 할 일:**
+1. Chrome에서 쿠팡 탭 열기 (https://www.coupang.com)
+2. 쿠팡 로그인 완료 후 채팅방에 "완료" 등 응답
+
+judy는 브라우저 연결을 확인한 뒤 자동으로 수집을 시작한다.
+
+**응답 없을 경우:**
+- 최대 30분(5분 간격 × 6회) 재확인
+- 30분 후에도 연결 실패 시 수집 없이 종료 (20:00 폴백 크론이 Qoo10 등록만 진행)
+
+**연결 확인 명령:**
+```bash
+openclaw browser --browser-profile chrome tabs
+# 출력에 coupang.com 탭이 있으면 수집 시작
+```
+
+> 모든 작업 알림/결과는 텔레그램 crawler-pipeline 그룹 채팅방 (chatId: `-5221359008`)으로 전송된다.
+
 > ⚠️ **`coupang:collect` / `coupang:collect:one` 전 필수 조건:**
 > `coupangApiClient.js`는 **Browser Relay CLI** (`openclaw browser --browser-profile chrome`)를 사용한다.
 > Chrome에 `--browser-profile chrome`으로 연결 가능한 상태여야 하며,

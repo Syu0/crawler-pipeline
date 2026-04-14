@@ -36,6 +36,7 @@ const COUPANG_DATA_HEADERS = [
 
   // ── [Q] Qoo10 등록 ──────────────────────────────
   'jpTitle',
+  'SearchKeyword',
   'qoo10SellingPrice',
   'qoo10ItemId',
   'qoo10SellerCode',
@@ -66,10 +67,10 @@ const COUPANG_DATA_HEADERS = [
 const HEADER_GROUPS = [
   { label: '[D] Discover', start: 0,  end: 4,  bg: { red: 0.890, green: 0.949, blue: 0.992 }, fg: { red: 0, green: 0, blue: 0 } }, // #E3F2FD 아주 연한 하늘
   { label: '[C] Collect',  start: 5,  end: 20, bg: { red: 0.565, green: 0.792, blue: 0.976 }, fg: { red: 0, green: 0, blue: 0 } }, // #90CAF9 중간 하늘
-  { label: '[Q] Qoo10',    start: 21, end: 32, bg: { red: 0.290, green: 0.565, blue: 0.851 }, fg: { red: 1, green: 1, blue: 1 } }, // #4A90D9 진한 파랑 (글자 흰색)
-  { label: '[USER]',       start: 33, end: 34, bg: { red: 1,     green: 1,     blue: 1     }, fg: { red: 0, green: 0, blue: 0 } }, // #FFFFFF 흰색
-  { label: '[SYS]',        start: 35, end: 37, bg: { red: 0.929, green: 0.906, blue: 0.965 }, fg: { red: 0, green: 0, blue: 0 } }, // #EDE7F6 연보라
-  { label: '[GRP]',        start: 38, end: 41, bg: { red: 0.984, green: 0.929, blue: 0.831 }, fg: { red: 0, green: 0, blue: 0 } }, // #FBECD4 연주황
+  { label: '[Q] Qoo10',    start: 21, end: 33, bg: { red: 0.290, green: 0.565, blue: 0.851 }, fg: { red: 1, green: 1, blue: 1 } }, // #4A90D9 진한 파랑 (글자 흰색)
+  { label: '[USER]',       start: 34, end: 35, bg: { red: 1,     green: 1,     blue: 1     }, fg: { red: 0, green: 0, blue: 0 } }, // #FFFFFF 흰색
+  { label: '[SYS]',        start: 36, end: 38, bg: { red: 0.929, green: 0.906, blue: 0.965 }, fg: { red: 0, green: 0, blue: 0 } }, // #EDE7F6 연보라
+  { label: '[GRP]',        start: 39, end: 42, bg: { red: 0.984, green: 0.929, blue: 0.831 }, fg: { red: 0, green: 0, blue: 0 } }, // #FBECD4 연주황
 ];
 
 // 허용된 status ENUM 값 (파이프라인 전체 기준)
