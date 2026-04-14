@@ -38,6 +38,24 @@ Location: `/app/backend/.env`
 | `QOO10_TRACER` | No | `0` | Set to `1` for verbose API logging |
 | `COUPANG_COOKIE` | Yes | - | Playwright 수집기용 쿠팡 인증 쿠키 (`npm run cookie:refresh`로 갱신) |
 
+## ⚠️ 시트 운영 주의사항
+
+### EXT_ 상품 (비쿠팡 기존 Qoo10 상품)
+
+`coupang_datas` 시트에 `vendorItemId`가 `EXT_`로 시작하는 행이 존재한다.
+
+**배경:** "Qoo10 기존 운영 상품 → coupang_datas 역수입" 작업(`qoo10-import-existing-goods.js`)으로 추가된 행이다.
+Qoo10에서 직접 운영 중이던 상품 중 쿠팡과 연결되지 않은 상품은 `EXT_{qoo10ItemId}` 형식의 가상키로 등록된다.
+
+**현재 상태 (2026-04-10 기준):** 역수입 작업 진행 중. 운영 지침 미확정.
+
+**지금 할 일:** **무시해도 된다.** 일반 파이프라인(discover → collect → register)은 EXT_ 행을 건드리지 않는다.
+역수입 작업 완료 후 EXT_ 상품 전용 운영 지침이 이 섹션에 추가될 예정이다.
+
+> 참고: EXT_ 상품에 대해 `changeFlags=IMAGE` 또는 `DESC`를 설정해도 `qoo10-auto-register.js`가 자동 skip한다.
+
+---
+
 ## 자동 등록 파이프라인 운영
 
 ### 전체 파이프라인 실행 순서
@@ -146,10 +164,10 @@ npm run sheets:setup:force    # 모든 기본값 덮어쓰기 — 값 초기화 
 - `SecondSubCat` (category ID)
 - `ItemTitle`
 - `ProductionPlaceType` (default: "2")
-- `ProductionPlace` (default: "Overseas")
+- `ProductionPlace` (default: "KR")
 - `AdultYN` (default: "N")
 - `AvailableDateType` (default: "0")
-- `AvailableDateValue` (default: "2")
+- `AvailableDateValue` (default: "3")
 - `ShippingNo` (default: "471554")
 - `TaxRate` (default: "S")
 - `ExpireDate` (default: "2030-12-31")
