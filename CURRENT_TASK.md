@@ -1,3 +1,5 @@
+<!-- CURRENT_TASK.md (루트) — judy(운영자) 전용. 오늘 할 일, 운영 체크리스트 등 비기술적 내용 -->
+
 # CURRENT_TASK.md
 
 ## 현재 상태

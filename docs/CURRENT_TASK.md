@@ -1,3 +1,5 @@
+<!-- docs/CURRENT_TASK.md — 개발팀(Claude/에이전트 포함) 전용. 개발 작업 진행 상황, 브랜치, 버그 트래킹 등 -->
+
 # CURRENT_TASK.md
 
 ## 현재 상태
