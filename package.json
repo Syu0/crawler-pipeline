@@ -53,7 +53,10 @@
     "qoo10:import:existing": "node scripts/qoo10-import-existing-goods.js",
     "qoo10:import:existing:dry": "node scripts/qoo10-import-existing-goods.js --dry-run",
     "qoo10:translate:titles": "node scripts/qoo10-translate-titles.js",
-    "qoo10:translate:titles:dry": "node scripts/qoo10-translate-titles.js --dry-run"
+    "qoo10:translate:titles:dry": "node scripts/qoo10-translate-titles.js --dry-run",
+    "// 주문확인": "→ npm run qoo10:order:sync",
+    "qoo10:order:sync": "node backend/scripts/qoo10-order-sync.js",
+    "qoo10:order:sync:dry": "node backend/scripts/qoo10-order-sync.js --dry-run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
