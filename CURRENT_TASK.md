@@ -3,11 +3,10 @@
 # CURRENT_TASK.md
 
 ## 현재 상태
-- 2026-04-14 업데이트
+- 2026-04-15 업데이트
 - 브랜치: `main`
-- 운영 초기화 완료: 기존 운영 상품 236개 역수입 + ItemTitle 역번역 완료
-- 현재 시트 상태: LIVE 236개 / REGISTERED 11개 / COLLECTED 9개 / ERROR 9개 / DISCOVERED 4개
-- 다음: 전략 고도화 (market-analysis 활용안 논의) — 별도 세션
+- 마켓 잔존: 31개 (judy-ops 500개 목표 진행 중)
+- 다음: 전략 고도화 [전략-1] market-analysis 활용안 논의
 
 ---
 
@@ -60,6 +59,15 @@
 ---
 
 ## 완료된 작업
+
+### 2026-04-15
+- **기등록 상품 최적화 완료** — EXT_ 236개 정리
+  - `strategyNote` 컬럼 신설 (`sheetSchema.js`)
+  - 전략 인사이트 보유 23개 메모 아카이빙 (패턴A/B/C 태그)
+  - 즉시 삭제 202개 거래폐지 (`EditGoodsStatus status=3`)
+  - 아카이빙 23개 거래폐지 완료
+  - 최종 마켓 잔존: 31개 (KEEP 11개 + judy-ops 20개)
+  - `qoo10-archive-strategy-notes.js`, `qoo10-retire-goods.js` 신규 작성
 
 ### 2026-04-14
 - **운영 초기화 완료**
