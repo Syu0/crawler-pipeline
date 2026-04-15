@@ -372,7 +372,7 @@ async function main() {
       console.log(`  StandardImage:  ${collected.StandardImage ? 'OK' : '없음'}`);
       console.log(`  StockStatus:    ${collected.StockStatus ?? '(없음)'}`);
       console.log(`  ReviewCount:    ${collected.ReviewCount ?? '(없음)'}`);
-      console.log(`  DetailImages:   ${JSON.parse(collected.DetailImages || '[]').length}개`);
+      console.log(`  DetailImages:   ${(() => { try { return JSON.parse(collected.DetailImages || '[]').length; } catch (e) { return 0; } })()}개`);
 
       if (dryRun) {
         console.log('  [DRY-RUN] 시트 write 생략');
