@@ -284,6 +284,25 @@ npm run coupang:browser:status
 
 ---
 
+### 주문 확인 (트리거: "주문확인해줘" / "주문 확인" / "주문확인")
+
+judy가 위 문구를 채팅에서 수신하면 아래 명령을 실행한다.
+
+```bash
+npm run qoo10:order:sync
+```
+
+- 기본: 최근 2일 주문 조회 → `qoo10_orders` 시트 upsert
+- 특정 기간이 필요한 경우: `npm run qoo10:order:sync -- --days=N` (최대 90)
+- 실행 후 텔레그램으로 결과 요약 전송:
+  - 조회 건수 / upsert 건수 / 실패 건수
+
+> `qoo10_orders` 시트는 `coupang_datas`와 **별도 스프레드시트** (`1RZ5Kol8iAW2myXQOSRsG3MCwYIw1rQk6HY3a90GLyRs`)에 있다.
+> 인터넷 연결과 `.env`의 `QOO10_SAK` / Google 서비스 계정 설정만 있으면 실행 가능하다.
+> Playwright · Browser Relay · 쿠팡 로그인 불필요.
+
+---
+
 ### 매일 시작 절차 (순서 중요)
 
 ```bash

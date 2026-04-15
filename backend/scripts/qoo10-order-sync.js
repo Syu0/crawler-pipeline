@@ -42,7 +42,7 @@ const ORDER_HEADERS = [
 const args = process.argv.slice(2);
 const isDryRun = args.includes('--dry-run');
 const daysArg = args.find(a => a.startsWith('--days='));
-const days = Math.min(daysArg ? parseInt(daysArg.split('=')[1], 10) : 30, 90);
+const days = Math.min(daysArg ? parseInt(daysArg.split('=')[1], 10) : 2, 90);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 유틸
