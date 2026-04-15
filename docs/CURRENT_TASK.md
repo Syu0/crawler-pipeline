@@ -56,6 +56,24 @@
 
 ## 다음 작업 (초기화 완료 후)
 
+### 🟡 배송 자동화 (설계 확정 후 착수)
+
+#### [배송-1] SetSendingInfo 연동 (`qoo10-shipping-update.js`)
+- **확정된 흐름 (옵션 A):**
+  1. 사람이 `qoo10_orders` 시트 `송장번호` 컬럼에 직접 입력
+  2. `npm run qoo10:shipping:update` 실행
+  3. 송장번호 있음 + 배송상태 = `배송요청` 인 행 감지
+  4. `SetSendingInfo` API 호출 → Qoo10 발송확인 처리
+  5. 시트 `배송상태` → `배송중` 업데이트
+- **확장 예정 (옵션 B):** TracX Logis 등 물류사 API와 직접 연동 — 별도 설계
+- 사용 API: `ShippingBasic.SetSendingInfo`
+- 착수 조건: 문서 업데이트 완료 후
+
+#### [분석-1] 주문 데이터 활용 분석 (별도 논의)
+- linkedVendorItemId 기반 판매 분석
+- 판매가 적정성 검토 (coupang_datas 원가 vs qoo10_orders 판매가)
+- 착수 조건: 주문 데이터 일정 기간 누적 후
+
 ### 🟡 우선순위 보통
 
 #### Dashboard Chat 탭 UI 확인
@@ -82,6 +100,11 @@
 ---
 
 ## 완료된 작업
+
+### 2026-04-15
+- **주문 동기화 구현** (`qoo10-order-sync.js`) 완료
+  - `GetShippingInfo_v3` → `qoo10_orders` 시트 upsert 1회 실행 성공
+  - PK: 장바구니번호 / linkedVendorItemId 매칭 / dry-run 지원
 
 ### 2026-04-08
 - **파이프라인 등록분 Qoo10 수동 삭제** 완료

@@ -111,6 +111,14 @@ https://api.qoo10.jp/GMKT.INC.Front.QAPIService/ebayjapan.qapi
 | `ItemsContents.EditGoodsContents` | 상세페이지 내용 수정 |
 | `ItemsLookup.GetItemDetailInfo` | 등록 상품 상세 조회 (read-back 검증용) |
 | `ItemsLookup.GetAllGoodsInfo` | 전체 상품 목록 조회 |
+| `ShippingBasic.GetShippingInfo_v3` | 주문 배송 상태 조회 (복수, 상태별 필터) |
+| `ShippingBasic.SetSendingInfo` | 배송 처리 (송장번호 입력 → Qoo10 발송확인) |
+
+### API 사양서 관리
+
+현재: `docs/` 폴더의 PDF 파일
+목표: Google Doc으로 이관 → 신규 API 파악 시 즉시 업데이트 가능한 구조로 전환
+착수: 다음 문서 업데이트 작업 시 함께 처리
 
 ### 알려진 에러 & 해결법
 
@@ -188,6 +196,8 @@ write calls 쿼터: 10회/세션
   headless Playwright로 상세 페이지 직접 접근 금지 — Akamai TLS 핑거프린트 차단 확인됨.
 - 수집 전 Chrome에서 쿠팡 로그인 탭 열고 Browser Relay attach 필요 (하루 1회 수동).
 - 사용 API: `next-api/products/quantity-info`, `next-api/review`. 구 API(`other-seller-info`, `btf`) 폐기됨.
+- 문서 업데이트 시 실제 구현 코드가 지침과 다를 경우 코드를 우선으로 반영한다.
+  지침은 설계 의도이고 코드가 실제 동작 기준이다.
 
 ---
 
@@ -321,6 +331,12 @@ write calls 쿼터: 10회/세션
   - `ProductionPlace`: `'Overseas'` → `'KR'` (Qoo10 Japan Type2 해외 ISO 코드)
   - `buildSearchKeywords()` 추가 — jpTitle 단어 추출(단위·괄호·숫자·1~3자 알파벳 제거) + 한국어 보조, 최대 10개
   - CREATE/UPDATE 성공 후 자동 호출, `registrationMessage`에 `[descMethod=vision|text|skip]` 기록
+- [x] **주문 동기화** (`qoo10-order-sync.js`) | 브랜치: oc/order-sync (머지 완료)
+  - `GetShippingInfo_v3` API → `qoo10_orders` 시트 upsert
+  - PK: `장바구니번호` / `--dry-run` / `--days=N` 옵션 (기본 30일, 최대 90일)
+  - `qoo10SellerCode` → `coupang_datas` vendorItemId 매칭 (`linkedVendorItemId`)
+  - 대상 시트: `1RZ5Kol8iAW2myXQOSRsG3MCwYIw1rQk6HY3a90GLyRs`
+  - `npm run qoo10:order:sync` / `npm run qoo10:order:sync:dry`
 
 #### 🔄 대기 중
 
@@ -334,6 +350,11 @@ write calls 쿼터: 10회/세션
   - `buildImageExtractFn()` return에 `detail` 누락 버그 수정
   - ExtraImages = 슬라이더만, DetailImages = 상세페이지만으로 수집 분리
   - `descriptionGenerator`: vision 입력을 ExtraImages → DetailImages 우선 (없으면 fallback)
+
+- [ ] **배송 자동화** (`qoo10-shipping-update.js`) — SetSendingInfo API
+  - qoo10_orders 시트 `송장번호` 컬럼 입력 감지 → Qoo10 발송확인 처리
+  - 옵션 B(물류사 API 직접 연동)로 확장 예정
+  - 착수 조건: 문서 업데이트 완료 후
 
 - [ ] **[추후 작업] 가격 상수 config 시트 이관**
   - 현재: `backend/pricing/pricingConstants.js`에 하드코딩

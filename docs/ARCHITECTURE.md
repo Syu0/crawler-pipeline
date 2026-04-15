@@ -68,8 +68,12 @@ Qoo10 QAPI를 통해 상품 등록/수정.
 | `registerNewGoods.js` | SetNewGoods API 래퍼 (CREATE) |
 | `titleTranslator.js` | KR→JP 타이틀 변환 (Claude Haiku API + 카테고리 템플릿 fallback) |
 | `updateGoods.js` | UpdateGoods API 래퍼 (UPDATE) — `updateExistingGoods()`, `buildUpdateGoodsParams()` |
+| `editGoodsContents.js` | EditGoodsContents 래퍼 (일본어 상세 HTML + 이미지) |
+| `editGoodsImage.js` | EditGoodsImage 래퍼 (대표이미지 업데이트) |
+| `editGoodsMultiImage.js` | EditGoodsMultiImage 래퍼 (슬라이더 이미지 EnlargedImage1~50) |
+| `descriptionGenerator.js` | 일본어 상세페이지 HTML 생성 (vision/text via OpenRouter) |
 
-> ⚠️ **미존재:** `getItemDetailInfo.js` (GetItemDetailInfo 래퍼), `editGoodsContents.js` (EditGoodsContents 래퍼)
+> ⚠️ **미존재:** `getItemDetailInfo.js` (GetItemDetailInfo 래퍼)
 > SecondSubCat은 시트 `jpCategoryIdUsed` 컬럼에서 직접 resolve. GetItemDetailInfo 조회 없음.
 
 Entry points:
@@ -139,6 +143,7 @@ yamyam 크롬 익스텐션이 전송하는 쿠키를 수신·저장하는 Expres
 | `qoo10.setGoodsPriceQty.js` | 재고/가격 직접 업데이트 유틸 |
 | `fix-stuck-registering.js` | REGISTERING 락 상태 수동 해제 유틸 |
 | `migrate-coupang-datas-schema.js` | 스키마 마이그레이션 유틸 |
+| `qoo10-order-sync.js` | Qoo10 주문 조회 → qoo10_orders 시트 upsert |
 
 ---
 
@@ -207,9 +212,11 @@ ERROR            → 복구 가능한 실패
 | `ItemsBasic.SetNewGoods` | 신규 상품 등록 |
 | `ItemsBasic.UpdateGoods` | 상품 수정 (Title 업데이트에만 안정적) |
 | `ItemsOrder.SetGoodsPriceQty` | 재고/가격 업데이트 |
-| `ItemsContents.EditGoodsContents` | 상세페이지 수정 (래퍼 미구현) |
+| `ItemsContents.EditGoodsContents` | 상세페이지 수정 |
 | `ItemsLookup.GetItemDetailInfo` | 상품 상세 조회 (래퍼 미구현) |
 | `ItemsLookup.GetAllGoodsInfo` | 전체 상품 목록 조회 |
+| `ShippingBasic.GetShippingInfo_v3` | 주문 배송 상태 조회 (복수) |
+| `ShippingBasic.SetSendingInfo` | 발송 처리 (송장번호 등록) |
 
 ---
 
@@ -223,6 +230,7 @@ ERROR            → 복구 가능한 실패
 | `keywords` | `keyword` | 수집 대상 키워드 (ACTIVE/PAUSED/PENDING) |
 | `config` | `key` | 필터 조건값 등 운영 설정 |
 | `Txlogis_standard` | (weight range) | 일본 배송비 구간 테이블 |
+| `qoo10_orders` | `장바구니번호` | Qoo10 주문 데이터 (자동 동기화, SSOT) — ※ 별도 스프레드시트 (`1RZ5Kol8iAW2myXQOSRsG3MCwYIw1rQk6HY3a90GLyRs`) |
 
 ---
 

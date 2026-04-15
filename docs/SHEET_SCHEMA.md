@@ -25,6 +25,7 @@ The Google Sheet serves as the central data store between:
 | `japan_categories` | Full JP category list from Qoo10 API |
 | `category_mapping` | KR→JP category mapping (manual + auto) |
 | `Txlogis_standard` | Japan shipping fee by weight range |
+| `qoo10_orders` | Qoo10 주문 데이터 자동 동기화 |
 
 ---
 
@@ -476,3 +477,85 @@ async function writeRegistrationResult(sheetId, rowIndex, result) {
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - System architecture
 - [RUNBOOK.md](./RUNBOOK.md) - Operational procedures
+
+---
+
+## Tab: `qoo10_orders`
+
+Qoo10 주문 데이터 자동 동기화 탭.
+`ShippingBasic.GetShippingInfo_v3` API 결과를 upsert.
+수동 복붙 배송일지(`000년00월 배송일지` 탭들)를 대체하는 SSOT.
+
+**스프레드시트**: `1RZ5Kol8iAW2myXQOSRsG3MCwYIw1rQk6HY3a90GLyRs` (coupang_datas와 별도)
+**동기화 명령**: `npm run qoo10:order:sync`
+
+### 컬럼 (총 48개)
+
+#### Qoo10 원본 필드 (1~46 — API/엑셀 다운로드 동일 구조)
+
+| # | 컬럼명 | 설명 |
+|---|--------|------|
+| 1 | `배송상태` | 배송요청 / 배송중 / 배송완료 등 |
+| 2 | `주문번호` | Qoo10 주문번호 |
+| 3 | `장바구니번호` | **PK** |
+| 4 | `택배사` | 택배사명 |
+| 5 | `송장번호` | 운송장번호 |
+| 6 | `발송일` | 발송 처리일 |
+| 7 | `주문일` | 구매자 결제일 |
+| 8 | `입금일` | 입금 확인일 |
+| 9 | `배달희망일` | 구매자 희망 수령일 |
+| 10 | `발송예정일` | 판매자 발송 예정일 |
+| 11 | `배송완료일` | 배송 완료일 |
+| 12 | `배송방식` | 일반배송(추적-O) 등 |
+| 13 | `상품코드` | Qoo10 상품코드 (qoo10ItemId) |
+| 14 | `상품명` | 일본어 상품명 |
+| 15 | `수량` | 주문 수량 |
+| 16 | `옵션정보` | 선택한 옵션 |
+| 17 | `판매자옵션코드` | 판매자 옵션 관리코드 |
+| 18 | `사은품` | 사은품 정보 |
+| 19 | `수취인명` | 수령인 이름 |
+| 20 | `수취인명(음성표기)` | 수령인 이름 (후리가나) |
+| 21 | `수취인전화번호` | 수령인 전화번호 |
+| 22 | `수취인핸드폰번호` | 수령인 휴대폰번호 |
+| 23 | `주소` | 배송지 주소 |
+| 24 | `우편번호` | 배송지 우편번호 |
+| 25 | `국가` | 배송 국가 (항상 빈값 — API 미제공) |
+| 26 | `배송비결제` | 배송비 결제 방식 |
+| 27 | `주문국가` | 주문 국가 (항상 빈값 — API 미제공) |
+| 28 | `통화` | 결제 통화 (JPY) |
+| 29 | `구매자결제금` | 구매자 실 결제금액 |
+| 30 | `판매가` | 상품 판매가 |
+| 31 | `할인액` | 할인 금액 |
+| 32 | `총주문액` | 총 주문금액 |
+| 33 | `총공급원가` | 총 공급원가 |
+| 34 | `구매자명` | 구매자 이름 |
+| 35 | `구매자명(발음표기)` | 구매자 이름 (후리가나) |
+| 36 | `배송요청사항` | 배송 시 요청사항 |
+| 37 | `구매자전화번호` | 구매자 전화번호 |
+| 38 | `구매자핸드폰번호` | 구매자 휴대폰번호 |
+| 39 | `판매자상품코드` | API의 `SellerItemCode` — `qoo10SellerCode` 컬럼과 매칭 키 |
+| 40 | `JAN코드` | 항상 빈값 — API 미제공 |
+| 41 | `규격번호` | `SellerDeliveryNo` 매핑 |
+| 42 | `(선물)보내는사람` | 선물 발신자명 |
+| 43 | `패킹번호` | `PackingNo` 매핑 (`장바구니번호`의 `PackNo`와 별개) |
+| 44 | `외부광고` | `VoucherCode` 매핑 |
+| 45 | `소재` | 소재 정보 |
+| 46 | `선물하기주문` | 항상 빈값 — API 미제공 |
+
+#### 파이프라인 추가 필드 (47~48)
+
+| # | 컬럼명 | 설명 |
+|---|--------|------|
+| 47 | `syncedAt` | 시트 upsert 시각 (ISO 8601) |
+| 48 | `linkedVendorItemId` | `판매자상품코드` → `coupang_datas.qoo10SellerCode` 역매칭 결과 |
+
+### Upsert 규칙
+
+- PK: `장바구니번호`
+- 기존 행 있으면 UPDATE (배송상태·송장번호 등 갱신), 없으면 APPEND
+- `syncedAt` 매 upsert마다 갱신
+
+### 활용 방향
+
+1. **판매 분석**: `linkedVendorItemId` → `coupang_datas` 조인 → 원가 대비 판매가 적정성 확인
+2. **배송 자동화**: 송장번호 컬럼 입력 감지 → `SetSendingInfo` API 호출 (미구현, 예정)
