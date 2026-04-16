@@ -231,9 +231,10 @@ async function generateJapaneseDescription(row) {
       return { html: '', method: 'skip' };
     }
 
-    // Append ExtraImages as <img> tags after the generated text
-    if (extraImages.length > 0) {
-      const imgTags = extraImages
+    // Append DetailImages as <img> tags after the generated text (fallback: ExtraImages)
+    const appendImages = detailImages.length > 0 ? detailImages : extraImages;
+    if (appendImages.length > 0) {
+      const imgTags = appendImages
         .map(url => `<p><img src="${normalizeUrl(url)}" /></p>`)
         .join('\n');
       html = html + '\n' + imgTags;
