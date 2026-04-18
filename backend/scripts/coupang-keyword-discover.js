@@ -54,6 +54,136 @@ function trace(...args) {
   if (TRACE) console.log('[TRACER]', ...args);
 }
 
+// ── 로그인 대기 흐름 ──────────────────────────────────────────────────────────
+
+const PIPELINE_CHAT_ID = '-5221359008';
+
+function isBrowserAvailable() {
+  try {
+    const out = execSync('openclaw browser --browser-profile chrome tabs', {
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
+    return out.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function sendTelegramMessage(chatId, text) {
+  const https = require('https');
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!botToken) {
+    console.warn('[LOGIN] TELEGRAM_BOT_TOKEN 없음 — 알림 스킵');
+    return;
+  }
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ chat_id: chatId, text });
+    const req = https.request(
+      {
+        hostname: 'api.telegram.org',
+        path: `/bot${botToken}/sendMessage`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      },
+      (res) => { res.resume(); resolve(); }
+    );
+    req.on('error', () => resolve());
+    req.write(body);
+    req.end();
+  });
+}
+
+async function checkAndWaitForLogin(dryRun) {
+  if (dryRun) return;
+
+  // Step 1: Chrome 연결 확인
+  if (!isBrowserAvailable()) {
+    console.log('[LOGIN] Chrome 없음 — Profile 1(judy)으로 Chrome 열기 시도...');
+    try {
+      execSync(
+        'open -a "Google Chrome" --args --profile-directory="Profile 1" "https://member.coupang.com/login/login.pang"',
+        { encoding: 'utf8', timeout: 10_000 }
+      );
+      console.log('[LOGIN] Chrome 실행 요청 완료');
+    } catch (err) {
+      console.warn('[LOGIN] Chrome 열기 실패:', err.message.split('\n')[0]);
+    }
+
+    // Chrome 연결 대기 (최대 60초)
+    console.log('[LOGIN] Chrome 연결 대기 중...');
+    const connectDeadline = Date.now() + 60_000;
+    while (Date.now() < connectDeadline) {
+      await new Promise((r) => setTimeout(r, 5_000));
+      if (isBrowserAvailable()) break;
+    }
+
+    if (!isBrowserAvailable()) {
+      await sendTelegramMessage(
+        PIPELINE_CHAT_ID,
+        '⚠️ [coupang:discover] Chrome 연결 실패\nChrome(Profile 1)을 열고 쿠팡에 접속한 뒤 OpenClaw 브라우저 프로파일을 연결해 주세요.'
+      );
+      console.error('[LOGIN] Chrome 연결 실패 — 종료 (에이전트가 2순위 전환 처리)');
+      process.exit(1);
+    }
+  }
+
+  // Step 2: 현재 페이지가 로그인 상태인지 확인
+  let currentUrl = '';
+  try {
+    const raw = execSync(
+      `openclaw browser --browser-profile chrome evaluate --fn '() => window.location.href'`,
+      { encoding: 'utf8', timeout: 10_000 }
+    ).trim();
+    currentUrl = JSON.parse(raw);
+  } catch { /* URL 확인 실패 시 로그인 페이지로 이동 진행 */ }
+
+  const needsLogin =
+    !currentUrl ||
+    currentUrl.includes('login') ||
+    !currentUrl.includes('coupang.com');
+
+  if (!needsLogin) return;
+
+  // Step 3: 로그인 페이지 navigate
+  try {
+    browserNavigate('https://member.coupang.com/login/login.pang');
+    console.log('[LOGIN] 쿠팡 로그인 페이지 접속됨');
+  } catch (err) {
+    console.error('[LOGIN] 로그인 페이지 접속 실패:', err.message.split('\n')[0]);
+  }
+
+  // Step 4: 텔레그램 알림
+  await sendTelegramMessage(
+    PIPELINE_CHAT_ID,
+    '🔐 [coupang:discover] 쿠팡 로그인 필요\n브라우저에 쿠팡 페이지 열어뒀어요. 로그인 후 알려주세요.'
+  );
+  console.log('[LOGIN] 텔레그램 알림 전송 완료. 로그인 대기 중... (최대 10분)');
+
+  // Step 5: 로그인 완료 polling (30초 간격, 최대 10분)
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 10 * 60 * 1000) {
+    await new Promise((r) => setTimeout(r, 30_000));
+    try {
+      const raw = execSync(
+        `openclaw browser --browser-profile chrome evaluate --fn '() => window.location.href'`,
+        { encoding: 'utf8', timeout: 10_000 }
+      ).trim();
+      const url = JSON.parse(raw);
+      if (typeof url === 'string' && url.includes('coupang.com') && !url.includes('login')) {
+        console.log('[LOGIN] 로그인 완료 감지 — 작업 계속');
+        return;
+      }
+    } catch { /* keep polling */ }
+  }
+
+  console.error('[LOGIN] 로그인 대기 타임아웃 (10분) — 종료 (에이전트가 2순위 전환 처리)');
+  process.exit(1);
+}
+
 // ── Browser Relay CLI 래퍼 ────────────────────────────────────────────────────
 
 function browserNavigate(url) {
@@ -151,6 +281,8 @@ async function main() {
     console.error('Error: GOOGLE_SHEET_ID not set in backend/.env');
     process.exit(1);
   }
+
+  await checkAndWaitForLogin(dryRun);
 
   const sheets = await getSheetsClient();
 
