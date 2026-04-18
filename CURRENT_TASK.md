@@ -110,3 +110,8 @@
 ### 2026-03-30
 - **collect 후 Chrome 탭 로딩 스피너 멈춤 수정** (PR #11)
 - **categoryId 브레드크럼 자동 추출**
+
+### Freedom 거리계 Step 2
+- [ ] Qoo10 수입 수집 스크립트 작성 (GetSellingReportDetailList 재활용)
+- [ ] 주간 정산 예정액 파싱 로직 구현
+- [ ] 크론 등록 (주 1회, REPORT 사이클 동기화)
