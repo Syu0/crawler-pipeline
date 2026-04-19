@@ -100,21 +100,44 @@ function buildFallbackTitle(categoryPath, meta) {
   return result.slice(0, MAX_JP_TITLE_LEN);
 }
 
-// ─── 3. OpenRouter API 호출 ───────────────────────────────────────────────
+// ─── 3. LLM API 호출 (Ollama 우선, OpenRouter fallback) ──────────────────
 
-const OPENROUTER_MAX_RETRIES = 3;
-const OPENROUTER_RETRY_BASE_MS = 2000; // 2s → 4s → 8s
+const MAX_RETRIES = 3;
+const RETRY_BASE_MS = 2000;
 
-/**
- * OpenRouter API 호출 공통 함수 (retry with exponential backoff)
- * 401/429/5xx: 최대 3회 재시도
- */
-async function callOpenRouterWithRetry(body) {
+async function callLLMWithRetry(body) {
+  const ollamaBase = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+  const ollamaModel = process.env.OLLAMA_TITLE_MODEL || 'gemma3:4b';
+
+  // Ollama 시도 (native /api/chat)
+  try {
+    const messages = [
+      { role: 'system', content: 'あなたはQoo10 Japan SEOタイトル専門家です。タイトル文字列のみ出力。説明・記号・引用符不要。' },
+      ...(body.messages || []),
+    ];
+    const response = await fetch(`${ollamaBase}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: ollamaModel, messages, stream: false }),
+      signal: AbortSignal.timeout(60000),
+    });
+    if (response.ok) {
+      const d = await response.json();
+      // Ollama native 응답 → OpenAI 호환 구조로 변환
+      return { choices: [{ message: { content: d.message?.content || '' } }] };
+    }
+    const errBody = await response.text().catch(() => '');
+    console.warn(`[titleTranslator] Ollama ${response.status}: ${errBody.slice(0, 100)}, falling back to OpenRouter`);
+  } catch (err) {
+    console.warn(`[titleTranslator] Ollama unreachable (${err.message}), falling back to OpenRouter`);
+  }
+
+  // OpenRouter fallback
   const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY not set in backend/.env');
+  if (!apiKey) throw new Error('Ollama failed and OPENROUTER_API_KEY not set');
 
   let lastError;
-  for (let attempt = 1; attempt <= OPENROUTER_MAX_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -124,22 +147,17 @@ async function callOpenRouterWithRetry(body) {
       body: JSON.stringify(body),
     });
 
-    if (response.ok) {
-      return response.json();
-    }
+    if (response.ok) return response.json();
 
-    // 에러 body 읽기 (rate limit 원인 파악용)
     let errBody = '';
     try { errBody = await response.text(); } catch (_) {}
     const errMsg = `OpenRouter ${response.status} ${response.statusText}: ${errBody.slice(0, 200)}`;
 
-    const isRetryable = response.status === 401 || response.status === 429 || response.status >= 500;
-    if (!isRetryable || attempt === OPENROUTER_MAX_RETRIES) {
-      throw new Error(errMsg);
-    }
+    const isRetryable = response.status === 429 || response.status >= 500;
+    if (!isRetryable || attempt === MAX_RETRIES) throw new Error(errMsg);
 
-    const waitMs = OPENROUTER_RETRY_BASE_MS * Math.pow(2, attempt - 1);
-    console.warn(`[titleTranslator] ${errMsg} — retry ${attempt}/${OPENROUTER_MAX_RETRIES} after ${waitMs}ms`);
+    const waitMs = RETRY_BASE_MS * Math.pow(2, attempt - 1);
+    console.warn(`[titleTranslator] ${errMsg} — retry ${attempt}/${MAX_RETRIES} after ${waitMs}ms`);
     await new Promise(r => setTimeout(r, waitMs));
     lastError = errMsg;
   }
@@ -147,7 +165,7 @@ async function callOpenRouterWithRetry(body) {
 }
 
 /**
- * OpenRouter API로 SEO 최적화 일본어 타이틀 생성.
+ * LLM API로 SEO 최적화 일본어 타이틀 생성.
  */
 async function callClaudeForTitle(krTitle, categoryPath, meta) {
   const metaHints = [];
@@ -172,7 +190,7 @@ ${metaHints.length > 0 ? metaHints.join('\n') : ''}
 
 日本語SEOタイトル:`;
 
-  const data = await callOpenRouterWithRetry({
+  const data = await callLLMWithRetry({
     model: 'anthropic/claude-haiku-4-5',
     max_tokens: 200,
     messages: [{ role: 'user', content: prompt }],
@@ -198,18 +216,14 @@ async function translateTitle(krTitle, categoryPath = null) {
 
   const meta = extractMeta(krTitle.trim());
 
-  // Claude API 시도
-  if (process.env.OPENROUTER_API_KEY) {
-    try {
-      const jpTitle = await callClaudeForTitle(krTitle, categoryPath, meta);
-      if (jpTitle && jpTitle.length >= 4) {
-        return { jpTitle, method: 'api', confidence: 0.8, meta };
-      }
-    } catch (err) {
-      console.warn(`[titleTranslator] Claude API failed (${err.message}), using fallback`);
+  // LLM API 시도 (Ollama 우선, OpenRouter fallback)
+  try {
+    const jpTitle = await callClaudeForTitle(krTitle, categoryPath, meta);
+    if (jpTitle && jpTitle.length >= 4) {
+      return { jpTitle, method: 'api', confidence: 0.8, meta };
     }
-  } else {
-    console.warn('[titleTranslator] OPENROUTER_API_KEY not set, using fallback');
+  } catch (err) {
+    console.warn(`[titleTranslator] Claude API failed (${err.message}), using fallback`);
   }
 
   // Fallback
@@ -229,7 +243,7 @@ async function translateTitleJpToKr(jpTitle) {
     throw new Error('translateTitleJpToKr: jpTitle is required');
   }
 
-  const data = await callOpenRouterWithRetry({
+  const data = await callLLMWithRetry({
     model: 'anthropic/claude-haiku-4-5',
     max_tokens: 200,
     messages: [{
