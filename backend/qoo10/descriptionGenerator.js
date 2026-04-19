@@ -14,7 +14,9 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-const MODEL = 'anthropic/claude-haiku-4-5';
+const OPENROUTER_MODEL = 'anthropic/claude-haiku-4-5';
+const OLLAMA_VISION_MODEL = process.env.OLLAMA_VISION_MODEL || 'llama3.2-vision:11b';
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 const MAX_IMAGES = 5;
 
 const SYSTEM_PROMPT = `あなたは韓国商品を日本市場向けに紹介するコピーライターです。
@@ -46,55 +48,76 @@ function normalizeUrl(url) {
   return url;
 }
 
-const OPENROUTER_MAX_RETRIES = 3;
-const OPENROUTER_RETRY_BASE_MS = 2000; // 2s → 4s → 8s
+/**
+ * Ollama vision API 호출 (native /api/chat, base64 images 배열)
+ */
+async function callOllamaVision(textPrompt, base64Images) {
+  const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: OLLAMA_VISION_MODEL,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: textPrompt, images: base64Images },
+      ],
+      stream: false,
+    }),
+    signal: AbortSignal.timeout(300000), // 이미지 처리 최대 5분
+  });
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(`Ollama ${response.status}: ${err.slice(0, 100)}`);
+  }
+  const d = await response.json();
+  return (d.message?.content || '').replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/, '').trim();
+}
 
 /**
- * OpenRouter API 호출 (vision 또는 텍스트) — retry with exponential backoff
- * 401/429/5xx: 최대 3회 재시도
+ * Ollama 텍스트 API 호출
+ */
+async function callOllamaText(textPrompt) {
+  const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: OLLAMA_VISION_MODEL,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: textPrompt },
+      ],
+      stream: false,
+    }),
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(`Ollama ${response.status}: ${err.slice(0, 100)}`);
+  }
+  const d = await response.json();
+  return (d.message?.content || '').replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/, '').trim();
+}
+
+/**
+ * OpenRouter API 호출 (Ollama 실패 시 fallback)
  */
 async function callOpenRouter(messages) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY not set in backend/.env');
 
-  let lastError;
-  for (let attempt = 1; attempt <= OPENROUTER_MAX_RETRIES; attempt++) {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 1024,
-        messages,
-      }),
-    });
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: OPENROUTER_MODEL, max_tokens: 1024, messages }),
+  });
 
-    if (response.ok) {
-      const data = await response.json();
-      const raw = data.choices?.[0]?.message?.content?.trim() || '';
-      // 마크다운 코드펜스 제거 (```html ... ``` 또는 ``` ... ```)
-      return raw.replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/, '').trim();
-    }
-
-    // 에러 body 읽기 (rate limit 원인 파악용)
-    let errBody = '';
-    try { errBody = await response.text(); } catch (_) {}
-    const errMsg = `OpenRouter ${response.status} ${response.statusText}: ${errBody.slice(0, 200)}`;
-
-    const isRetryable = response.status === 401 || response.status === 429 || response.status >= 500;
-    if (!isRetryable || attempt === OPENROUTER_MAX_RETRIES) {
-      throw new Error(errMsg);
-    }
-
-    const waitMs = OPENROUTER_RETRY_BASE_MS * Math.pow(2, attempt - 1);
-    console.warn(`[descGen] ${errMsg} — retry ${attempt}/${OPENROUTER_MAX_RETRIES} after ${waitMs}ms`);
-    await new Promise(r => setTimeout(r, waitMs));
-    lastError = errMsg;
+  if (!response.ok) {
+    const errBody = await response.text().catch(() => '');
+    throw new Error(`OpenRouter ${response.status}: ${errBody.slice(0, 200)}`);
   }
-  throw new Error(lastError);
+  const data = await response.json();
+  const raw = data.choices?.[0]?.message?.content?.trim() || '';
+  return raw.replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/, '').trim();
 }
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4MB (Anthropic 제한 5MB에 여유 두기)
@@ -138,13 +161,11 @@ async function fetchImageAsDataUrl(url) {
 }
 
 /**
- * vision 방식: 이미지를 base64로 다운로드 후 image_url 블록으로 전달
- * (쿠팡 CDN은 OpenRouter 서버의 직접 fetch를 차단하므로 로컬에서 다운로드 필요)
+ * vision 방식: Ollama 우선, OpenRouter fallback
  */
 async function generateVision(imageUrls) {
   const urls = imageUrls.slice(0, MAX_IMAGES).map(normalizeUrl);
 
-  // 병렬 다운로드 (실패한 이미지는 건너뜀)
   const dataUrls = (await Promise.all(
     urls.map(url => fetchImageAsDataUrl(url).catch(err => {
       console.warn(`[descGen] Image download failed (${err.message}) — skipping`);
@@ -154,27 +175,30 @@ async function generateVision(imageUrls) {
 
   if (dataUrls.length === 0) return '';
 
+  const textPrompt = '上記の商品画像をもとに、日本の消費者向けの商品説明をHTML形式で生成してください。';
+
+  // Ollama 시도 (base64 순수 문자열 — data:... prefix 제거)
+  try {
+    const base64Images = dataUrls.map(d => d.replace(/^data:[^;]+;base64,/, ''));
+    return await callOllamaVision(textPrompt, base64Images);
+  } catch (err) {
+    console.warn(`[descGen] Ollama vision failed (${err.message}), falling back to OpenRouter`);
+  }
+
+  // OpenRouter fallback
   const imageBlocks = dataUrls.map(dataUrl => ({
     type: 'image_url',
     image_url: { url: dataUrl },
   }));
-
   const messages = [
     { role: 'system', content: SYSTEM_PROMPT },
-    {
-      role: 'user',
-      content: [
-        ...imageBlocks,
-        { type: 'text', text: '上記の商品画像をもとに、日本の消費者向けの商品説明をHTML形式で生成してください。' },
-      ],
-    },
+    { role: 'user', content: [...imageBlocks, { type: 'text', text: textPrompt }] },
   ];
-
   return callOpenRouter(messages);
 }
 
 /**
- * 텍스트 방식: ItemTitle + ItemDescriptionText 기반
+ * 텍스트 방식: Ollama 우선, OpenRouter fallback
  */
 async function generateText(itemTitle, itemDescriptionText) {
   const userContent = [
@@ -184,15 +208,20 @@ async function generateText(itemTitle, itemDescriptionText) {
 
   if (!userContent) return '';
 
-  const messages = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    {
-      role: 'user',
-      content: `${userContent}\n\n上記の情報をもとに、日本の消費者向けの商品説明をHTML形式で生成してください。`,
-    },
-  ];
+  const prompt = `${userContent}\n\n上記の情報をもとに、日本の消費者向けの商品説明をHTML形式で生成してください。`;
 
-  return callOpenRouter(messages);
+  // Ollama 시도
+  try {
+    return await callOllamaText(prompt);
+  } catch (err) {
+    console.warn(`[descGen] Ollama text failed (${err.message}), falling back to OpenRouter`);
+  }
+
+  // OpenRouter fallback
+  return callOpenRouter([
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: prompt },
+  ]);
 }
 
 /**
@@ -202,11 +231,6 @@ async function generateText(itemTitle, itemDescriptionText) {
  * @returns {Promise<{ html: string, method: 'vision'|'text'|'skip' }>}
  */
 async function generateJapaneseDescription(row) {
-  if (!process.env.OPENROUTER_API_KEY) {
-    console.warn('[descGen] OPENROUTER_API_KEY not set — skip');
-    return { html: '', method: 'skip' };
-  }
-
   // DetailImages 우선, 없으면 ExtraImages fallback (기존 수집 상품 호환)
   const detailImages = parseExtraImages(row.DetailImages);
   const extraImages = parseExtraImages(row.ExtraImages);
