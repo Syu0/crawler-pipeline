@@ -63,7 +63,7 @@ async function callOllamaVision(textPrompt, base64Images) {
       ],
       stream: false,
     }),
-    signal: AbortSignal.timeout(300000), // 이미지 처리 최대 5분
+    signal: AbortSignal.timeout(90000), // 이미지 처리 최대 90초
   });
   if (!response.ok) {
     const err = await response.text().catch(() => '');
@@ -177,24 +177,29 @@ async function generateVision(imageUrls) {
 
   const textPrompt = '上記の商品画像をもとに、日本の消費者向けの商品説明をHTML形式で生成してください。';
 
-  // Ollama 시도 (base64 순수 문자열 — data:... prefix 제거)
+  // Ollama 시도 (1장만 — llama3.2-vision은 multi-image 미지원)
   try {
-    const base64Images = dataUrls.map(d => d.replace(/^data:[^;]+;base64,/, ''));
+    const base64Images = dataUrls.slice(0, 1).map(d => d.replace(/^data:[^;]+;base64,/, ''));
     return await callOllamaVision(textPrompt, base64Images);
   } catch (err) {
     console.warn(`[descGen] Ollama vision failed (${err.message}), falling back to OpenRouter`);
   }
 
-  // OpenRouter fallback
-  const imageBlocks = dataUrls.map(dataUrl => ({
-    type: 'image_url',
-    image_url: { url: dataUrl },
-  }));
-  const messages = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: [...imageBlocks, { type: 'text', text: textPrompt }] },
-  ];
-  return callOpenRouter(messages);
+  // OpenRouter fallback (크레딧 있을 때만 유효)
+  try {
+    const imageBlocks = dataUrls.map(dataUrl => ({
+      type: 'image_url',
+      image_url: { url: dataUrl },
+    }));
+    const messages = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: [...imageBlocks, { type: 'text', text: textPrompt }] },
+    ];
+    return await callOpenRouter(messages);
+  } catch (err) {
+    console.warn(`[descGen] OpenRouter vision failed (${err.message}), trying text fallback`);
+    return ''; // caller(generateJapaneseDescription)가 text fallback 처리
+  }
 }
 
 /**
@@ -244,8 +249,12 @@ async function generateJapaneseDescription(row) {
       console.log(`[descGen] vision mode — ${Math.min(visionImages.length, MAX_IMAGES)} images (source: ${detailImages.length > 0 ? 'DetailImages' : 'ExtraImages'})`);
       html = await generateVision(visionImages);
       method = 'vision';
-    } else {
-      console.log('[descGen] text mode');
+    }
+
+    // vision 실패 또는 이미지 없으면 텍스트 모드로 fallback
+    if (!html) {
+      if (visionImages.length > 0) console.log('[descGen] vision failed, falling back to text mode');
+      else console.log('[descGen] text mode');
       html = await generateText(row.ItemTitle, row.ItemDescriptionText);
       method = 'text';
     }
