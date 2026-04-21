@@ -214,7 +214,8 @@ function validateRow(row, isUpdateMode = false) {
   }
   
   // Category validation - required for CREATE, optional for UPDATE
-  if (!isUpdateMode && !row.categoryId) {
+  // jpCategoryIdUsed(MANUAL) 있으면 categoryId 없어도 통과
+  if (!isUpdateMode && !row.categoryId && !row.jpCategoryIdUsed) {
     return { valid: false, reason: 'Missing categoryId' };
   }
   
@@ -403,49 +404,48 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
     }
   }
 
-  // Resolve JP category (never fails - has FALLBACK)
-  let categoryResolution;
-  try {
-    categoryResolution = await resolveJpCategoryId({
-      categoryId: row.categoryId,
-      categoryPath2: row.categoryPath2 || '',
-      categoryPath3: row.categoryPath3 || ''
-    });
-  } catch (catErr) {
-    console.warn(`[Registration] Category resolution error: ${catErr.message}, using FALLBACK`);
-    categoryResolution = {
-      jpCategoryId: '320002604', // Hardcoded fallback
-      matchType: 'FALLBACK',
-      confidence: 0
-    };
-  }
-  
   // changeFlags 파싱 (CREATE/UPDATE 공통)
   const flags = parseChangeFlags(row.changeFlags);
 
-  // CATEGORY: flags.category 이면 resolver 결과 사용 (MANUAL override bypass)
-  //           아니면 기존 MANUAL override 로직 유지
-  if (flags.category) {
-    const oldCategoryId = row.jpCategoryIdUsed || '(none)';
-    if (oldCategoryId !== categoryResolution.jpCategoryId) {
-      console.log(`  [CATEGORY] 재resolve: ${oldCategoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
-    } else {
-      console.log(`  [CATEGORY] 동일 카테고리 (${categoryResolution.jpCategoryId})`);
-    }
-  } else {
-    // CATEGORY 플래그 없으면 기존 MANUAL override 유지
-    const manualCategoryOverride = row.jpCategoryIdUsed &&
-      row.jpCategoryIdUsed !== categoryResolution.jpCategoryId &&
-      row.categoryMatchType === 'MANUAL';
+  // Resolve JP category (never fails - has FALLBACK)
+  let categoryResolution;
 
-    if (manualCategoryOverride) {
+  // MANUAL override: categoryMatchType=MANUAL + jpCategoryIdUsed가 있으면 resolver 우선 적용
+  // flags.category는 UPDATE 재resolve 용도 — CREATE 신규 상품 + MANUAL은 항상 override
+  const isManualOverride = row.jpCategoryIdUsed && row.categoryMatchType === 'MANUAL' &&
+    (!flags.category || !isUpdateMode);
+  if (isManualOverride) {
+    categoryResolution = {
+      jpCategoryId: row.jpCategoryIdUsed,
+      matchType: 'MANUAL',
+      confidence: 1.0,
+      coupangCategoryKey: null
+    };
+    console.log(`  Category: MANUAL override → ${categoryResolution.jpCategoryId}`);
+  } else {
+    try {
+      categoryResolution = await resolveJpCategoryId({
+        categoryId: row.categoryId,
+        categoryPath2: row.categoryPath2 || '',
+        categoryPath3: row.categoryPath3 || ''
+      });
+    } catch (catErr) {
+      console.warn(`[Registration] Category resolution error: ${catErr.message}, using FALLBACK`);
       categoryResolution = {
-        jpCategoryId: row.jpCategoryIdUsed,
-        matchType: 'MANUAL',
-        confidence: 1.0,
-        coupangCategoryKey: categoryResolution.coupangCategoryKey
+        jpCategoryId: '320002604', // Hardcoded fallback
+        matchType: 'FALLBACK',
+        confidence: 0
       };
-      console.log(`  Category: Using MANUAL override → ${categoryResolution.jpCategoryId}`);
+    }
+
+    // CATEGORY 플래그: resolver 결과 사용 (로깅)
+    if (flags.category) {
+      const oldCategoryId = row.jpCategoryIdUsed || '(none)';
+      if (oldCategoryId !== categoryResolution.jpCategoryId) {
+        console.log(`  [CATEGORY] 재resolve: ${oldCategoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
+      } else {
+        console.log(`  [CATEGORY] 동일 카테고리 (${categoryResolution.jpCategoryId})`);
+      }
     } else {
       console.log(`  Category: ${row.categoryId} → ${categoryResolution.jpCategoryId} (${categoryResolution.matchType})`);
     }

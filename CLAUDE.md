@@ -258,7 +258,7 @@ write calls 쿼터: 10회/세션
   - DOM 파싱: StandardImage·ExtraImages(슬라이더 이미지)·DetailImages(상세페이지 이미지)
   - **ExtraImages**: 슬라이더 썸네일 DOM 파싱 결과 → `EditGoodsMultiImage` 상단 갤러리 등록용
   - **DetailImages**: 상세페이지 이미지 DOM 파싱 결과 → `descriptionGenerator` vision 입력용
-  - ⚠️ 현재 `buildImageExtractFn()` return에 `detail` 누락 버그 → DetailImages 항상 빈 배열 (수정 예정: oc/fix-detail-images)
+  - ✅ `buildImageExtractFn()` return에 `detail` 포함됨 (버그 수정 완료)
   - **breadcrumbTexts**: 브레드크럼 텍스트 배열 수집 → coupang_categorys 자동 upsert
     (collect 시마다 자동 기록, category_mapping AUTO match 키 소스)
   - HARD_BLOCK 0, 3/3 연속 수집 성공 검증 완료
@@ -346,10 +346,10 @@ write calls 쿼터: 10회/세션
   - false 시 출력: `[promote] 비활성화 상태입니다 (AUTO_REGISTER_ENABLED=false). config 시트에서 true로 변경하면 재개됩니다.`
   - setup-sheets.js 기본값에도 추가
 
-- [ ] **DetailImages 수집 버그 수정 + DESC vision 입력 변경** | 브랜치: oc/fix-detail-images
-  - `buildImageExtractFn()` return에 `detail` 누락 버그 수정
+- [x] **DetailImages 수집 버그 수정 + DESC vision 입력 변경** | 완료 (2026-04-21)
+  - `buildImageExtractFn()` return에 `detail` 포함 (버그 수정 완료)
   - ExtraImages = 슬라이더만, DetailImages = 상세페이지만으로 수집 분리
-  - `descriptionGenerator`: vision 입력을 ExtraImages → DetailImages 우선 (없으면 fallback)
+  - `descriptionGenerator`: DetailImages 우선, ExtraImages fallback 구현됨
 
 - [ ] **배송 자동화** (`qoo10-shipping-update.js`) — SetSendingInfo API
   - qoo10_orders 시트 `송장번호` 컬럼 입력 감지 → Qoo10 발송확인 처리

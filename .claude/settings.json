@@ -8,7 +8,10 @@
       "Bash(node -e \"require\\(''got-scraping''\\); console.log\\(''ok''\\)\")",
       "Bash(node scripts/qoo10-import-existing-goods.js --dry-run --file=/Users/judy/dev/crawler-pipeline/Qoo10_ItemInfo_20260408114140.xlsx)",
       "Bash(node -e ':*)",
-      "Bash(node scripts/qoo10-import-existing-goods.js --file=/Users/judy/dev/crawler-pipeline/Qoo10_ItemInfo_20260408114140.xlsx)"
+      "Bash(node scripts/qoo10-import-existing-goods.js --file=/Users/judy/dev/crawler-pipeline/Qoo10_ItemInfo_20260408114140.xlsx)",
+      "Bash(git branch *)",
+      "Bash(node backend/scripts/sheets-delete-deactivated.js --dry-run)",
+      "Bash(node backend/scripts/sheets-delete-deactivated.js)"
     ]
   }
 }
