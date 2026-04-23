@@ -2,18 +2,17 @@
 
 ## Step-by-Step Operator Instructions
 
-### 0. 매일 시작 절차 (순서 중요)
-
-> ⚠️ 매일 출근 시 또는 PC 재시작 후 반드시 아래 순서대로 실행한다.
-> 순서가 바뀌거나 1번 없이 2번 실행하면 warming 단계에서 Akamai 블록 발생.
+### 0. 매일 시작 절차
 
 ```bash
-# 1번 먼저: yamyam 쿠키 수신 서버
+# yamyam 쿠키 수신 서버 (필수)
 npm run backend:start
-
-# 2번: Playwright 브라우저 데몬
-npm run coupang:browser:start
 ```
+
+Chrome은 Profile 1으로 쿠팡 로그인 상태를 유지해둔다 — `coupang:collect`/`coupang:discover`가 Browser Relay CLI로 attach.
+
+> **참고**: `coupang:browser:start`(Playwright 데몬)는 `coupang:collect`/`coupang:discover`에 불필요. `stock:check` 등 Playwright를 직접 사용하는 스크립트를 돌릴 때에만 따로 실행.
+> (이전 버전 문서는 "browser:start 2번째 실행"을 필수처럼 기술했으나, 2026-04-23 실측으로 파이프라인에 불필요함이 재확인되었다.)
 
 운영 환경: **Mac Mini** (Tailscale Funnel로 대시보드와 연결됨)
 

@@ -41,9 +41,11 @@ ERROR            → 복구 가능한 실패
 
 ```bash
 npm run backend:start           # 매일 1번째 실행 (쿠키 수신 서버)
-npm run coupang:browser:start   # 매일 2번째 실행 (Playwright 데몬)
-npm run coupang:browser:status  # 데몬 상태 확인
 npm run cookie:refresh          # 쿠키 수동 갱신 (자동 갱신 실패 시)
+
+# (선택) stock:check 실행 시에만 필요 — daily 파이프라인(collect/discover 포함)엔 불필요
+# npm run coupang:browser:start   # Playwright 데몬
+# npm run coupang:browser:status  # Playwright 데몬 상태
 
 # 파이프라인 (순서대로)
 npm run coupang:discover        # 키워드 탐색
