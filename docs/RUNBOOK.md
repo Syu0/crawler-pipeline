@@ -152,6 +152,46 @@ npm run sheets:setup:force    # 모든 기본값 덮어쓰기 — 값 초기화 
 
 ---
 
+## LLM 경로 (description / title 생성)
+
+Qoo10 등록 시 `descriptionGenerator.js`(일본어 상세 HTML)와 `titleTranslator.js`(일본어 타이틀)는 LLM을 호출한다. 2026-04-23 B+C 적용 이후 경로는 다음과 같다.
+
+### description 생성 경로 (`backend/qoo10/descriptionGenerator.js`)
+
+1. **vision 경로** — ExtraImages 있을 때
+   - Ollama vision (`OLLAMA_VISION_MODEL`, 기본 `llama3.2-vision:11b`, 1장만, 90s timeout)
+   - 실패 시 → **text 경로로 떨어짐** (OpenRouter vision 경유 없음, B안 적용)
+2. **text 경로** — ExtraImages 없거나 vision 실패 시
+   - Ollama text (`OLLAMA_TEXT_MODEL`, 기본 `gemma3:4b`, 60s timeout) — 가볍고 안정적
+   - 실패 시 → OpenRouter `claude-haiku-4-5` text (크레딧 있을 때만 유효)
+3. **최종 실패**: `{ html: '', method: 'skip' }` 반환 → 등록은 진행되지만 description 빈 값
+
+### 관련 env var
+
+| Variable | Default | 역할 |
+|----------|---------|------|
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama 서버 주소 |
+| `OLLAMA_VISION_MODEL` | `llama3.2-vision:11b` | 이미지 분석 전용. 무겁고 자주 timeout |
+| `OLLAMA_TEXT_MODEL` | `gemma3:4b` | text fallback 전용. titleTranslator도 이 모델 사용 |
+| `OPENROUTER_API_KEY` | - | OpenRouter 크레딧 있을 때만 유효한 text fallback |
+
+### 장애 시 대응
+
+| 증상 | 원인 | 조치 |
+|------|------|------|
+| description이 빈 문자열(`method: 'skip'`)로 등록됨 | Ollama 다운 또는 OpenRouter 크레딧 소진 | `ollama list`로 모델 확인 → 필요 시 `ollama serve` 재시작 / OpenRouter 크레딧 복구 |
+| vision이 매번 timeout | 무거운 vision 모델 + 큰 이미지 | `OLLAMA_VISION_MODEL`을 가벼운 모델로 교체 (예: `llava:7b`) |
+| text fallback이 느리거나 품질 낮음 | `OLLAMA_TEXT_MODEL` 모델 교체 필요 | env만 바꿔 재시작. 코드 수정 불필요 |
+| OpenRouter 402 Insufficient credits 반복 | 크레딧 0 | 카드 복구 전까지 `OPENROUTER_API_KEY` 비우기 (Ollama만 사용). 복구 후 다시 채움 |
+
+### 재발 방지 원칙
+
+1. **LLM 경로 변경 시 3곳 동시 업데이트**: 코드 주석 + `.env.example` + 본 섹션 (`RUNBOOK.md`) + `ARCHITECTURE.md`. PR 하나에서 같이.
+2. **외부 API 크레딧 상태 변경 시**(결제 복구/소진) 해당 fallback 경로를 즉시 조건부 활성화/비활성화한다. 과거 OpenRouter 402가 매번 발생하며 시간만 낭비한 사례 있음.
+3. **vision과 text는 별도 env var**로 유지한다. 모델 교체 시 코드 수정 없이 env만 바꿔 끝낼 수 있도록.
+
+---
+
 ## Common Failure Modes
 
 ### Qoo10 API Error -999

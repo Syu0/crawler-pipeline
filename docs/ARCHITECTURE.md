@@ -71,7 +71,7 @@ Qoo10 QAPI를 통해 상품 등록/수정.
 | `editGoodsContents.js` | EditGoodsContents 래퍼 (일본어 상세 HTML + 이미지) |
 | `editGoodsImage.js` | EditGoodsImage 래퍼 (대표이미지 업데이트) |
 | `editGoodsMultiImage.js` | EditGoodsMultiImage 래퍼 (슬라이더 이미지 EnlargedImage1~50) |
-| `descriptionGenerator.js` | 일본어 상세페이지 HTML 생성 (vision/text via OpenRouter) |
+| `descriptionGenerator.js` | 일본어 상세페이지 HTML 생성 (Ollama vision/text 우선, OpenRouter text fallback). 2026-04-23 B+C 적용: OpenRouter vision 경유 제거, `OLLAMA_TEXT_MODEL`(기본 `gemma3:4b`)로 text 모델 분리 |
 
 > ⚠️ **미존재:** `getItemDetailInfo.js` (GetItemDetailInfo 래퍼)
 > SecondSubCat은 시트 `jpCategoryIdUsed` 컬럼에서 직접 resolve. GetItemDetailInfo 조회 없음.

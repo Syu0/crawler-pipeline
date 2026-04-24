@@ -322,7 +322,7 @@ write calls 쿼터: 10회/세션
   - URL 200자 초과 건 skip, 50개 초과 분 slice
   - Qoo10 슬라이더 real mode 반영 확인 완료 (2026-04-01)
 - [x] **[전략] 일본어 상세페이지 콘텐츠 생성** | 완료 2026-03-31
-  - `backend/qoo10/descriptionGenerator.js`: ExtraImages vision 모드(Claude Haiku via OpenRouter) 또는 텍스트 모드로 일본어 HTML 생성
+  - `backend/qoo10/descriptionGenerator.js`: 일본어 HTML 생성. **경로 (2026-04-23 B+C 적용)**: vision=Ollama `llama3.2-vision:11b` 단 1회 시도 → 실패 시 바로 text 경로로 (OpenRouter vision 경유 제거). text=Ollama `gemma3:4b`(env `OLLAMA_TEXT_MODEL`) 우선 → 실패 시 OpenRouter `claude-haiku-4-5` fallback(크레딧 있을 때만 유효)
   - `backend/qoo10/editGoodsContents.js`: ItemsContents.EditGoodsContents API 래퍼 (파라미터명 `Contents`)
   - `backend/qoo10/editGoodsMultiImage.js`: ItemsContents.EditGoodsMultiImage API 래퍼 (EnlargedImage1~50)
   - ExtraImages를 `<p><img src="..." /></p>` 형식으로 일본어 텍스트 뒤에 이어붙여 전송

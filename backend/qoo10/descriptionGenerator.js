@@ -2,10 +2,19 @@
  * descriptionGenerator.js
  * ExtraImages(vision) 또는 텍스트 기반으로 일본어 상품 설명 HTML 생성
  *
- * 우선순위:
- *   1. ExtraImages 있으면 → OpenRouter vision (최대 5장)
- *   2. ExtraImages 없으면 → ItemTitle + ItemDescriptionText 텍스트 기반
- *   3. API 실패 → { html: '', method: 'skip' }
+ * 우선순위 (2026-04-23 B+C 적용):
+ *   vision 경로: Ollama vision → (실패) → 바로 text 경로로 떨어뜨림 (OpenRouter vision 경유 X)
+ *   text 경로:   Ollama text(가벼운 모델) → (실패) → OpenRouter text (크레딧 있을 때만 유효)
+ *   최종 실패:   { html: '', method: 'skip' }
+ *
+ * 모델 분리:
+ *   - OLLAMA_VISION_MODEL (기본 llama3.2-vision:11b) — 이미지 분석 전용. 무겁고 자주 timeout.
+ *   - OLLAMA_TEXT_MODEL   (기본 gemma3:4b)          — text fallback 전용. 빠르고 안정적.
+ *
+ * 배경:
+ *   OpenRouter 카드 결제 오류(2026-04) 이후 vision fallback 루트가 매번 402를 맞고 시간만 낭비.
+ *   과거엔 vision 실패 → OpenRouter vision → text fallback 3단계였으나
+ *   B안(OpenRouter vision 건너뛰기) + C안(text 모델 분리)을 적용해 2단계로 단축 + 모델 경량화.
  *
  * 사용:
  *   const { generateJapaneseDescription } = require('./descriptionGenerator');
@@ -16,6 +25,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 
 const OPENROUTER_MODEL = 'anthropic/claude-haiku-4-5';
 const OLLAMA_VISION_MODEL = process.env.OLLAMA_VISION_MODEL || 'llama3.2-vision:11b';
+const OLLAMA_TEXT_MODEL   = process.env.OLLAMA_TEXT_MODEL   || 'gemma3:4b';
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 const MAX_IMAGES = 5;
 
@@ -74,21 +84,21 @@ async function callOllamaVision(textPrompt, base64Images) {
 }
 
 /**
- * Ollama 텍스트 API 호출
+ * Ollama 텍스트 API 호출 (OLLAMA_TEXT_MODEL 사용 — vision 모델과 분리)
  */
 async function callOllamaText(textPrompt) {
   const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: OLLAMA_VISION_MODEL,
+      model: OLLAMA_TEXT_MODEL,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: textPrompt },
       ],
       stream: false,
     }),
-    signal: AbortSignal.timeout(120000),
+    signal: AbortSignal.timeout(60000),
   });
   if (!response.ok) {
     const err = await response.text().catch(() => '');
@@ -161,7 +171,13 @@ async function fetchImageAsDataUrl(url) {
 }
 
 /**
- * vision 방식: Ollama 우선, OpenRouter fallback
+ * vision 방식: Ollama vision만 시도. 실패 시 빈 문자열 반환 → caller가 text fallback.
+ *
+ * B안 적용 (2026-04-23): OpenRouter vision 경유 제거.
+ *   과거엔 Ollama 실패 → OpenRouter vision → text fallback 이었으나,
+ *   OpenRouter 카드 결제 오류 이후 vision fallback이 매번 402로 실패하며 시간만 낭비.
+ *   Ollama 실패 → 바로 text 경로로 떨어뜨리는 게 훨씬 빠르고 실질적.
+ *   OpenRouter vision 재활성화가 필요한 경우는 이 함수 내 분기 복구.
  */
 async function generateVision(imageUrls) {
   const urls = imageUrls.slice(0, MAX_IMAGES).map(normalizeUrl);
@@ -177,27 +193,12 @@ async function generateVision(imageUrls) {
 
   const textPrompt = '上記の商品画像をもとに、日本の消費者向けの商品説明をHTML形式で生成してください。';
 
-  // Ollama 시도 (1장만 — llama3.2-vision은 multi-image 미지원)
+  // Ollama vision 단 1회 시도 (1장만 — llama3.2-vision은 multi-image 미지원)
   try {
     const base64Images = dataUrls.slice(0, 1).map(d => d.replace(/^data:[^;]+;base64,/, ''));
     return await callOllamaVision(textPrompt, base64Images);
   } catch (err) {
-    console.warn(`[descGen] Ollama vision failed (${err.message}), falling back to OpenRouter`);
-  }
-
-  // OpenRouter fallback (크레딧 있을 때만 유효)
-  try {
-    const imageBlocks = dataUrls.map(dataUrl => ({
-      type: 'image_url',
-      image_url: { url: dataUrl },
-    }));
-    const messages = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: [...imageBlocks, { type: 'text', text: textPrompt }] },
-    ];
-    return await callOpenRouter(messages);
-  } catch (err) {
-    console.warn(`[descGen] OpenRouter vision failed (${err.message}), trying text fallback`);
+    console.warn(`[descGen] Ollama vision failed (${err.message}), falling through to text path (OpenRouter vision 경유 skip)`);
     return ''; // caller(generateJapaneseDescription)가 text fallback 처리
   }
 }
