@@ -95,3 +95,8 @@ agenthub/agents/youtube/db
 
 # Mobile development
 android-sdk/
+
+# Image processing: local static host
+backend/image-processing/hosted/
+backend/image-processing/output/
+backend/image-processing/logs/

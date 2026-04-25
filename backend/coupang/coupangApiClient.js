@@ -68,11 +68,24 @@ function browserEvaluate(fn) {
 /**
  * 이미지 URL을 풀 HTTPS URL로 정규화.
  * protocol-relative("//...") → "https://..." 변환만 수행.
- * CDN size 세그먼트는 그대로 유지 ("origin"은 CDN 미지원 → 404 확인됨).
+ * CDN size 세그먼트는 그대로 유지.
  */
 function normalizeImageUrl(url) {
   if (!url) return null;
   return url.startsWith('//') ? `https:${url}` : url;
+}
+
+/**
+ * 슬라이더(ExtraImages)용 URL 포맷을 800x800ex로 통일.
+ * 쿠팡 상세 페이지는 섬네일용 492x492ex 세그먼트로 이미지를 주므로, Qoo10 슬라이더
+ * EnlargedImage 품질을 위해 수집 시점에 upsize한다. 2026-04-24 해상도 실측으로
+ * 원본이 최소 1948px~4009px임을 확인 — 800x800ex는 Qoo10 측에서 즉시 제공 가능한 해상도.
+ *
+ * DetailImages(`/q89/`)는 이미 원본 해상도로 수집되므로 대상 아님.
+ */
+function upsizeSliderUrl(url) {
+  if (!url) return url;
+  return url.replace(/\/\d+x\d+(?:ex|cr)\//, '/800x800ex/');
 }
 
 // ── evaluate 함수 빌더 ────────────────────────────────────────────────────────
@@ -213,9 +226,10 @@ async function collectProductData(productId, vendorItemId, _itemId) {
     const rawExtra = Array.isArray(result.extra) ? result.extra : [];
     const rawDetail = Array.isArray(result.detail) ? result.detail : [];
 
-    // ExtraImages: 슬라이더 이미지 (EditGoodsMultiImage 상단 갤러리용)
-    ExtraImages = [...new Set(rawExtra.map(normalizeImageUrl).filter(Boolean))];
-    // DetailImages: 상세페이지 이미지 (DESC vision 입력용)
+    // ExtraImages: 슬라이더 이미지 (EditGoodsMultiImage 상단 갤러리용).
+    // 쿠팡 DOM은 섬네일용 492x492ex로 src를 주므로 800x800ex로 upsize (Qoo10 슬라이더 품질).
+    ExtraImages = [...new Set(rawExtra.map(normalizeImageUrl).map(upsizeSliderUrl).filter(Boolean))];
+    // DetailImages: 상세페이지 이미지 (DESC vision 입력용). /q89/ 원본 해상도 유지.
     DetailImages = [...new Set(rawDetail.map(normalizeImageUrl).filter(Boolean))];
 
     categoryId = result.categoryId || null;
