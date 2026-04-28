@@ -100,3 +100,4 @@ android-sdk/
 backend/image-processing/hosted/
 backend/image-processing/output/
 backend/image-processing/logs/
+backend/image-processing/title-rework-*.json

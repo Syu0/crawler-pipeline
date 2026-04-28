@@ -93,30 +93,86 @@ QOO10_ALLOW_REAL_REG=1 \
 - `logs/batch-phase1.jsonl`에 결과 append. 재실행 시 성공한 건은 skip.
 - API 사이 sleep 800ms (Qoo10 rate 안전 마진).
 
-### 2) Phase 2 — DetailImages + description HTML (📋 TODO, Phase 2)
+### 2) Phase 2 — title + DetailImages + description (이미지만, 텍스트 본문 보류)
 
-**현재 상태**: 보류. Phase 1 검증 후 별도 결정.
+**현재 동작** (2026-04-26):
+- Title: gemma3:12b 번역 + 자동 후처리 + 9건 수동 보정 → `title-rework-output.json`의 `fixedJpTitle`
+- DetailImages: 다운로드 + processImage → `hosted/products/<itemCode>/detail_NN.jpg`
+- description: **이미지만** (`<p><img src="tunnel/..."/></p>` 반복). DetailImages 우선, 없으면 ExtraImages
+- API: `ItemsBasic.UpdateGoods` (title + description + ExtraImages를 한 번에 갱신)
 
-**왜 분리했나**:
-- Standard·Extra는 이미지 URL만 교체 → description 텍스트에 영향 없음.
-- DetailImages는 `<img>` 태그가 description HTML 본문에 임베드돼 있다. Qoo10에는 부분 업데이트 API가 없고 `EditGoodsContents`로 HTML 전체를 덮어써야 한다. 즉 `descriptionGenerator.js`를 다시 호출해 새 HTML을 보내야 하므로 **description 텍스트까지 함께 재생성**된다 (Ollama 번역이 새로 돈다).
-- 운영 영향이 크다 → 별도 사이클로.
+**실행**:
+```bash
+cd /Users/judy/dev/crawler-pipeline
+IMAGE_TUNNEL_BASE='https://<random>.trycloudflare.com' \
+  node backend/image-processing/batch-replace-phase2.js --limit=1            # dry-run 1건
+IMAGE_TUNNEL_BASE='https://<random>.trycloudflare.com' QOO10_ALLOW_REAL_REG=1 \
+  node backend/image-processing/batch-replace-phase2.js --limit=1 --apply    # apply 1건
+IMAGE_TUNNEL_BASE='https://<random>.trycloudflare.com' QOO10_ALLOW_REAL_REG=1 \
+  node backend/image-processing/batch-replace-phase2.js --apply              # apply 전체
+```
 
-**Phase 2 진입 전 확인 필요**:
-- (a) 현재 Phase 1 적용 후 Qoo10 실 노출 검증 OK인지 (30분 동기화 후 무작위 5건 마켓 페이지 확인).
-- (b) `descriptionGenerator.js`의 B+C 적용본(`commit 0674e22`)이 만들어내는 description 품질이 운영에 적합한지.
-- (c) DetailImages 재가공·재호스팅에 필요한 추가 용량 (현재 ~192장 × 평균 100KB ≈ 20MB. 무시 가능).
+**Idempotent**: `logs/batch-phase2.jsonl`에 성공 itemCode 기록 → 재실행 시 skip.
 
-**Phase 2 구현 시 기대 동작**:
-1. 시트 row의 `DetailImages` 배열 다운로드 → `processImage` → `hosted/products/<itemCode>/detail_NN.jpg` 저장.
-2. `descriptionGenerator.generateJapaneseDescription(row, { detailImagesOverride: tunnelDetailUrls })`로 새 HTML 생성.
-3. `EditGoodsContents(itemCode, newHtml)` 호출.
-4. 로그 step `details` 추가. idempotent.
+---
 
-**Phase 2 미수행 시 잔존 리스크**:
-- 상세 페이지 본문 안의 이미지(`<img src="...coupangcdn.com/...q89/...">`)가 그대로 노출됨.
-- 즉 "상세 페이지에 진입한 사용자/봇이 보는 본문 이미지"는 여전히 쿠팡 원본 URL.
-- 우선순위는 Phase 1 (검색 결과 노출 빈도가 압도적으로 큼)이지만, **저작권 관점 리스크는 부분만 해소된 상태**임을 명시한다.
+### 🚧 Phase 2 보류 작업 — description 텍스트 본문 (복구 가능)
+
+**보류 사유** (2026-04-26):
+- `descriptionGenerator.js`의 Ollama vision 호출이 매번 timeout (90s) → 사실상 vision 미작동
+- Text fallback (gemma3:4b 또는 gemma3:12b) 모두 한국 고유어 번역 한계: 「김」→「김」그대로 또는 「김치」오역, 브랜드명 한국어 잔존 (예: "고메이494" → "ごめい494", "캔김" → "缶김")
+- titleTranslator는 KR_JP_GLOSSARY 가이드로 해결됐지만 descriptionGenerator는 동일 가이드 미적용
+- 위기 모드 시간 부담: 51건 vision+text = ~1.5시간, gemma3:12b text-only = ~40분, 그래도 품질 가변
+- 결론: **이미지만 반복하는 단순 description**으로 우선 처리. 텍스트 본문은 후속 사이클에 별도 처리.
+
+**현재 description 형태** (51건):
+```html
+<p><img src="https://<tunnel>/images/products/<itemCode>/detail_01.jpg" /></p>
+<p><img src="https://<tunnel>/images/products/<itemCode>/detail_02.jpg" /></p>
+...
+```
+
+**복구 절차** (description 텍스트 본문 재생성하려면):
+
+1. **`descriptionGenerator.js` prompt 보강** — `titleTranslator.js`의 `KR_JP_GLOSSARY` 패턴을 그대로 도입:
+   - 「김」→「海苔」 (절대 「キムチ」「김パ」 금지)
+   - 「곱창」→「ホルモン」
+   - 「광천김」→「廣川海苔」, 「대천김」→「大川海苔」
+   - 한국 브랜드명·지명 음차 카타카나 무리하지 말 것 (예: 「고메이494」→「Gomei494」 또는 한자/원어 그대로)
+2. **vision 단계 검토** — Ollama vision 11b가 매번 timeout → vision 자체 사용 보류 또는 더 가벼운 모델로 교체
+3. **text 모델 변경** — `OLLAMA_TEXT_MODEL=gemma3:12b` 또는 더 큰 모델
+4. **batch-replace-phase2.js 코드 복원**:
+   - 상단 `require('../qoo10/descriptionGenerator')` 주석 해제
+   - `runOne()` 안의 description 생성 블록을 다음과 같이 교체:
+     ```js
+     // descGen vision 우회 + text 본문 + 이미지 임베드
+     const descRow = {
+       ItemTitle: rowData.ItemTitle,
+       ItemDescriptionText: rowData.ItemDescriptionText || '',
+       DetailImages: [],   // vision skip (또는 tunnelDetails 전달해 vision 시도)
+       ExtraImages: [],
+     };
+     const descResult = await generateJapaneseDescription(descRow);
+     let newHtml = descResult?.html || '';
+     const embedUrls = tunnelDetails.length > 0 ? tunnelDetails : tunnelExtras;
+     if (embedUrls.length > 0) {
+       newHtml += embedUrls.map(u => `<p><img src="${u}" /></p>`).join('');
+     }
+     ```
+5. **재실행**: `logs/batch-phase2.jsonl` 백업 후 삭제 → 51건 재처리 (idempotent log 초기화).
+   - 동일 batch가 같은 itemCode에 대해 UpdateGoods 재호출 → 새 description으로 덮어쓰기.
+6. **30분 동기화** + 마켓 검증.
+
+**복구 시 보존되는 자산**:
+- `title-rework-output.json` — 51건 fixedJpTitle (제목 재번역 결과). 변하지 않으니 재사용.
+- `hosted/products/<itemCode>/{main,extra_NN,detail_NN}.jpg` — 모든 재가공 이미지. 재사용.
+- 즉 복구 작업은 **descGen 호출 + UpdateGoods 호출만** 추가하면 됨.
+
+**Phase 2 미완 잔존 리스크 (현 상태)**:
+- description 본문에 텍스트 SEO 내용이 없음 (이미지 + placeholder만). 검색 노출은 title이 담당하므로 영향 작음.
+- 단 일본 구매자가 상품 상세 페이지에서 텍스트 설명 기대 시 부족. 전환율에 부정 영향 가능.
+
+---
 
 ### 3) 신규 수집 자동화 — Phase 3 (TODO, 파이프라인 통합)
 

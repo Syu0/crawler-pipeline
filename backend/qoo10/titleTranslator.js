@@ -105,6 +105,21 @@ function buildFallbackTitle(categoryPath, meta) {
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 2000;
 
+// 한국→일본 어휘 매핑 가이드 (모델이 자주 틀리는 케이스)
+const KR_JP_GLOSSARY = `
+【韓国語→日本語の重要な訳語ルール — 厳守】
+- 「김」(海苔・乾海苔) は必ず「海苔」と訳す。絶対に「キムチ」ではない。
+- 「김치」(発酵白菜) のみ「キムチ」と訳す。
+- 「캔김」「도시락김」「전장김」「조미김」など「〇〇김」は全て「○○ 海苔」(海苔)。
+- 「곱창」(腸) は「ホルモン」または「韓国もつ」。
+- ブランド名・地名・人名は不要な音訳カタカナを避ける。意味のない長いカタカナ羅列は禁止。
+  - 例: 「광천김」→ 「広川海苔」または「韓国海苔」(✗ ガンチェンギム)
+  - 例: 「대천김」→ 「大川海苔」(✗ デチョンキム)
+  - 例: 「해달음」「마켓오네이처」など固有ブランドは英字や原音そのまま、不必要に伸ばさない
+- 数字+単位 (g, ml, 個, 봉, p, 호) は原文そのまま保持
+- 韓国独自食品は「韓国○○」prefix を活用 (例: 韓国海苔, 韓国おつまみ, 韓国ごはん)
+`;
+
 async function callLLMWithRetry(body) {
   const ollamaBase = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
   const ollamaModel = process.env.OLLAMA_TITLE_MODEL || 'gemma3:4b';
@@ -112,14 +127,30 @@ async function callLLMWithRetry(body) {
   // Ollama 시도 (native /api/chat)
   try {
     const messages = [
-      { role: 'system', content: 'あなたはQoo10 Japan SEOタイトル専門家です。タイトル文字列のみ出力。説明・記号・引用符不要。' },
+      {
+        role: 'system',
+        content:
+          'あなたはQoo10 Japan SEOタイトル専門家です。韓国語商品名を日本語の検索キーワード型タイトルに変換します。' +
+          'タイトル文字列のみ出力 (説明・記号・引用符不要)。' +
+          KR_JP_GLOSSARY,
+      },
       ...(body.messages || []),
     ];
     const response = await fetch(`${ollamaBase}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: ollamaModel, messages, stream: false }),
-      signal: AbortSignal.timeout(60000),
+      body: JSON.stringify({
+        model: ollamaModel,
+        messages,
+        stream: false,
+        keep_alive: '10m',           // 모델 unload 방지 → 두번째 호출부터 빠름
+        think: false,                // qwen3 thinking 비활성 — 토큰 낭비/지연 방지 (ollama 0.10+)
+        options: {
+          num_predict: 200,           // title ~30자 + 약간 여유
+          temperature: 0.3,           // 일관성 ↑
+        },
+      }),
+      signal: AbortSignal.timeout(240000),  // 12B 모델 첫 로드 시 ~60s 가능, 여유분
     });
     if (response.ok) {
       const d = await response.json();
@@ -178,11 +209,11 @@ async function callClaudeForTitle(krTitle, categoryPath, meta) {
 【ルール】
 - 自然な翻訳ではなく、検索キーワード重視の羅列型タイトル
 - 最大${MAX_JP_TITLE_LEN}文字
-- 英数字・ブランド名・容量・個数はそのまま保持
+- 英数字・容量・個数はそのまま保持
 - 不要な助詞・文末表現は省略
 - カテゴリーに合った日本語検索ワードを先頭に
 - 出力はタイトル文字列のみ（説明・記号・引用符なし）
-
+${KR_JP_GLOSSARY}
 【商品情報】
 韓国語タイトル: ${krTitle}
 カテゴリー: ${categoryPath || '不明'}

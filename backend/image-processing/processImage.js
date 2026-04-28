@@ -51,13 +51,16 @@ function watermarkSvg(width, height, text) {
 async function processImage(inputUrl, outputPath, options = {}) {
   const watermarkText = options.watermarkText || process.env.IMAGE_WATERMARK_TEXT || '© judy';
   const buf = await downloadImage(inputUrl);
-  const meta = await sharp(buf).metadata();
+
+  // rotate() 적용 후 dimensions 확보 — EXIF orientation 회전으로 width/height가 swap될 수 있어
+  // raw metadata 기준 SVG를 만들면 composite 시 mismatch 에러가 난다.
+  const rotated = await sharp(buf).rotate().toBuffer();
+  const meta = await sharp(rotated).metadata();
   if (!meta.width || !meta.height) {
     throw new Error(`Cannot read image dimensions: ${inputUrl}`);
   }
   const overlay = watermarkSvg(meta.width, meta.height, watermarkText);
-  await sharp(buf)
-    .rotate()
+  await sharp(rotated)
     .composite([{ input: overlay }])
     .toFile(outputPath);
   const stat = await fs.stat(outputPath);
