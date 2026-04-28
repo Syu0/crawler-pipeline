@@ -28,6 +28,7 @@ const { editGoodsContents } = require('../backend/qoo10/editGoodsContents');
 const { editGoodsImage } = require('../backend/qoo10/editGoodsImage');
 const { editGoodsInventory, buildInventoryInfo, validateDeltas } = require('../backend/qoo10/editGoodsInventory');
 const { detectGroupPattern } = require('../backend/qoo10/groupDetector');
+const { prepareForRegister } = require('../backend/image-processing/prepareForRegister');
 
 // Configuration
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
@@ -510,6 +511,42 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
     }
   }
 
+  // ── Phase 3: 이미지 재가공 + tunnel URL 치환 ──
+  // EXT_ 상품(쿠팡 수집 데이터 없음)은 skip. tunnel 미가동 시 fallback(쿠팡 원본).
+  // hosted/products/<vendorItemId>/ 에 저장 — register 시점 stable ID 기준.
+  const isExternalGoodsForPrep = (row.vendorItemId || '').startsWith('EXT_');
+  let imagePrep = null;
+  if (!isExternalGoodsForPrep && row.StandardImage) {
+    try {
+      imagePrep = await prepareForRegister(vendorItemId, row);
+      console.log(
+        `  [Phase3] images: standard=1 extras=${imagePrep.tunnelExtras.length} ` +
+        `details=${imagePrep.tunnelDetails.length} reused=${imagePrep.stats.reused} ` +
+        `processed=${imagePrep.stats.processed} tunnel=${imagePrep.tunnelBase}`
+      );
+    } catch (e) {
+      console.warn(`  [Phase3] image prep failed (${e.message}) — fallback to 쿠팡 원본 URL`);
+    }
+  }
+  const payloadStandardImage = imagePrep?.tunnelStandard || normalizeImageUrl(row.StandardImage);
+  const payloadExtraImages = imagePrep?.tunnelExtras?.length
+    ? imagePrep.tunnelExtras
+    : extraImages.map(url => normalizeImageUrl(url));
+
+  // descGen에 전달할 row — DetailImages/ExtraImages를 tunnel URL로 override.
+  // 위기 모드 텍스트 본문 보류 중이라 실제 호출 빈도는 낮지만 인터페이스 미리 통합.
+  const rowForDescGen = imagePrep
+    ? {
+        ...row,
+        DetailImages: imagePrep.tunnelDetails.length > 0
+          ? JSON.stringify(imagePrep.tunnelDetails)
+          : row.DetailImages,
+        ExtraImages: imagePrep.tunnelExtras.length > 0
+          ? JSON.stringify(imagePrep.tunnelExtras)
+          : row.ExtraImages,
+      }
+    : row;
+
   const payload = {
     SecondSubCat: jpCategoryId,
     ItemTitle: itemTitle,
@@ -517,12 +554,12 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
     ItemPrice: String(sellingPrice),
     ItemQty: '100',
     ShippingNo: FIXED_SHIPPING_NO,
-    StandardImage: normalizeImageUrl(row.StandardImage),
+    StandardImage: payloadStandardImage,
     ItemDescription: row.ItemDescriptionText || row.ItemTitle || '<p>Product description</p>',
     ProductionPlaceType: FIXED_PRODUCTION_PLACE_TYPE,
     ProductionPlace: FIXED_PRODUCTION_PLACE,
     Weight: FIXED_WEIGHT,
-    ExtraImages: extraImages.map(url => normalizeImageUrl(url)),
+    ExtraImages: payloadExtraImages,
   };
 
   // Parse and add options if present
@@ -544,7 +581,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
     if (flags.image) msgParts.push('[imageUpdate=dry]');
     if (flags.category) msgParts.push('[categoryUpdate=dry]');
     if (flags.desc) {
-      const descResult = await generateJapaneseDescription(row);
+      const descResult = await generateJapaneseDescription(rowForDescGen);
       msgParts.push(`[descMethod=${descResult.method}]`);
       if (descResult.html) {
         console.log(`  [DRY-RUN] Generated JP description (${descResult.method}): ${descResult.html.slice(0, 100)}...`);
@@ -669,7 +706,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
         console.log(`  [skip] EXT_ 상품 — DESC flag 미지원 (쿠팡 수집 데이터 없음)`);
         msgParts.push('[descMethod=skip(EXT_)]');
       } else {
-        const descResult = await generateJapaneseDescription(row);
+        const descResult = await generateJapaneseDescription(rowForDescGen);
         descMethod = descResult.method;
         if (descResult.html) {
           await editGoodsContents({ itemCode: existingQoo10ItemId, htmlContent: descResult.html });
@@ -769,7 +806,7 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
         }
 
         // Generate and upload Japanese description
-        const descResult = await generateJapaneseDescription(row);
+        const descResult = await generateJapaneseDescription(rowForDescGen);
         const descMethod = descResult.method;
         if (descResult.html) {
           await editGoodsContents({ itemCode: result.createdItemId, htmlContent: descResult.html });

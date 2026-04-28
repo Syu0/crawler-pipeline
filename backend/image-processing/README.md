@@ -187,17 +187,131 @@ IMAGE_TUNNEL_BASE='https://<random>.trycloudflare.com' QOO10_ALLOW_REAL_REG=1 \
 
 ---
 
-### 3) 신규 수집 자동화 — Phase 3 (TODO, 파이프라인 통합)
+### 3) 신규 수집 자동화 — Phase 3 (파이프라인 통합)
 
-**목표**: 새로 수집되는 상품은 처음부터 재가공 이미지로 시트 저장 + Qoo10 등록.
+**목표**: `qoo10-auto-register` 호출 시점에 자동으로 이미지가 재가공되어 Qoo10 CDN에 들어가도록.
+신규 등록 상품은 처음부터 워터마크 + EXIF strip 된 이미지로 노출됨.
 
-**작업 항목**:
-- (a) `coupang:collect` 직후 `processImage` 자동 호출 → `hosted/products/<itemCode>/`에 저장 → 시트의 `StandardImage`·`ExtraImages` 컬럼을 tunnel URL로 기록.
-- (b) `qoo10-auto-register.js`가 시트에서 그대로 tunnel URL을 읽어 Qoo10에 보내므로 EditGoodsImage·MultiImage 별도 호출 불필요.
-- (c) tunnel 운영 정책 — 수집·등록 배치 전에 `cloudflared`를 띄우는 LaunchAgent 또는 daemon 스크립트.
-- (d) descGen 호출 시 DetailImages도 자동으로 재가공된 tunnel URL을 쓰도록 (Phase 2 동시 적용).
+#### 설계 결정 (2026-04-28)
 
-**의존**: Phase 2 완료 후 진입 권장. Phase 2 미완 상태로 통합하면 신규 상품도 DetailImages만 쿠팡 원본 URL로 남는다.
+**선택지 비교**:
+- ❌ Option A: collect 시점에 재가공 + 시트의 StandardImage/ExtraImages 컬럼을 tunnel URL로 덮어쓰기
+  - 단점: tunnel URL은 휘발성(cloudflared 재시작 시 변경) → 시트가 stale 될 위험. 시트는 영구·진실 소스로 유지해야 함.
+- ✅ **Option B: register 시점에 재가공 + payload만 tunnel URL로 치환** (시트는 안 건드림)
+  - 시트는 쿠팡 원본 URL 영구 보존. hosted/* 로컬 파일은 영구. tunnel URL은 휘발성이지만 register 호출 + 30분 동기화만 살아있으면 됨.
+  - 등록 실패 시 재시도 = 같은 hosted/* 파일에 새 tunnel URL 부여 → idempotent.
+
+**아키텍처**:
+```
+시트(쿠팡 URL, 영구)  ──[register 시점]──> prepareForRegister(itemCode, row)
+                                              │
+                                              ↓ hosted/products/<itemCode>/ 부재면 다운로드+가공
+                                              │ 있으면 재사용 (idempotent)
+                                              │
+                                              ↓ 현재 tunnel URL을 .tunnel-base에서 읽음
+                                              │
+                                              ↓ { tunnelStandard, tunnelExtras[], tunnelDetails[] }
+                                              │
+                                              ↓ payload의 StandardImage/ExtraImages/DetailImages를 tunnel URL로 치환
+                                              │
+                                              ↓ registerNewGoods(payload) — Qoo10이 tunnel에서 fetch → 자기 CDN으로 복사
+                                              │
+                                              ↓ 30분 후 tunnel 죽여도 무관 (CDN에 영구 저장됨)
+```
+
+#### 모듈 분담
+
+| 컴포넌트 | 역할 |
+|---------|------|
+| `image-processing/prepareForRegister.js` (신규) | itemCode + row → 이미지 가공·저장·tunnel URL 반환. 단일 진입점. |
+| `image-processing/tunnel-daemon.sh` (신규) | cloudflared quick tunnel 가동 + URL을 `.tunnel-base`에 기록. 죽으면 재시작. |
+| `.tunnel-base` (신규, gitignored) | 현재 활성 tunnel base URL (예: `https://abc123.trycloudflare.com`). register 스크립트 + batch 모두 여기서 읽음. |
+| `qoo10-auto-register.js` (수정) | payload 빌드 직전 `prepareForRegister` 호출 → payload 치환. EditGoodsImage/MultiImage 별도 호출 제거. |
+| `descriptionGenerator.js` (수정 예정) | row.DetailImages 대신 prepareForRegister가 준 tunnel URL 사용. 단 위기 모드 텍스트 본문 보류 중이므로 인터페이스만 추가. |
+| `LaunchAgents/com.openclaw.tunnel-daemon.plist` (신규) | tunnel-daemon을 상시 가동. Mac mini 부팅 시 자동 시작. |
+
+#### 컬럼 정책 (Phase 3 진입 후)
+
+| 컬럼 | 정책 | 비고 |
+|------|------|------|
+| `StandardImage` | 쿠팡 원본 URL **유지** | 시트는 진실 소스. 가공은 register 시점 동적 처리. |
+| `ExtraImages` | 쿠팡 `/800x800ex/` **유지** | 동일. |
+| `DetailImages` | 쿠팡 `/q89/` **유지** | 동일. |
+
+→ Phase 1·2에서 검토했던 `StandardImageHosted` 컬럼 추가는 **하지 않음**. tunnel URL의 휘발성 때문에 시트에 기록하는 의미가 없다.
+
+#### 실패 모드 / 복구
+
+- **tunnel 죽은 상태에서 register 시도** → `prepareForRegister`가 `.tunnel-base` 미존재 또는 unreachable 감지 → 명확한 에러로 abort. 시트 상태 변경 없음. tunnel-daemon 재기동 후 재시도.
+- **hosted/* 파일 손실** → `prepareForRegister`가 자동 재다운로드+재가공. 단 쿠팡 원본 URL이 만료된 상품은 실패 → 사람이 재수집하거나 해당 상품 skip.
+- **등록 후 30분 이내 tunnel 죽음** → Qoo10 CDN 동기화 미완 가능성 → 해당 상품 이미지 깨짐. **tunnel-daemon은 register 후 최소 30분 살아있어야 함**. LaunchAgent의 KeepAlive=true로 보장.
+
+#### 단계별 진입 순서
+
+1. ✅ `prepareForRegister.js` 작성 + 단위 테스트 (idempotent reuse 검증)
+2. ✅ `tunnel-daemon.sh` 작성 + `.tunnel-base` 자동 갱신 로직
+3. ✅ `qoo10-auto-register.js`에 통합 (payload 빌드 직전 치환 + descGen 행 override)
+4. ⏳ **다음 단계**: dry-run 1건 → 실거래 1건 → 마켓 검증
+5. ⏳ LaunchAgent 등록 (tunnel-daemon 상시 가동)
+6. ⏳ 운영 1주 관찰 → 이상 없으면 기존 EditGoodsImage/MultiImage 호출 경로 재검토
+
+**의존**: Phase 2 완료 (✅ 2026-04-28). Phase 3 코드 통합 완료 (2026-04-28).
+
+#### 운영 — tunnel-daemon
+
+**foreground 테스트**:
+```bash
+cd /Users/judy/dev/crawler-pipeline
+bash backend/image-processing/tunnel-daemon.sh
+# server + cloudflared 동시 가동, .tunnel-base에 URL 기록.
+# Ctrl-C 시 둘 다 정리.
+```
+
+**상시 가동 (LaunchAgent 설치)**:
+```bash
+cp backend/image-processing/com.roughdiamond.tunnel-daemon.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.roughdiamond.tunnel-daemon.plist
+# 부팅 시 자동 시작 + 죽으면 자동 재시작 (KeepAlive=true).
+# 로그: /tmp/tunnel-daemon.log, /tmp/tunnel-daemon-error.log
+```
+
+**상태 확인**:
+```bash
+launchctl list | grep tunnel-daemon
+cat /Users/judy/dev/crawler-pipeline/.tunnel-base    # 현재 활성 URL
+curl -sf "$(cat /Users/judy/dev/crawler-pipeline/.tunnel-base)/health"
+```
+
+**중단**:
+```bash
+launchctl unload ~/Library/LaunchAgents/com.roughdiamond.tunnel-daemon.plist
+```
+
+#### Phase 3 코드 통합 지점 (2026-04-28)
+
+`scripts/qoo10-auto-register.js`:
+- `prepareForRegister` import 추가 (line 31).
+- payload 빌드 직전 (line ~520): `prepareForRegister(vendorItemId, row)` 호출 → `tunnelStandard`/`tunnelExtras`/`tunnelDetails` 획득.
+  - EXT_ 상품(쿠팡 수집 데이터 없음) 또는 StandardImage 없으면 skip.
+  - tunnel 미가동·실패 시 자동 fallback (쿠팡 원본 URL 그대로 사용 → 저작권 리스크 노출, 경고 로그).
+- payload의 `StandardImage`·`ExtraImages`를 tunnel URL로 치환.
+- `rowForDescGen` 클론 — `DetailImages`/`ExtraImages` 컬럼만 tunnel URL로 override해서 `generateJapaneseDescription`에 전달. row 원본은 보존.
+
+**fallback 동작 확인 방법**:
+```bash
+# .tunnel-base 없는 상태 (또는 IMAGE_TUNNEL_BASE 미지정) → fallback 발동
+node scripts/qoo10-auto-register.js --dry-run --limit 1
+# 로그에서 "[Phase3] image prep failed ... fallback to 쿠팡 원본 URL" 확인.
+```
+
+#### 검증 시나리오
+
+| 케이스 | 기대 동작 |
+|--------|----------|
+| tunnel 가동 + REGISTER_READY 신규 상품 | payload에 trycloudflare URL → registerNewGoods 성공 → 30분 후 마켓 페이지에 워터마크 이미지 노출 |
+| tunnel 미가동 + REGISTER_READY 신규 상품 | `[Phase3] image prep failed` 경고 → 쿠팡 원본 URL로 등록 (구공지 위반 리스크) |
+| tunnel 가동 + 이미 처리된 상품 (hosted/* 존재) | `stats.reused>0`, 다운로드 0회, 빠른 응답 |
+| tunnel 가동 + EXT_ 상품 | imagePrep skip (수집 데이터 없음) |
 
 ---
 
