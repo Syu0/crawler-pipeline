@@ -99,20 +99,33 @@ QOO10_ALLOW_REAL_REG=1 \
 - Title: gemma3:12b 번역 + 자동 후처리 + 9건 수동 보정 → `title-rework-output.json`의 `fixedJpTitle`
 - DetailImages: 다운로드 + processImage → `hosted/products/<itemCode>/detail_NN.jpg`
 - description: **이미지만** (`<p><img src="tunnel/..."/></p>` 반복). DetailImages 우선, 없으면 ExtraImages
-- API: `ItemsBasic.UpdateGoods` (title + description + ExtraImages를 한 번에 갱신)
+- API 두 단계로 분리 호출:
+  1. `ItemsBasic.UpdateGoods` — `ItemTitle`·`ItemDescription`·`StandardImage`·`ExtraImages` 갱신 (`batch-replace-phase2.js`)
+  2. `ItemsContents.EditGoodsContents` — **상세페이지 본문 HTML** 갱신 (`batch-edit-contents.js`)
+
+> ⚠️ **중요**: Qoo10은 description을 두 영역으로 분리 관리한다.
+> - `ItemDescription` (UpdateGoods 페이로드 안) — 검색·간략 안내 영역
+> - `Contents` (EditGoodsContents 별도 API) — **상세페이지 본문 HTML** (商品情報 탭 안)
+>
+> Phase 2에서 `UpdateGoods`만 호출하면 본문 HTML은 등록 시점의 한국어 잔존이 그대로 남는다.
+> **반드시 `EditGoodsContents`도 같이 호출**해야 한다 (2026-04-28 실증).
 
 **실행**:
 ```bash
 cd /Users/judy/dev/crawler-pipeline
-IMAGE_TUNNEL_BASE='https://<random>.trycloudflare.com' \
-  node backend/image-processing/batch-replace-phase2.js --limit=1            # dry-run 1건
+
+# 1) UpdateGoods (ItemTitle·ItemDescription·StandardImage·ExtraImages)
 IMAGE_TUNNEL_BASE='https://<random>.trycloudflare.com' QOO10_ALLOW_REAL_REG=1 \
-  node backend/image-processing/batch-replace-phase2.js --limit=1 --apply    # apply 1건
+  node backend/image-processing/batch-replace-phase2.js --apply
+
+# 2) EditGoodsContents (상세페이지 본문 HTML) — 반드시 같이 실행
 IMAGE_TUNNEL_BASE='https://<random>.trycloudflare.com' QOO10_ALLOW_REAL_REG=1 \
-  node backend/image-processing/batch-replace-phase2.js --apply              # apply 전체
+  node backend/image-processing/batch-edit-contents.js --apply
 ```
 
-**Idempotent**: `logs/batch-phase2.jsonl`에 성공 itemCode 기록 → 재실행 시 skip.
+**Idempotent**: 각 batch 별도 로그 (`logs/batch-phase2.jsonl`, `logs/batch-edit-contents.jsonl`).
+
+**dry-run**: 두 스크립트 모두 `--apply` 빼면 dry-run.
 
 ---
 
