@@ -31,12 +31,16 @@ TUNNEL_PID=""
 
 cleanup() {
   echo "[tunnel-daemon] shutting down..."
+  # 자식 프로세스 + 같은 프로세스 그룹의 모든 잔존 자식 정리.
+  # cloudflared·node가 별도 PID로 살아남는 케이스 대비 (subshell 래핑이 없어졌어도 안전 마진).
   if [[ -n "$TUNNEL_PID" ]] && kill -0 "$TUNNEL_PID" 2>/dev/null; then
     kill "$TUNNEL_PID" 2>/dev/null || true
   fi
   if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
     kill "$SERVER_PID" 2>/dev/null || true
   fi
+  # 같은 PGID에 속한 모든 자식 강제 정리 (bash subshell 잔존 회피).
+  pkill -P $$ 2>/dev/null || true
   rm -f "$TUNNEL_FILE"
   exit 0
 }
@@ -44,7 +48,9 @@ trap cleanup INT TERM
 
 start_server() {
   echo "[tunnel-daemon] starting img-server on port $PORT..."
-  (cd "$REPO_ROOT" && IMAGE_SERVER_PORT="$PORT" node backend/image-processing/server.js >> "$SERVER_LOG" 2>&1) &
+  # cd + 직접 background — subshell 래핑 제거 (이전: $!가 bash subshell PID였고 트랩이 node 자식까지 못 잡음).
+  cd "$REPO_ROOT"
+  IMAGE_SERVER_PORT="$PORT" node backend/image-processing/server.js >> "$SERVER_LOG" 2>&1 &
   SERVER_PID=$!
   sleep 2
   if ! kill -0 "$SERVER_PID" 2>/dev/null; then
