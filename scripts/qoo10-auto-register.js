@@ -805,11 +805,23 @@ async function registerProduct(row, dryRun = false, sheetsClient = null) {
           }
         }
 
-        // Generate and upload Japanese description
-        const descResult = await generateJapaneseDescription(rowForDescGen);
-        const descMethod = descResult.method;
-        if (descResult.html) {
-          await editGoodsContents({ itemCode: result.createdItemId, htmlContent: descResult.html });
+        // 상세페이지 본문 HTML 생성·업로드.
+        // 위기모드 정책: 텍스트 본문 보류 (Phase 2 결정, README §"Phase 2 보류 작업").
+        // imagePrep 가용 시 image-only HTML 우선. tunnel 미가동·EXT_ 등 imagePrep null이면 descGen fallback.
+        let descMethod, descHtml;
+        const phase3Embed = imagePrep
+          ? (imagePrep.tunnelDetails.length > 0 ? imagePrep.tunnelDetails : imagePrep.tunnelExtras)
+          : [];
+        if (phase3Embed.length > 0) {
+          descMethod = 'image-only';
+          descHtml = phase3Embed.map(u => `<p><img src="${u}" /></p>`).join('');
+        } else {
+          const descResult = await generateJapaneseDescription(rowForDescGen);
+          descMethod = descResult.method;
+          descHtml = descResult.html || '';
+        }
+        if (descHtml) {
+          await editGoodsContents({ itemCode: result.createdItemId, htmlContent: descHtml });
         }
 
         // ── MASTER: EditGoodsInventory 호출 ──
