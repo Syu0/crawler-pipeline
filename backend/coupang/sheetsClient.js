@@ -464,6 +464,7 @@ async function upsertDiscoveredProducts(sheets, spreadsheetId, items) {
       case 'ItemDescriptionText': return '';
       case 'updatedAt':           return now;
       case 'status':              return 'DISCOVERED';
+      case 'SearchKeyword':       return item.searchKeyword || '';
       default:                    return '';
     }
   }
@@ -496,6 +497,13 @@ async function upsertDiscoveredProducts(sheets, spreadsheetId, items) {
 /**
  * `coupang_datas` 시트에서 status='DISCOVERED' 인 행만 반환.
  * ProductURL 없는 행은 skip.
+ *
+ * **Order**: row 순서가 아니라 **Fisher-Yates 셔플**한 결과를 반환한다.
+ * discover가 키워드 순으로 sequential append하기 때문에 row 순서를 그대로 쓰면
+ * 식품 키워드(앞쪽) 행들이 collect 큐를 점거하고 비식품(뒤쪽)은 후순위로 밀린다.
+ * MAX_COLLECT_PER_DAY=15 한도와 결합되면 비식품은 영영 처리되지 못한다.
+ *
+ * 셔플로 키워드 균등 분산. 결정적 동작이 필요하면 env `COLLECT_ORDER=sequential`로 비활성.
  *
  * @param {object} sheets
  * @param {string} spreadsheetId
@@ -535,6 +543,14 @@ async function getDiscoveredProducts(sheets, spreadsheetId) {
       itemId: row[itemIdIdx] || '',
       productUrl,
     });
+  }
+
+  // 키워드 분산: row 순서 편향 제거. 명시적 sequential 요청 시 skip.
+  if (process.env.COLLECT_ORDER !== 'sequential') {
+    for (let i = result.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [result[i], result[j]] = [result[j], result[i]];
+    }
   }
 
   return result;

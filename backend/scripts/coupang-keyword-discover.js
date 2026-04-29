@@ -382,11 +382,12 @@ async function main() {
       continue;
     }
 
-    // DISCOVERED upsert
+    // DISCOVERED upsert — keyword 컬럼 채워서 후속 ROI 분석 가능하게
+    const filteredWithKeyword = filtered.map(item => ({ ...item, searchKeyword: kw.keyword }));
     const { upserted, skipped } = await upsertDiscoveredProducts(
       sheets,
       SPREADSHEET_ID,
-      filtered
+      filteredWithKeyword
     );
     totalUpserted += upserted;
     totalSkipped += skipped;
