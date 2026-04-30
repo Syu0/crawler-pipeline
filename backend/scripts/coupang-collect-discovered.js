@@ -253,6 +253,15 @@ async function main() {
           break;
         }
 
+        // Browser Relay timeout / NAVIGATE_ERROR 등 인프라 오류 분류
+        // (collectPriceStockReview는 navigate 실패 시 { error, message }로 즉시 return — B-01 ItemTitle 가드 도달 못함)
+        if (fetched.error) {
+          throw new Error(`BROWSER_RELAY_${fetched.error}: ${fetched.message || ''}`);
+        }
+        if (!fetched.ItemTitle || !fetched.ItemTitle.trim()) {
+          throw new Error(`COLLECT_INCOMPLETE: ItemTitle 없음 (Phases='${fetched.CollectedPhases || ''}')`);
+        }
+
         console.log(`  CollectedPhases: [${fetched.CollectedPhases || '없음'}]`);
         console.log(`  ItemTitle:      ${fetched.ItemTitle?.substring(0, 50) ?? '(없음)'}`);
         console.log(`  ItemPrice:      ${fetched.ItemPrice ?? '(없음)'}`);
@@ -363,6 +372,15 @@ async function main() {
           }
         }
         break; // 세션 전체 중단
+      }
+
+      // Browser Relay timeout / NAVIGATE_ERROR 등 인프라 오류 분류
+      // (collectProductData는 navigate 실패 시 { error, message }로 즉시 return — B-01 ItemTitle 가드 도달 못함)
+      if (collected.error) {
+        throw new Error(`BROWSER_RELAY_${collected.error}: ${collected.message || ''}`);
+      }
+      if (!collected.ItemTitle || !collected.ItemTitle.trim()) {
+        throw new Error(`COLLECT_INCOMPLETE: ItemTitle 없음 (Phases='${collected.CollectedPhases || ''}')`);
       }
 
       const successApis = collected.CollectedPhases || '';
