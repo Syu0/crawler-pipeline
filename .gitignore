@@ -104,3 +104,6 @@ backend/image-processing/title-rework-*.json
 
 # Phase 3 tunnel runtime state (cloudflared quick tunnel base URL — 휘발성)
 .tunnel-base
+
+# qoo10-seller daily collected metrics (large/binary, regenerated daily)
+metrics/qoo10_seller/
