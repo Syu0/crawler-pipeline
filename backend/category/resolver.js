@@ -540,29 +540,49 @@ function findBestAutoMatch(coupangKey, jpCategories) {
   // Stage 3 fallback: no leaf candidates → search entire corpus
   const pool = leafCandidates.length > 0 ? leafCandidates : jpCategories;
 
-  // Stage 2: Jaccard on pool
+  // Stage 2: Jaccard on pool — Qoo10 only accepts isLeaf categories,
+  // so restrict to leaves whenever any qualifying leaf exists.
+  // Falls back to non-leaf only if zero leaf candidates pass AUTO_THRESHOLD,
+  // letting the caller (resolver) drop to FALLBACK rather than register a parent
+  // category that Qoo10 rejects with [-102].
   let best = null;
+  let bestNonLeaf = null;
 
   for (const jpCat of pool) {
     const score = computeMatchScore(coupangKey, jpCat.fullPath);
     if (score < AUTO_THRESHOLD) continue;
 
-    if (
-      !best ||
-      score > best.confidence ||
-      (score === best.confidence && jpCat.depth > best.depth) ||
-      (score === best.confidence && jpCat.depth === best.depth && jpCat.isLeaf && !best.isLeaf)
-    ) {
-      best = {
-        jpCategoryId: jpCat.jpCategoryId,
-        jpFullPath: jpCat.fullPath,
-        isLeaf: jpCat.isLeaf,
-        depth: jpCat.depth,
-        confidence: Math.round(score * 100) / 100
-      };
+    const candidate = {
+      jpCategoryId: jpCat.jpCategoryId,
+      jpFullPath: jpCat.fullPath,
+      isLeaf: jpCat.isLeaf,
+      depth: jpCat.depth,
+      confidence: Math.round(score * 100) / 100,
+    };
+
+    const beats = (cur, ref) =>
+      !ref ||
+      cur.confidence > ref.confidence ||
+      (cur.confidence === ref.confidence && cur.depth > ref.depth);
+
+    if (jpCat.isLeaf) {
+      if (beats(candidate, best)) best = candidate;
+    } else {
+      if (beats(candidate, bestNonLeaf)) bestNonLeaf = candidate;
     }
   }
 
+  // Hard leaf-only — Qoo10 [-102] guard.
+  // If only a non-leaf parent matched, drop to FALLBACK (a known leaf) instead of
+  // registering a parent that Qoo10 will reject. Log the rejected parent so a
+  // human can promote the correct child to MANUAL.
+  if (!best && bestNonLeaf) {
+    console.warn(
+      `[CategoryResolver] AUTO non-leaf rejected: ${bestNonLeaf.jpCategoryId} "${bestNonLeaf.jpFullPath}" ` +
+      `(score=${bestNonLeaf.confidence}). Dropping to FALLBACK to avoid Qoo10 [-102]. ` +
+      `Add a MANUAL mapping to category_mapping for the leaf child.`
+    );
+  }
   return best;
 }
 
