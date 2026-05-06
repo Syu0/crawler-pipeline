@@ -38,10 +38,10 @@ async function _assertCookieValid() {
   const data = cookieStore.loadCookieData();
   if (!data) {
     console.error('[BrowserManager] 쿠팡 쿠키가 없습니다.');
-    console.error("yamyam 크롬 확장에서 쿠키를 갱신한 후 'npm run coupang:browser:start'를 다시 실행하세요.");
+    console.error("yamyam 확장 → 🔑 쿠키 복사 클릭 (Mac mini Chrome → coupang.com 로그인 상태에서). 자동으로 ~/Downloads/coupang_cookie.txt 에 저장되고 다음 실행 시 흡수됩니다.");
     await sendBlockAlertEmail(null, {
       subject: '[RoughDiamond] Coupang 쿠키 만료',
-      text: "쿠팡 쿠키가 없습니다. yamyam 크롬 확장에서 쿠키를 갱신한 후 'npm run coupang:browser:start'를 다시 실행하세요.",
+      text: "쿠팡 쿠키가 없습니다. yamyam 확장 → 🔑 쿠키 복사 클릭 (Mac mini Chrome → coupang.com 로그인 상태에서). 자동으로 ~/Downloads/coupang_cookie.txt 에 저장되고 다음 실행 시 흡수됩니다.",
     });
     process.exit(1);
   }
@@ -53,10 +53,10 @@ async function _assertCookieValid() {
       : null;
     const elapsedStr = elapsedH != null ? `(수신 후 ${elapsedH}시간 경과)` : '';
     console.error(`[BrowserManager] 쿠키가 만료되었습니다. ${elapsedStr}`);
-    console.error("yamyam 크롬 확장에서 쿠키를 갱신한 후 'npm run coupang:browser:start'를 다시 실행하세요.");
+    console.error("yamyam 확장 → 🔑 쿠키 복사 클릭 (Mac mini Chrome → coupang.com 로그인 상태에서). 자동으로 ~/Downloads/coupang_cookie.txt 에 저장되고 다음 실행 시 흡수됩니다.");
     await sendBlockAlertEmail(null, {
       subject: '[RoughDiamond] Coupang 쿠키 만료',
-      text: `쿠팡 쿠키가 만료되었습니다. ${elapsedStr} yamyam 크롬 확장에서 쿠키를 갱신한 후 'npm run coupang:browser:start'를 다시 실행하세요.`,
+      text: `쿠팡 쿠키가 만료되었습니다. ${elapsedStr} yamyam 확장 → 🔑 쿠키 복사 클릭 (Mac mini Chrome → coupang.com 로그인 상태에서). 자동으로 ~/Downloads/coupang_cookie.txt 에 저장되고 다음 실행 시 흡수됩니다.`,
     });
     process.exit(1);
   }

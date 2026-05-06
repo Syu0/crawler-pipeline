@@ -40,8 +40,8 @@ ERROR            → 복구 가능한 실패
 > 전체 실행 순서 및 dry-run 정책 → `docs/RUNBOOK.md` 참조. 파이프라인 작업 전 반드시 읽어라.
 
 ```bash
-npm run backend:start           # 매일 1번째 실행 (쿠키 수신 서버)
-npm run cookie:refresh          # 쿠키 수동 갱신 (자동 갱신 실패 시)
+# 쿠키 갱신: yamyam 확장 → 🔑 쿠키 복사 (~/Downloads/coupang_cookie.txt 자동 저장 → 다음 실행 시 흡수)
+npm run cookie:check            # 만료 D-3 이내일 때 텔레그램 알림 (cron 08:00 자동)
 
 # (선택) stock:check 실행 시에만 필요 — daily 파이프라인(collect/discover 포함)엔 불필요
 # npm run coupang:browser:start   # Playwright 데몬
@@ -58,7 +58,7 @@ npm run stock:check             # 재고 모니터링
 # dry-run은 각 명령어에 :dry 접미어 (Playwright 단계는 생략 — RUNBOOK 참조)
 ```
 
-쿠키 갱신: 매일 아침 cron 자동 실행 (결과 텔레그램 수신). 실패 시 `npm run cookie:refresh`.
+쿠키 갱신: yamyam 확장 → 🔑 쿠키 복사 (사용자 1회 클릭). 만료 D-3 이내면 cron(08:00 cookie:check)이 텔레그램 알림.
 
 ---
 
@@ -74,7 +74,7 @@ npm run stock:check             # 재고 모니터링
 - `DEACTIVATED` 상태는 코드로 자동 해제하지 않는다
 - 브라우저 스크립트 실행 전 반드시 데몬 상태 확인 (`coupang:browser:status`)
 - HARD_BLOCK 발생 시 1시간 쿨다운 후 재시작 (강제 재시작 금지)
-- 쿠키 만료 텔레그램 알림 수신 시 즉시 `npm run cookie:refresh` 실행
+- 쿠키 만료 텔레그램 알림(D-3) 수신 시 즉시 yamyam 확장 → 🔑 쿠키 복사 클릭
 
 ---
 

@@ -4,10 +4,7 @@
 
 ### 0. 매일 시작 절차
 
-```bash
-# yamyam 쿠키 수신 서버 (필수)
-npm run backend:start
-```
+별도의 쿠키 수신 서버는 더 이상 필요 없다. yamyam 확장이 `~/Downloads/coupang_cookie.txt`에 직접 저장하고, `cookieStore.loadCookies()`가 mtime 비교로 자동 흡수한다.
 
 Chrome은 Profile 1으로 쿠팡 로그인 상태를 유지해둔다 — `coupang:collect`/`coupang:discover`가 Browser Relay CLI로 attach.
 
@@ -23,9 +20,10 @@ Chrome은 Profile 1으로 쿠팡 로그인 상태를 유지해둔다 — `coupan
 #### Step 1-a: 쿠키 갱신 (필요 시)
 
 1. Chrome에서 쿠팡 로그인
-2. yamyam 익스텐션 아이콘 클릭 → "Copy Cookie"
-3. 쿠키 만료 알림 이메일(D-3/D-0) 수신 시 반드시 갱신
-   - 쿠키는 서버(`backend:start`)가 수신하여 자동 저장 (`cookieStore.js`)
+2. yamyam 확장 아이콘 클릭 → **🔑 쿠키 복사** 버튼
+3. `~/Downloads/coupang_cookie.txt` 파일이 자동 생성됨 (덮어쓰기)
+4. 다음 collect/discover 실행 시 `cookieStore.loadCookies()`가 mtime 비교로 자동 흡수
+5. 만료 D-3 이내 텔레그램 알림 (`cron 08:00 cookie:check`) 수신 시 즉시 갱신
 
 #### Step 1-b: 키워드 탐색 실행
 

@@ -173,8 +173,8 @@ write calls 쿼터: 10회/세션
 - 군더더기 없이 바로 구현. 한 줄이면 한 줄로 끝낸다.
 - 브라우저를 사용하는 스크립트는 반드시 `browserGuard.assertBrowserRunning()`으로 시작한다.
   새 Playwright 인스턴스 생성 = Akamai 블록 트리거.
-- 쿠키 갱신은 `coupang-cookie-refresh.js` 스크립트로 수행한다 (yamyam 확장 대체).
-  OpenClaw 위임 가능: 수집 전 `npm run cookie:refresh` 실행 → sid 없으면 텔레그램 알림 → 사람 개입 대기.
+- 쿠키 갱신은 yamyam 확장(v2.1+) → 🔑 쿠키 복사 버튼이 단일 경로다. 확장이 `~/Downloads/coupang_cookie.txt`에 직접 저장하면 `cookieStore.loadCookies()`가 mtime 비교로 자동 흡수한다.
+  만료 D-3 이내일 때 `cron 08:00 cookie:check`이 텔레그램 알림. 자동 갱신은 없음 — 사용자가 yamyam을 눌러야 한다.
 - 수집 스크립트의 상품 간 딜레이는 `delay.js`의 `randomDelay(4000, 10000)`을 사용한다.
   dry-run 모드에서는 500ms 고정.
 - 동일 `coupang_product_id`를 가진 vendorItemId 변형들은 세션 내에서 중복 Playwright 접근을 하지 않는다.
@@ -213,12 +213,11 @@ write calls 쿼터: 10회/세션
 - [x] 쿠팡 서버사이드 수집 기반 구축
   - Playwright + stealth + cookieStore 쿠키 주입으로 Akamai 우회 성공
   - 가격 셀렉터 타이밍 이슈 수정 완료 (`.final-price-amount` + `waitForSelector`)
-  - yamyam 크롬 확장 → **스크립트 기반 쿠키 갱신으로 교체** (`coupang-cookie-refresh.js`)
-    - Chrome 데몬에 CDP로 attach → coupang.com 쿠키 추출 → cookieStore 저장
-    - `npm run cookie:refresh` (만료 시에만) / `npm run cookie:refresh:force` (강제 갱신)
-    - sid 쿠키 없음(로그인 만료) 시 텔레그램 알림 → 사람이 Chrome에서 재로그인
-    - 갱신 성공 시 HARD_BLOCK 쿨다운 자동 해제
-    - yamyam 확장은 Chrome에서 수동 로그인 후 **재로그인 보조용**으로만 잔존
+  - yamyam 크롬 확장 v2.1 → **파일 저장 방식 단일화** (HTTP 수신 서버 폐기)
+    - 확장 → 🔑 쿠키 복사 → `~/Downloads/coupang_cookie.txt` 자동 저장 (overwrite)
+    - `cookieStore.loadCookies()`가 mtime > 캐시 updatedAt 비교로 자동 흡수 + 캐시 갱신
+    - 만료 D-3 이내 텔레그램 알림: `npm run cookie:check` (cron 08:00)
+    - .env `COUPANG_FALLBACK_COOKIES` 폴백 (만료+파일 없음 시 임시 사용)
   - 쿠키 만료 이메일 알림 구현 (meaningful.jy@gmail.com, D-3/D-0)
   - 기본 수집 필드 동작 확인: ItemTitle / ItemPrice / StandardImage / ItemDescriptionText
 - [x] 키워드 기반 탐색 파이프라인 (`coupang-keyword-discover.js`)
@@ -380,13 +379,12 @@ write calls 쿼터: 10회/세션
 - [x] `editGoodsImage.js` 모듈 구현 — EditGoodsImage API 래퍼 (완료 2026-04-01)
 - [ ] UpdateGoods / EditGoodsContents / GetItemDetailInfo 테스트 스크립트
 - [ ] **[운영 매뉴얼 작성 시]** 매일 시작 절차 문서화
-  - 순서 중요. 아래 명령을 매일 출근 시 / PC 재시작 후 실행해야 함:
-    1. `npm run backend:start`              # yamyam 쿠키 수신 서버 (쿠키 주입 없으면 Akamai 블록)
-    2. `npm run coupang:browser:start`      # Playwright 브라우저 데몬 (stock:check 사용 시에만 필요 — collect는 불필요)
-    3. `npm run cookie:refresh`             # 쿠키 만료 시 자동 갱신 (만료 아니면 skip)
-  - 수집(coupang:collect) 전: Chrome에서 쿠팡 로그인 탭 열고 Browser Relay attach 필요 (하루 1회)
-  - 3번은 OpenClaw가 수집 시작 전에도 자동 실행 가능 (위임 가능 단계)
-  - sid 없음(로그인 만료) 시 텔레그램 알림 → Chrome에서 수동 재로그인 후 `cookie:refresh:force`
+  - 매일 출근 시 / PC 재시작 후:
+    1. Chrome 부팅 + coupang.com 로그인 탭 열기 (Browser Relay attach용)
+    2. (선택) `npm run coupang:browser:start` — stock:check 사용 시에만 필요. collect/discover에는 불필요.
+    3. 쿠키 만료 D-3 이내 텔레그램 알림 받으면 → yamyam 확장 → 🔑 쿠키 복사 클릭
+  - 만료 체크는 `npm run cookie:check` (cron 08:00 자동). 자동 갱신은 없음.
+  - 만료된 상태에서 collect 실행 시 cookieStore가 .env `COUPANG_FALLBACK_COOKIES` 폴백 + 경고 로그.
   - 운영 매뉴얼(RUNBOOK.md 또는 별도 OPERATIONS.md)에 정식 절차로 포함할 것
 
 ---
@@ -440,7 +438,7 @@ crawler-pipeline/
 │   │   ├── coupang-browser-start.js  # Playwright 데몬 시작
 │   │   ├── coupang-browser-stop.js
 │   │   ├── coupang-browser-status.js
-│   │   ├── coupang-cookie-refresh.js # 쿠키 갱신 (CDP attach → cookieStore 저장)
+│   │   ├── coupang-cookie-check.js   # 쿠키 만료 D-3 텔레그램 알림 (cron 08:00)
 │   │   ├── coupang-keyword-discover.js
 │   │   ├── coupang-collect-discovered.js
 │   │   ├── coupang-promote-to-pending.js

@@ -41,7 +41,7 @@ Quick reference document for LLM handoffs and onboarding.
 
 | Step | File | Purpose |
 |------|------|---------|
-| Step 1 | `chrome-extension/yamyam/` | 쿠키 원클릭 갱신 확장 |
+| Step 1 | `chrome-extension/yamyam/` | 쿠키 원클릭 갱신 확장 (~/Downloads/coupang_cookie.txt 저장 → cookieStore 자동 흡수) |
 | Step 1 | `scripts/coupang-playwright-scrape.js` | Playwright 서버사이드 수집기 |
 | Step 2 | `scripts/lib/sheetsClient.js` | Google Sheets API client |
 | Step 3 | `scripts/qoo10-register-cli.js` | Register product to Qoo10 |

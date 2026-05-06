@@ -47,6 +47,7 @@
       text-align: center;
       line-height: 1.5;
       color: #aaa;
+      white-space: pre-line;
     }
     #status.ok  { color: #2ecc71; }
     #status.err { color: #e74c3c; }
@@ -58,59 +59,18 @@
       color: #555;
       text-align: center;
       line-height: 1.6;
+      white-space: pre-line;
     }
-
-    .divider {
-      border: none;
-      border-top: 1px solid #2a2a4a;
-      margin: 14px 0;
-    }
-
-    label {
-      display: block;
-      font-size: 11px;
-      color: #666;
-      margin-bottom: 4px;
-    }
-    input[type="text"] {
-      width: 100%;
-      padding: 8px 10px;
-      background: #0f0f23;
-      border: 1px solid #2a2a4a;
-      border-radius: 8px;
-      color: #ccc;
-      font-size: 12px;
-      outline: none;
-    }
-    input[type="text"]:focus { border-color: #e94560; }
-
-    #save-url-btn {
-      margin-top: 6px;
-      padding: 6px 12px;
-      background: #2a2a4a;
-      border: none;
-      border-radius: 6px;
-      color: #aaa;
-      font-size: 11px;
-      cursor: pointer;
-    }
-    #save-url-btn:hover { background: #3a3a5a; color: #fff; }
   </style>
 </head>
 <body>
   <h1>🍪 yam yam</h1>
 
-  <button id="send-btn">🍪 yam yam</button>
+  <button id="send-btn">🔑 쿠키 복사</button>
 
   <div id="status"></div>
 
   <div class="meta" id="meta"></div>
-
-  <hr class="divider">
-
-  <label for="server-url">서버 URL</label>
-  <input type="text" id="server-url" placeholder="http://localhost:4000" />
-  <button id="save-url-btn">저장</button>
 
   <script src="popup.js"></script>
 </body>

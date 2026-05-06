@@ -1,13 +1,15 @@
 {
   "manifest_version": 3,
   "name": "🍪 yam yam",
-  "version": "1.0",
-  "description": "쿠팡 세션 쿠키를 서버로 전송합니다.",
-  "permissions": ["cookies", "storage"],
+  "version": "2.1",
+  "description": "쿠팡 세션 쿠키를 ~/Downloads/coupang_cookie.txt 에 저장합니다.",
+  "permissions": ["cookies", "downloads", "storage"],
   "host_permissions": [
-    "https://*.coupang.com/*",
-    "http://localhost:*/*"
+    "https://*.coupang.com/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_title": "🍪 yam yam"

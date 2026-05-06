@@ -115,16 +115,16 @@ finalPrice    = Math.round(Math.max(requiredPrice, targetPrice))
 
 ---
 
-### E) Backend Server (`backend/server.js`, `backend/services/`, `backend/routes/`)
+### E) Cookie 관리 (`backend/services/`, `chrome-extension/yamyam/`)
 
-yamyam 크롬 익스텐션이 전송하는 쿠키를 수신·저장하는 Express 서버.
+yamyam 확장 v2.1+가 `~/Downloads/coupang_cookie.txt`에 직접 저장하면 `cookieStore.loadCookies()`가 mtime 비교로 자동 흡수. HTTP 수신 서버는 폐기됨 (2026-05-06).
 
 | File | Purpose |
 |------|---------|
-| `server.js` | Express 서버 (포트 4000) |
-| `services/cookieStore.js` | 쿠키 저장/조회 |
+| `chrome-extension/yamyam/` | 🔑 쿠키 복사 버튼 → Downloads 파일 저장 (Manifest V3, downloads API + onDeterminingFilename) |
+| `services/cookieStore.js` | 쿠키 저장/조회. `loadCookies()` 우선순위: Downloads 파일 → 캐시 → .env `COUPANG_FALLBACK_COOKIES` |
 | `services/cookieExpiry.js` | 쿠키 만료 이메일 알림 (D-3/D-0, nodemailer) |
-| `routes/cookie.js` | `/cookie` POST 엔드포인트 |
+| `scripts/coupang-cookie-check.js` | 만료 D-3 이내 텔레그램 알림 (cron 08:00) |
 
 ---
 

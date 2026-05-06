@@ -192,7 +192,7 @@ async function sendBlockAlertEmail(stats = null, override = null) {
     '조치 방법:',
     '1. 1~2시간 후 재실행',
     '2. VPN 또는 다른 네트워크에서 재시도',
-    '3. yamyam 익스텐션으로 쿠키 재추출 후 재실행',
+    '3. yamyam 확장 → 🔑 쿠키 복사 클릭 후 재실행',
   ].filter(Boolean).join('\n');
 
   await transporter.sendMail({ from: user, to, subject, text });

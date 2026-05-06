@@ -2,6 +2,27 @@
 
 All notable changes to this project.
 
+## 2026-05-06
+
+### Changed
+- **쿠키 갱신 플로우 단일화 — yamyam v2.1 + Downloads 파일 방식**
+  - yamyam 확장: HTTP 전송 → `~/Downloads/coupang_cookie.txt` 파일 저장 (Manifest V3 downloads API + onDeterminingFilename)
+  - `cookieStore.loadCookies()` 우선순위: Downloads 파일(mtime 신선) → 캐시 → `.env COUPANG_FALLBACK_COOKIES` → null
+  - cron 08:00: 자동 갱신(`cookie:refresh`) → 만료 D-3 텔레그램 알림(`cookie:check`)으로 교체. 자동 갱신 없음.
+
+### Removed
+- `backend/server.js` (Express 쿠키 수신 서버, 포트 4000)
+- `backend/routes/cookie.js`
+- `backend/scripts/coupang-cookie-refresh.js` (CDP attach 갱신 스크립트)
+- `npm run backend:start`, `cookie:refresh`, `cookie:refresh:force`
+
+### Added
+- `backend/scripts/coupang-cookie-check.js` — 만료 D-3 이내 텔레그램 알림
+- `chrome-extension/yamyam/background.js` — service worker (filename 강제용)
+- env: `COUPANG_DOWNLOAD_COOKIE_PATH`, `COUPANG_FALLBACK_COOKIES`
+
+---
+
 ## 2026-03
 
 ### Added
