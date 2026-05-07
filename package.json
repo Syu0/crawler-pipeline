@@ -14,6 +14,8 @@
     "qoo10:auto-register:dry": "node scripts/qoo10-auto-register.js --dry-run",
     "// 신규주문확인": "→ npm run qoo10:orders:check (등록 직후 단계, 단순 카운트)",
     "qoo10:orders:check": "node backend/scripts/qoo10-orders-check.js",
+    "// 고객문의확인": "→ npm run qoo10:inquiries:check (orders 직후, 최근 7일 S1=미답변 카운트)",
+    "qoo10:inquiries:check": "node backend/scripts/qoo10-inquiries-check.js",
     "qoo10:sync:japan-categories": "node scripts/qoo10-sync-japan-categories.js",
     "categories:sync:csv": "node backend/scripts/sync-japan-categories-from-csv.js",
     "categories:sync:csv:dry": "node backend/scripts/sync-japan-categories-from-csv.js --dry-run",
