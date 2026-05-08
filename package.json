@@ -16,6 +16,8 @@
     "qoo10:orders:check": "node backend/scripts/qoo10-orders-check.js",
     "// 고객문의확인": "→ npm run qoo10:inquiries:check (orders 직후, 최근 7일 S1=미답변 카운트)",
     "qoo10:inquiries:check": "node backend/scripts/qoo10-inquiries-check.js",
+    "// 약기법 위반 fix": "→ npm run qoo10:fix:yakkiho -- --vid=A,B (description sanitize + EditContents)",
+    "qoo10:fix:yakkiho": "node backend/scripts/qoo10-fix-yakkiho.js",
     "qoo10:sync:japan-categories": "node scripts/qoo10-sync-japan-categories.js",
     "categories:sync:csv": "node backend/scripts/sync-japan-categories-from-csv.js",
     "categories:sync:csv:dry": "node backend/scripts/sync-japan-categories-from-csv.js --dry-run",

@@ -23,6 +23,8 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
+const { sanitize: yakkihoSanitize, SYSTEM_PROMPT_GUARD } = require('./yakkihoSanitizer');
+
 const OPENROUTER_MODEL = 'anthropic/claude-haiku-4-5';
 const OLLAMA_VISION_MODEL = process.env.OLLAMA_VISION_MODEL || 'llama3.2-vision:11b';
 const OLLAMA_TEXT_MODEL   = process.env.OLLAMA_TEXT_MODEL   || 'gemma3:4b';
@@ -31,7 +33,9 @@ const MAX_IMAGES = 5;
 
 const SYSTEM_PROMPT = `あなたは韓国商品を日本市場向けに紹介するコピーライターです。
 商品画像の韓国語テキストを読み取り、日本の消費者向けの商品説明を日本語で生成してください。
-出力はHTML形式（<p>タグ使用）で200〜400文字程度にまとめてください。`;
+出力はHTML形式（<p>タグ使用）で200〜400文字程度にまとめてください。
+
+${SYSTEM_PROMPT_GUARD}`;
 
 /**
  * ExtraImages JSON string → URL 배열
@@ -263,6 +267,13 @@ async function generateJapaneseDescription(row) {
     if (!html) {
       console.warn('[descGen] Empty response — skip');
       return { html: '', method: 'skip' };
+    }
+
+    // 약기법(薬機法) + 건강증진법 위반 키워드 후처리 (생성 단계 가이드 보완)
+    const sanRes = yakkihoSanitize(html);
+    if (sanRes.hits.length > 0) {
+      console.warn(`[descGen] yakkiho sanitized: ${sanRes.hits.map(h => `${h.keyword}→${h.replacement}`).join(', ')}`);
+      html = sanRes.html;
     }
 
     // Append DetailImages as <img> tags after the generated text (fallback: ExtraImages)
