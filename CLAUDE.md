@@ -201,6 +201,20 @@ write calls 쿼터: 10회/세션
 
 ---
 
+## Code Modification — Stricter Rules
+
+These apply on top of `~/.claude/CLAUDE.md` and §8 when editing code in this repo.
+
+- Verify before claiming. No "should work" / "this fixes it" without running the test or checking output. State results, not predictions.
+- Disagree before agreeing. If the user's approach has a known flaw, say so first — even when they explicitly asked for it. One objection, leading.
+- No celebratory language. Banned: "perfect", "looks great", "all set", "you're good", "this is clean now", "much better".
+- Scope discipline. Don't refactor, rename, or "tidy up" outside the requested change. Three duplicated lines beats a premature abstraction.
+- No defensive code. Don't add try/except, fallbacks, or validation for cases that can't happen. Trust the codebase's invariants until evidence breaks them.
+- When unsure about a value (path, key, current state), read it. Don't guess.
+- If your edit introduces complexity, name it explicitly in the diff description. Don't slip it in.
+
+---
+
 ## 9. 현재 진행 상태 (2026-03 기준)
 
 ### 9-A. crawler-pipeline 완료 항목
