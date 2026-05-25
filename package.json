@@ -71,9 +71,7 @@
     "qoo10:order:sync": "node backend/scripts/qoo10-order-sync.js",
     "qoo10:order:sync:dry": "node backend/scripts/qoo10-order-sync.js --dry-run",
     "qoo10:income:report": "node backend/scripts/qoo10-income-report.js",
-    "qoo10:income:report:dry": "node backend/scripts/qoo10-income-report.js --dry-run",
-    "// brain 연동": "→ npm run pipeline:brain-log (파이프라인 실행 결과 ~/brain/notes/ 저장)",
-    "pipeline:brain-log": "node scripts/brain_logger.js"
+    "qoo10:income:report:dry": "node backend/scripts/qoo10-income-report.js --dry-run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
