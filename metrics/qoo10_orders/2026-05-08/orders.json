@@ -1,0 +1,13 @@
+{
+  "fetchedAt": "2026-05-08T03:01:48.538Z",
+  "request": {
+    "ShippingStatus": "",
+    "SearchStartDate": "20260508",
+    "SearchEndDate": "20260508",
+    "SearchCondition": "2"
+  },
+  "resultCode": 0,
+  "resultMsg": "SUCCESS. But No Result",
+  "count": 0,
+  "items": []
+}

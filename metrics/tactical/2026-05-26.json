@@ -1,0 +1,17 @@
+{
+  "date": "2026-05-26",
+  "discovered_remaining": 730,
+  "success_today": null,
+  "success_3day_avg": null,
+  "auto_pct_5day": [
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "failed_today": null,
+  "failed_reasons": {},
+  "registered_cumulative": null,
+  "max_daily_register_current": 30
+}

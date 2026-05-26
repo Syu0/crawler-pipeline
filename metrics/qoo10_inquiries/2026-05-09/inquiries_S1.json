@@ -1,0 +1,12 @@
+{
+  "fetchedAt": "2026-05-08T23:44:26.915Z",
+  "request": {
+    "search_start_dt": "20260503",
+    "search_end_dt": "20260509",
+    "proc_status": "S1"
+  },
+  "resultCode": 0,
+  "resultMsg": "SUCCESS",
+  "count": 0,
+  "items": []
+}
