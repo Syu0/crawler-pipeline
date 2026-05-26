@@ -169,28 +169,26 @@ async function main() {
   if (afterState.hasBframeChallenge) {
     // reCAPTCHA v2 챌린지 발생 — 사용자가 직접 해결해야 함
     console.log(`[${ts()}] ⚠️ reCAPTCHA 챌린지 발생 — Telegram 알림 후 최대 3분 대기`);
-    _notifyTelegram('🤖 qsm reCAPTCHA 챌린지 발생\n브라우저에서 체크박스/이미지 선택 완료 후 "완료"라고 응답해주세요.');
+    _notifyTelegram('🤖 qsm reCAPTCHA 챌린지 발생\n브라우저에서 체크박스/이미지 선택 해주세요. 해결되면 자동으로 감지합니다 (최대 3분).');
 
-    // 최대 3분(180초)간 10초마다 폴링
+    // 최대 3분(180초)간 10초마다 폴링 + 매 회차 로그인 버튼 재클릭 시도
+    // bframe iframe은 챌린지 해결 후에도 DOM에 남아있으므로 존재 여부로 상태 판단 불가
     let solved = false;
     for (let i = 0; i < 18; i++) {
       await sleep(10000);
       try {
         const pollState = browserEvaluate(newTabId, `() => ({
           url: location.href,
-          hasLoginForm: !!document.querySelector("#txtLoginID"),
-          hasBframeChallenge: !!document.querySelector("iframe[src*='bframe']")
+          hasLoginForm: !!document.querySelector("#txtLoginID")
         })`);
         if (!pollState.hasLoginForm && !pollState.url.includes(LOGIN_URL_PATTERN)) {
           solved = true;
           break;
         }
-        if (!pollState.hasBframeChallenge && pollState.hasLoginForm) {
-          // 챌린지 해결됐지만 아직 제출 안 됨 — 버튼 다시 클릭
-          console.log(`[${ts()}] 챌린지 해결됨 — 로그인 버튼 재클릭`);
-          browserEvaluate(newTabId, `() => { const btn = document.querySelector("button.g-recaptcha"); if (btn) btn.click(); }`);
-          await sleep(4000);
-        }
+        // 아직 로그인 안 됨 — 버튼 클릭 재시도 (reCAPTCHA 해결됐으면 이번에 제출됨)
+        try {
+          browserEvaluate(newTabId, `() => { const btn = document.querySelector("button.g-recaptcha"); if (btn) btn.click(); return !!btn; }`);
+        } catch (_) {}
       } catch (_) {}
       console.log(`[${ts()}] 대기 중 (${(i + 1) * 10}초)...`);
     }
