@@ -9,6 +9,7 @@ function ts() { return new Date().toLocaleString('sv'); }
 
 const REPORTS_DIR = path.join(os.homedir(), '.openclaw', 'workspace', 'projects', 'crawler-pipeline', 'reports');
 const OUTPUT_DIR = path.join(__dirname, '..', 'metrics', 'tactical');
+const SELLER_METRICS_DIR = path.join(__dirname, '..', 'metrics', 'qoo10_seller');
 
 function getDateStr(daysAgo = 0) {
   const d = new Date();
@@ -84,6 +85,88 @@ async function getSheetsData() {
   }
 }
 
+/**
+ * qoo10_seller 메트릭에서 전략 지표 추출.
+ * 가장 최근 날짜 데이터를 기준으로 "직전 완전 월" 데이터를 반환.
+ */
+function loadSellerMetrics(dateStr) {
+  const dir = path.join(SELLER_METRICS_DIR, dateStr);
+  if (!fs.existsSync(dir)) return null;
+
+  function readJson(name) {
+    const f = path.join(dir, `${name}.json`);
+    if (!fs.existsSync(f)) return null;
+    try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { return null; }
+  }
+
+  // 직전 완전 월 데이터 (오늘 월 제외, 가장 최근 baseMonth)
+  function lastCompleteMonth(datas) {
+    if (!Array.isArray(datas) || datas.length === 0) return null;
+    const today = new Date();
+    const thisMonth = today.getMonth() + 1;
+    const thisYear = today.getFullYear();
+    // 이번 달 제외하고 가장 최근 행
+    const past = datas.filter(r => !(r.baseYear === thisYear && r.baseMonth === thisMonth));
+    return past.length > 0 ? past[past.length - 1] : datas[datas.length - 1];
+  }
+
+  const result = {};
+
+  // 전환율
+  const conv = readJson('pageview_conversion_rate');
+  if (conv?.datas) {
+    const row = lastCompleteMonth(conv.datas);
+    if (row) {
+      result.conv_total_pv = row.totalPv ?? null;
+      result.conv_user_cnt = row.userCnt ?? null;
+      result.conv_purchase_cnt = row.purchaseCnt ?? null;
+      result.conv_purchase_rate = row.purchaseRate ?? null; // %
+      result.conv_add_cart_cnt = row.addCnt ?? null;
+      result.conv_period = row.baseStartDt ? `${row.baseStartDt}~${row.baseEndDt}` : null;
+    }
+  }
+
+  // 고객 테이블 (신규/재구매)
+  const ctbl = readJson('customer_table_date');
+  if (ctbl?.datas) {
+    const row = lastCompleteMonth(ctbl.datas);
+    if (row) {
+      result.cust_buyer_cnt = row.buyerCnt ?? null;
+      result.cust_new_buyer_cnt = row.newbuyerCnt ?? null;
+      result.cust_new_buyer_rate = row.newbuyerRate ?? null;  // %
+      result.cust_existing_buyer_cnt = row.existingbuyerCnt ?? null;
+      result.cust_shop_follower_total = row.shopFollowerCnt ?? null;
+      result.cust_shop_pv = row.shopPageView ?? null;
+    }
+  }
+
+  // 팔로워 총계 (info에 있는 현재 값)
+  const shopStatus = readJson('customer_shop_status');
+  if (shopStatus?.info?.shopFollowerCnt != null) {
+    result.shop_follower_total_now = shopStatus.info.shopFollowerCnt;
+  }
+
+  // 거래 (transaction_table_date: 매출 합계)
+  const txn = readJson('transaction_table_date');
+  if (txn?.datas) {
+    const row = lastCompleteMonth(txn.datas);
+    if (row) {
+      // fieldSpecs로 컬럼명 매핑
+      const specs = txn.info?.fieldSpecs || [];
+      const nameMap = {};
+      specs.forEach(s => { if (s.fieldNm) nameMap[s.fieldCd || s.fieldNm] = s.fieldNm; });
+      result.txn_row_last_month = row;
+    }
+  }
+
+  // 수집 상태
+  const meta = readJson('_meta');
+  result.seller_endpoints_ok = meta ? Object.keys(meta.sellerEndpoints || {}).length : null;
+  result.seller_errors = meta?.errors?.length ?? null;
+
+  return Object.keys(result).length > 0 ? result : null;
+}
+
 async function main() {
   console.log(`[${ts()}] collect-tactical-data 시작`);
 
@@ -108,8 +191,21 @@ async function main() {
 
   const { discoveredRemaining, maxDailyRegister } = await getSheetsData();
 
+  // seller 시장 데이터 (오늘 수집 데이터 우선, 없으면 최근 7일 이내 탐색)
+  let sellerData = null;
+  for (let i = 0; i < 7; i++) {
+    const d = getDateStr(i);
+    sellerData = loadSellerMetrics(d);
+    if (sellerData) {
+      if (i > 0) console.log(`[${ts()}] seller 데이터: 오늘 없음 → ${d} 데이터 사용`);
+      break;
+    }
+  }
+  if (!sellerData) console.warn(`[${ts()}] ⚠ seller 시장 데이터 없음 (최근 7일)`);
+
   const output = {
     date: today,
+    // ── 파이프라인 지표 ──────────────────────────────
     discovered_remaining: discoveredRemaining,
     success_today: todayParsed?.totalSuccess ?? null,
     success_3day_avg: success3dayAvg,
@@ -118,6 +214,8 @@ async function main() {
     failed_reasons: todayParsed?.failedReasons ?? {},
     registered_cumulative: latestCumulative,
     max_daily_register_current: maxDailyRegister,
+    // ── Qoo10 시장 지표 (seller dashboard) ──────────
+    market: sellerData ?? null,
   };
 
   if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -127,6 +225,9 @@ async function main() {
 
   console.log(`[${ts()}] ✅ 저장: ${outputPath}`);
   console.log(`[${ts()}] SUCCESS 오늘=${output.success_today} / 3일평균=${output.success_3day_avg} / AUTO%=${output.auto_pct_5day[0]} / DISCOVERED=${output.discovered_remaining}`);
+  if (sellerData) {
+    console.log(`[${ts()}] MARKET 전환율=${sellerData.conv_purchase_rate}% / 구매자=${sellerData.cust_buyer_cnt} / 팔로워=${sellerData.shop_follower_total_now ?? sellerData.cust_shop_follower_total}`);
+  }
 }
 
 main().catch(e => {

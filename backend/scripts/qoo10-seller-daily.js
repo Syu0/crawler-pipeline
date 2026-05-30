@@ -36,7 +36,11 @@ const ENDPOINTS = [
   { name: 'pageview_table_date',          path: '/api/pageview/table/date' },
   { name: 'pageview_keyword_rank',        path: '/api/pageview/keyword-rank/chart' },
   { name: 'pageview_channels',            path: '/api/pageview/channels/chart' },
+  { name: 'pageview_conversion_rate',     path: '/api/pageview/conversion-rate/chart' },
   { name: 'customer_buyer_cnt',           path: '/api/customer/buyer-cnt/chart' },
+  { name: 'customer_table_date',          path: '/api/customer/table/date' },
+  { name: 'customer_shop_status',         path: '/api/customer/shop-status/chart' },
+  { name: 'transaction_chart',            path: '/api/transaction/chart' },
 ];
 
 const endDt = TODAY;
