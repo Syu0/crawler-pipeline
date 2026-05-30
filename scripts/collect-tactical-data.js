@@ -146,17 +146,24 @@ function loadSellerMetrics(dateStr) {
     result.shop_follower_total_now = shopStatus.info.shopFollowerCnt;
   }
 
-  // 거래 (transaction_table_date: 매출 합계)
+  // 거래 (transaction_table_date: 직전 완전 월 구매건수 + 금액)
   const txn = readJson('transaction_table_date');
   if (txn?.datas) {
     const row = lastCompleteMonth(txn.datas);
     if (row) {
-      // fieldSpecs로 컬럼명 매핑
-      const specs = txn.info?.fieldSpecs || [];
-      const nameMap = {};
-      specs.forEach(s => { if (s.fieldNm) nameMap[s.fieldCd || s.fieldNm] = s.fieldNm; });
-      result.txn_row_last_month = row;
+      result.txn_buy_cnt = row.buyCnt ?? null;
+      result.txn_buy_bpv = row.buyBpv ?? null;         // Qoo10 BPV (포인트 기반 가격)
+      result.txn_final_buy_cnt = row.finalTotalBuyCnt ?? null;
+      result.txn_period = row.baseStartDt ? `${row.baseStartDt}~${row.baseEndDt}` : null;
     }
+  }
+
+  // 검색어 유입 Top 20 (6개월 누적, 전략 참고용)
+  const kwRank = readJson('pageview_keyword_rank');
+  if (kwRank?.datas) {
+    result.top_keywords = kwRank.datas
+      .slice(0, 20)
+      .map(r => ({ kw: r.keyword, pv: r.pv }));
   }
 
   // 수집 상태
